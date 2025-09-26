@@ -275,15 +275,112 @@ class CaptureManager: ObservableObject {
         NotificationCenter.default.post(name: .screenshotDidSave, object: fileURL)
     }
     
-    /// 区域截图
+    /// 区域截图 - 使用系统截图工具
     private func captureRegionScreenshot() async throws -> NSImage {
-        // 这里需要实现区域选择UI
-        // 暂时返回全屏截图
-        let oldMode = captureMode
-        captureMode = .fullScreen
-        defer { captureMode = oldMode }
+        // 使用系统的截图工具进行区域选择
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
         
-        return try await captureScreenshot()
+        // 创建临时文件
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("temp_region_capture_\(UUID().uuidString).png")
+        
+        // 设置参数：-i 表示交互式选择区域，-r 表示只捕获选定区域
+        process.arguments = ["-i", "-r", tempURL.path]
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            process.terminationHandler = { process in
+                Task { @MainActor in
+                    if process.terminationStatus == 0 {
+                        // 截图成功，读取图片
+                        if let image = NSImage(contentsOf: tempURL) {
+                            // 保存到正式目录
+                            do {
+                                try await self.saveScreenshot(image)
+                                self.lastCapturedImage = image
+                                
+                                // 清理临时文件
+                                try? FileManager.default.removeItem(at: tempURL)
+                                
+                                continuation.resume(returning: image)
+                            } catch {
+                                continuation.resume(throwing: error)
+                            }
+                        } else {
+                            continuation.resume(throwing: CaptureError.failedToCapture)
+                        }
+                    } else {
+                        // 用户取消了截图
+                        try? FileManager.default.removeItem(at: tempURL)
+                        continuation.resume(throwing: CaptureError.regionSelectionCancelled)
+                    }
+                }
+            }
+            
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: CaptureError.failedToCapture)
+            }
+        }
+    }
+    
+    /// 捕获指定区域
+    private func captureRegion(_ rect: NSRect) async throws -> NSImage {
+        guard #available(macOS 12.3, *) else {
+            return try await captureLegacyRegion(rect)
+        }
+        
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        
+        guard let display = content.displays.first(where: { display in
+            display.frame.intersects(rect)
+        }) else {
+            throw CaptureError.noDisplayAvailable
+        }
+        
+        let filter = SCContentFilter(display: display, excludingWindows: [])
+        
+        let configuration = SCStreamConfiguration()
+        configuration.width = Int(rect.width)
+        configuration.height = Int(rect.height)
+        configuration.pixelFormat = kCVPixelFormatType_32BGRA
+        configuration.showsCursor = true
+        
+        // 设置源区域
+        configuration.sourceRect = rect
+        
+        // 使用旧版本兼容的截图方法
+        return try await captureLegacyRegion(rect)
+    }
+    
+    /// 旧系统区域截图方法
+    private func captureLegacyRegion(_ rect: NSRect) async throws -> NSImage {
+        let displayID = CGMainDisplayID()
+        
+        guard let cgImage = CGDisplayCreateImage(displayID) else {
+            throw CaptureError.failedToCapture
+        }
+        
+        // 裁剪图像到指定区域
+        let scale = CGFloat(cgImage.width) / NSScreen.main!.frame.width
+        let scaledRect = CGRect(
+            x: rect.origin.x * scale,
+            y: rect.origin.y * scale,
+            width: rect.width * scale,
+            height: rect.height * scale
+        )
+        
+        guard let croppedImage = cgImage.cropping(to: scaledRect) else {
+            throw CaptureError.failedToCapture
+        }
+        
+        let nsImage = NSImage(cgImage: croppedImage, size: rect.size)
+        
+        try await saveScreenshot(nsImage)
+        lastCapturedImage = nsImage
+        
+        return nsImage
     }
     
     /// 旧系统截图方法
@@ -325,6 +422,7 @@ enum CaptureError: LocalizedError {
     case noDisplayAvailable
     case noWindowSelected
     case regionRecordingNotSupported
+    case regionSelectionCancelled
     case unsupportedSystem
     case failedToCapture
     case failedToSaveImage
@@ -337,6 +435,8 @@ enum CaptureError: LocalizedError {
             return "没有选择窗口"
         case .regionRecordingNotSupported:
             return "区域录制暂不支持"
+        case .regionSelectionCancelled:
+            return "区域选择已取消"
         case .unsupportedSystem:
             return "系统版本不支持"
         case .failedToCapture:

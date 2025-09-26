@@ -126,7 +126,7 @@ class KeyboardShortcuts: ObservableObject {
     
     /// 处理热键事件
     private func handleHotKeyEvent(_ event: EventRef?) -> OSStatus {
-        guard let event = event else { return eventNotHandledErr }
+        guard let event = event else { return OSStatus(eventNotHandledErr) }
         
         var hotKeyID = EventHotKeyID()
         let status = GetEventParameter(

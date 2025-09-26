@@ -11,7 +11,35 @@
 		A1234567890ABCDEF003 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDEF004 /* ContentView.swift */; };
 		A1234567890ABCDEF005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDEF006 /* Assets.xcassets */; };
 		A1234567890ABCDEF007 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDEF008 /* Preview Assets.xcassets */; };
+		A1234567890ABCDEF021 /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDEF022 /* PermissionManager.swift */; };
+		A1234567890ABCDEF023 /* CaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDEF024 /* CaptureManager.swift */; };
+		A1234567890ABCDEF025 /* ScreenshotView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDEF026 /* ScreenshotView.swift */; };
+		A1234567890ABCDEF027 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDEF028 /* RecordingView.swift */; };
+		A1234567890ABCDEF029 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDEF030 /* SettingsView.swift */; };
+		A1234567890ABCDEF031 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDEF032 /* MenuBarView.swift */; };
+		A1234567890ABCDEF033 /* KeyboardShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDEF034 /* KeyboardShortcuts.swift */; };
+		A1234567890ABCDEF035 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDEF036 /* NotificationManager.swift */; };
+		A1234567890ABCDEF037 /* FileManager+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDEF038 /* FileManager+Extensions.swift */; };
+		A1234567890ABCDEF039 /* MacScreenCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDEF040 /* MacScreenCaptureTests.swift */; };
+		A1234567890ABCDEF041 /* MacScreenCaptureUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDEF042 /* MacScreenCaptureUITests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A1234567890ABCDEF043 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1234567890ABCDEF020 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1234567890ABCDEF016;
+			remoteInfo = MacScreenCapture;
+		};
+		A1234567890ABCDEF044 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1234567890ABCDEF020 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1234567890ABCDEF016;
+			remoteInfo = MacScreenCapture;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		A1234567890ABCDEF009 /* MacScreenCapture.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacScreenCapture.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -20,10 +48,38 @@
 		A1234567890ABCDEF006 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1234567890ABCDEF008 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		A1234567890ABCDEF010 /* MacScreenCapture.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MacScreenCapture.entitlements; sourceTree = "<group>"; };
+		A1234567890ABCDEF022 /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
+		A1234567890ABCDEF024 /* CaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureManager.swift; sourceTree = "<group>"; };
+		A1234567890ABCDEF026 /* ScreenshotView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotView.swift; sourceTree = "<group>"; };
+		A1234567890ABCDEF028 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
+		A1234567890ABCDEF030 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A1234567890ABCDEF032 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
+		A1234567890ABCDEF034 /* KeyboardShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcuts.swift; sourceTree = "<group>"; };
+		A1234567890ABCDEF036 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		A1234567890ABCDEF038 /* FileManager+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FileManager+Extensions.swift"; sourceTree = "<group>"; };
+		A1234567890ABCDEF045 /* MacScreenCaptureTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MacScreenCaptureTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1234567890ABCDEF040 /* MacScreenCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacScreenCaptureTests.swift; sourceTree = "<group>"; };
+		A1234567890ABCDEF046 /* MacScreenCaptureUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MacScreenCaptureUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1234567890ABCDEF042 /* MacScreenCaptureUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacScreenCaptureUITests.swift; sourceTree = "<group>"; };
+		A1234567890ABCDEF047 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A1234567890ABCDEF011 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1234567890ABCDEF048 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1234567890ABCDEF049 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -37,6 +93,8 @@
 			isa = PBXGroup;
 			children = (
 				A1234567890ABCDEF013 /* MacScreenCapture */,
+				A1234567890ABCDEF050 /* MacScreenCaptureTests */,
+				A1234567890ABCDEF051 /* MacScreenCaptureUITests */,
 				A1234567890ABCDEF014 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -45,6 +103,8 @@
 			isa = PBXGroup;
 			children = (
 				A1234567890ABCDEF009 /* MacScreenCapture.app */,
+				A1234567890ABCDEF045 /* MacScreenCaptureTests.xctest */,
+				A1234567890ABCDEF046 /* MacScreenCaptureUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -54,8 +114,12 @@
 			children = (
 				A1234567890ABCDEF002 /* MacScreenCaptureApp.swift */,
 				A1234567890ABCDEF004 /* ContentView.swift */,
+				A1234567890ABCDEF052 /* Core */,
+				A1234567890ABCDEF053 /* Views */,
+				A1234567890ABCDEF054 /* Utils */,
 				A1234567890ABCDEF006 /* Assets.xcassets */,
 				A1234567890ABCDEF010 /* MacScreenCapture.entitlements */,
+				A1234567890ABCDEF047 /* Info.plist */,
 				A1234567890ABCDEF015 /* Preview Content */,
 			);
 			path = MacScreenCapture;
@@ -67,6 +131,52 @@
 				A1234567890ABCDEF008 /* Preview Assets.xcassets */,
 			);
 			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		A1234567890ABCDEF052 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				A1234567890ABCDEF022 /* PermissionManager.swift */,
+				A1234567890ABCDEF024 /* CaptureManager.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		A1234567890ABCDEF053 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				A1234567890ABCDEF026 /* ScreenshotView.swift */,
+				A1234567890ABCDEF028 /* RecordingView.swift */,
+				A1234567890ABCDEF030 /* SettingsView.swift */,
+				A1234567890ABCDEF032 /* MenuBarView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		A1234567890ABCDEF054 /* Utils */ = {
+			isa = PBXGroup;
+			children = (
+				A1234567890ABCDEF034 /* KeyboardShortcuts.swift */,
+				A1234567890ABCDEF036 /* NotificationManager.swift */,
+				A1234567890ABCDEF038 /* FileManager+Extensions.swift */,
+			);
+			path = Utils;
+			sourceTree = "<group>";
+		};
+		A1234567890ABCDEF050 /* MacScreenCaptureTests */ = {
+			isa = PBXGroup;
+			children = (
+				A1234567890ABCDEF040 /* MacScreenCaptureTests.swift */,
+			);
+			path = MacScreenCaptureTests;
+			sourceTree = "<group>";
+		};
+		A1234567890ABCDEF051 /* MacScreenCaptureUITests */ = {
+			isa = PBXGroup;
+			children = (
+				A1234567890ABCDEF042 /* MacScreenCaptureUITests.swift */,
+			);
+			path = MacScreenCaptureUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -89,6 +199,42 @@
 			productReference = A1234567890ABCDEF009 /* MacScreenCapture.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A1234567890ABCDEF055 /* MacScreenCaptureTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1234567890ABCDEF056 /* Build configuration list for PBXNativeTarget "MacScreenCaptureTests" */;
+			buildPhases = (
+				A1234567890ABCDEF057 /* Sources */,
+				A1234567890ABCDEF048 /* Frameworks */,
+				A1234567890ABCDEF058 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A1234567890ABCDEF059 /* PBXTargetDependency */,
+			);
+			name = MacScreenCaptureTests;
+			productName = MacScreenCaptureTests;
+			productReference = A1234567890ABCDEF045 /* MacScreenCaptureTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		A1234567890ABCDEF060 /* MacScreenCaptureUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1234567890ABCDEF061 /* Build configuration list for PBXNativeTarget "MacScreenCaptureUITests" */;
+			buildPhases = (
+				A1234567890ABCDEF062 /* Sources */,
+				A1234567890ABCDEF049 /* Frameworks */,
+				A1234567890ABCDEF063 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A1234567890ABCDEF064 /* PBXTargetDependency */,
+			);
+			name = MacScreenCaptureUITests;
+			productName = MacScreenCaptureUITests;
+			productReference = A1234567890ABCDEF046 /* MacScreenCaptureUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -102,9 +248,17 @@
 					A1234567890ABCDEF016 = {
 						CreatedOnToolsVersion = 15.0;
 					};
+					A1234567890ABCDEF055 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = A1234567890ABCDEF016;
+					};
+					A1234567890ABCDEF060 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = A1234567890ABCDEF016;
+					};
 				};
 			};
-			buildConfigurationList = A1234567890ABCDEF021 /* Build configuration list for PBXProject "MacScreenCapture" */;
+			buildConfigurationList = A1234567890ABCDEF065 /* Build configuration list for PBXProject "MacScreenCapture" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -118,6 +272,8 @@
 			projectRoot = "";
 			targets = (
 				A1234567890ABCDEF016 /* MacScreenCapture */,
+				A1234567890ABCDEF055 /* MacScreenCaptureTests */,
+				A1234567890ABCDEF060 /* MacScreenCaptureUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -132,6 +288,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1234567890ABCDEF058 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1234567890ABCDEF063 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -140,14 +310,52 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1234567890ABCDEF003 /* ContentView.swift in Sources */,
+				A1234567890ABCDEF021 /* PermissionManager.swift in Sources */,
+				A1234567890ABCDEF023 /* CaptureManager.swift in Sources */,
+				A1234567890ABCDEF025 /* ScreenshotView.swift in Sources */,
+				A1234567890ABCDEF027 /* RecordingView.swift in Sources */,
+				A1234567890ABCDEF029 /* SettingsView.swift in Sources */,
+				A1234567890ABCDEF031 /* MenuBarView.swift in Sources */,
+				A1234567890ABCDEF033 /* KeyboardShortcuts.swift in Sources */,
+				A1234567890ABCDEF035 /* NotificationManager.swift in Sources */,
+				A1234567890ABCDEF037 /* FileManager+Extensions.swift in Sources */,
 				A1234567890ABCDEF001 /* MacScreenCaptureApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1234567890ABCDEF057 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1234567890ABCDEF039 /* MacScreenCaptureTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1234567890ABCDEF062 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1234567890ABCDEF041 /* MacScreenCaptureUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		A1234567890ABCDEF059 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1234567890ABCDEF016 /* MacScreenCapture */;
+			targetProxy = A1234567890ABCDEF043 /* PBXContainerItemProxy */;
+		};
+		A1234567890ABCDEF064 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1234567890ABCDEF016 /* MacScreenCapture */;
+			targetProxy = A1234567890ABCDEF044 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
-		A1234567890ABCDEF022 /* Debug */ = {
+		A1234567890ABCDEF066 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -210,7 +418,7 @@
 			};
 			name = Debug;
 		};
-		A1234567890ABCDEF023 /* Release */ = {
+		A1234567890ABCDEF067 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -265,7 +473,7 @@
 			};
 			name = Release;
 		};
-		A1234567890ABCDEF024 /* Debug */ = {
+		A1234567890ABCDEF068 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -275,10 +483,16 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"MacScreenCapture/Preview Content\"";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MacScreenCapture/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Mac Screen Capture";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access to record audio during screen recording.";
+				INFOPLIST_KEY_NSScreenCaptureDescription = "This app needs screen recording permission to capture screenshots and record screen content.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -291,7 +505,7 @@
 			};
 			name = Debug;
 		};
-		A1234567890ABCDEF025 /* Release */ = {
+		A1234567890ABCDEF069 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -301,10 +515,16 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"MacScreenCapture/Preview Content\"";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MacScreenCapture/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Mac Screen Capture";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access to record audio during screen recording.";
+				INFOPLIST_KEY_NSScreenCaptureDescription = "This app needs screen recording permission to capture screenshots and record screen content.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -317,23 +537,113 @@
 			};
 			name = Release;
 		};
+		A1234567890ABCDEF070 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.macscreencapture.MacScreenCaptureTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MacScreenCapture.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MacScreenCapture";
+			};
+			name = Debug;
+		};
+		A1234567890ABCDEF071 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.macscreencapture.MacScreenCaptureTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MacScreenCapture.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MacScreenCapture";
+			};
+			name = Release;
+		};
+		A1234567890ABCDEF072 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.macscreencapture.MacScreenCaptureUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = MacScreenCapture;
+			};
+			name = Debug;
+		};
+		A1234567890ABCDEF073 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.macscreencapture.MacScreenCaptureUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = MacScreenCapture;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A1234567890ABCDEF021 /* Build configuration list for PBXProject "MacScreenCapture" */ = {
+		A1234567890ABCDEF017 /* Build configuration list for PBXNativeTarget "MacScreenCapture" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A1234567890ABCDEF022 /* Debug */,
-				A1234567890ABCDEF023 /* Release */,
+				A1234567890ABCDEF068 /* Debug */,
+				A1234567890ABCDEF069 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A1234567890ABCDEF017 /* Build configuration list for PBXNativeTarget "MacScreenCapture" */ = {
+		A1234567890ABCDEF056 /* Build configuration list for PBXNativeTarget "MacScreenCaptureTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A1234567890ABCDEF024 /* Debug */,
-				A1234567890ABCDEF025 /* Release */,
+				A1234567890ABCDEF070 /* Debug */,
+				A1234567890ABCDEF071 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1234567890ABCDEF061 /* Build configuration list for PBXNativeTarget "MacScreenCaptureUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1234567890ABCDEF072 /* Debug */,
+				A1234567890ABCDEF073 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1234567890ABCDEF065 /* Build configuration list for PBXProject "MacScreenCapture" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1234567890ABCDEF066 /* Debug */,
+				A1234567890ABCDEF067 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

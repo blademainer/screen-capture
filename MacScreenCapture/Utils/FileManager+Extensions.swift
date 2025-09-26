@@ -6,13 +6,14 @@
 //
 
 import Foundation
+import UniformTypeIdentifiers
 import AppKit
 
 extension FileManager {
     
     /// 获取默认截图保存目录
     static var defaultScreenshotDirectory: URL {
-        let documentsPath = FileManager.default.urls(for: .documentsDirectory, in: .userDomainMask).first!
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let screenshotDir = documentsPath.appendingPathComponent("Screenshots")
         
         // 确保目录存在
@@ -23,7 +24,7 @@ extension FileManager {
     
     /// 获取默认录制保存目录
     static var defaultRecordingDirectory: URL {
-        let documentsPath = FileManager.default.urls(for: .documentsDirectory, in: .userDomainMask).first!
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let recordingDir = documentsPath.appendingPathComponent("Recordings")
         
         // 确保目录存在

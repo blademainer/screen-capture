@@ -13,6 +13,7 @@ import CoreGraphics
 import AppKit
 
 /// 捕获管理器 - 负责截图和录制功能的核心逻辑
+@available(macOS 12.3, *)
 @MainActor
 class CaptureManager: ObservableObject {
     
@@ -36,7 +37,7 @@ class CaptureManager: ObservableObject {
     
     // MARK: - Configuration
     private let outputDirectory: URL = {
-        let documentsPath = FileManager.default.urls(for: .documentsDirectory, in: .userDomainMask).first!
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let captureDir = documentsPath.appendingPathComponent("ScreenCaptures")
         try? FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
         return captureDir
@@ -48,7 +49,9 @@ class CaptureManager: ObservableObject {
     }
     
     deinit {
-        stopRecording()
+        Task {
+            await stopRecording()
+        }
         NotificationCenter.default.removeObserver(self)
     }
     
@@ -90,23 +93,22 @@ class CaptureManager: ObservableObject {
         }
         
         let configuration = SCStreamConfiguration()
-        configuration.width = Int(filter.contentRect.width)
-        configuration.height = Int(filter.contentRect.height)
+        
+        // 获取显示器尺寸
+        let displaySize: CGSize
+        if let display = selectedDisplay {
+            displaySize = CGSize(width: display.width, height: display.height)
+        } else {
+            displaySize = CGSize(width: 1920, height: 1080) // 默认尺寸
+        }
+        
+        configuration.width = Int(displaySize.width)
+        configuration.height = Int(displaySize.height)
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.showsCursor = true
         
-        let image = try await SCScreenshotManager.captureImage(
-            contentFilter: filter,
-            configuration: configuration
-        )
-        
-        let nsImage = NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
-        
-        // 保存截图
-        try await saveScreenshot(nsImage)
-        
-        lastCapturedImage = nsImage
-        return nsImage
+        // 使用旧版本兼容的截图方法
+        return try await captureLegacyScreenshot()
     }
     
     /// 开始录制
@@ -143,7 +145,9 @@ class CaptureManager: ObservableObject {
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: 60) // 60 FPS
         configuration.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         configuration.showsCursor = true
-        configuration.capturesAudio = true
+        if #available(macOS 13.0, *) {
+            configuration.capturesAudio = true
+        }
         
         // 创建输出文件URL
         let fileName = "Recording_\(DateFormatter.fileNameFormatter.string(from: Date())).mov"
@@ -157,7 +161,7 @@ class CaptureManager: ObservableObject {
         
         try stream?.addStreamOutput(streamOutput!, type: .screen, sampleHandlerQueue: DispatchQueue.global(qos: .userInitiated))
         
-        stream?.startCapture()
+        try await stream?.startCapture()
         
         // 更新状态
         isRecording = true
@@ -170,10 +174,10 @@ class CaptureManager: ObservableObject {
     }
     
     /// 停止录制
-    func stopRecording() {
+    func stopRecording() async {
         guard isRecording else { return }
         
-        stream?.stopCapture()
+        try? await stream?.stopCapture()
         stream = nil
         streamOutput = nil
         
@@ -413,6 +417,10 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                 videoInput.append(sampleBuffer)
             }
         case .audio:
+            if let audioInput = audioInput, audioInput.isReadyForMoreMediaData {
+                audioInput.append(sampleBuffer)
+            }
+        case .microphone:
             if let audioInput = audioInput, audioInput.isReadyForMoreMediaData {
                 audioInput.append(sampleBuffer)
             }

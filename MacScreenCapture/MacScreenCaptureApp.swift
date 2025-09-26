@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+@available(macOS 13.0, *)
 @main
 struct MacScreenCaptureApp: App {
     @StateObject private var permissionManager = PermissionManager()

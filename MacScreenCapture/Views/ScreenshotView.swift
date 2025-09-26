@@ -8,6 +8,7 @@
 import SwiftUI
 import ScreenCaptureKit
 
+@available(macOS 12.3, *)
 struct ScreenshotView: View {
     @EnvironmentObject var captureManager: CaptureManager
     @EnvironmentObject var permissionManager: PermissionManager
@@ -229,8 +230,12 @@ struct ScreenshotView: View {
 }
 
 #Preview {
-    ScreenshotView()
-        .environmentObject(CaptureManager())
-        .environmentObject(PermissionManager())
-        .frame(width: 600, height: 400)
+    if #available(macOS 12.3, *) {
+        ScreenshotView()
+            .environmentObject(CaptureManager())
+            .environmentObject(PermissionManager())
+            .frame(width: 600, height: 400)
+    } else {
+        Text("需要 macOS 12.3 或更高版本")
+    }
 }

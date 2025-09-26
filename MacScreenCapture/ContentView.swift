@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+@available(macOS 12.3, *)
 struct ContentView: View {
     @EnvironmentObject var permissionManager: PermissionManager
     @EnvironmentObject var captureManager: CaptureManager
@@ -82,7 +83,11 @@ struct HeaderView: View {
 }
 
 #Preview {
-    ContentView()
-        .environmentObject(PermissionManager())
-        .environmentObject(CaptureManager())
+    if #available(macOS 12.3, *) {
+        ContentView()
+            .environmentObject(PermissionManager())
+            .environmentObject(CaptureManager())
+    } else {
+        Text("需要 macOS 12.3 或更高版本")
+    }
 }

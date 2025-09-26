@@ -81,13 +81,24 @@ class PermissionManager: ObservableObject {
     func requestMicrophonePermission() {
         guard !hasMicrophonePermission else { return }
         
-        AVAudioSession.sharedInstance().requestRecordPermission { [weak self] granted in
-            DispatchQueue.main.async {
-                self?.hasMicrophonePermission = granted
-                if !granted {
-                    self?.showPermissionAlert(for: .microphone)
+        // macOS 使用不同的音频权限检查方式
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            hasMicrophonePermission = true
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+                DispatchQueue.main.async {
+                    self?.hasMicrophonePermission = granted
+                    if !granted {
+                        self?.showPermissionAlert(for: .microphone)
+                    }
                 }
             }
+        case .denied, .restricted:
+            hasMicrophonePermission = false
+            showPermissionAlert(for: .microphone)
+        @unknown default:
+            hasMicrophonePermission = false
         }
     }
     
@@ -124,8 +135,8 @@ class PermissionManager: ObservableObject {
     
     /// 检查麦克风权限
     private func checkMicrophonePermission() async {
-        let status = AVAudioSession.sharedInstance().recordPermission
-        hasMicrophonePermission = (status == .granted)
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        hasMicrophonePermission = (status == .authorized)
     }
     
     /// 检查辅助功能权限
@@ -148,8 +159,8 @@ class PermissionManager: ObservableObject {
         ) { _, _, _, _ in }
         
         if let stream = stream {
-            CGDisplayStreamStart(stream)
-            CGDisplayStreamStop(stream)
+            stream.start()
+            stream.stop()
             hasScreenRecordingPermission = true
         } else {
             hasScreenRecordingPermission = false

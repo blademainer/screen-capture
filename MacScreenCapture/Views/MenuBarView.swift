@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+@available(macOS 12.3, *)
 struct MenuBarView: View {
     @EnvironmentObject var captureManager: CaptureManager
     @EnvironmentObject var permissionManager: PermissionManager
@@ -58,7 +59,9 @@ struct MenuBarView: View {
                         icon: "stop.fill",
                         shortcut: "⌘⇧R"
                     ) {
-                        captureManager.stopRecording()
+                        Task {
+                            await captureManager.stopRecording()
+                        }
                     }
                     
                     // 录制状态显示
@@ -258,7 +261,11 @@ struct MenuButton: View {
 }
 
 #Preview {
-    MenuBarView()
-        .environmentObject(CaptureManager())
-        .environmentObject(PermissionManager())
+    if #available(macOS 12.3, *) {
+        MenuBarView()
+            .environmentObject(CaptureManager())
+            .environmentObject(PermissionManager())
+    } else {
+        Text("需要 macOS 12.3 或更高版本")
+    }
 }

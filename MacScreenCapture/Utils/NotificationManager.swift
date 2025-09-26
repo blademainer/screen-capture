@@ -11,7 +11,7 @@ import AppKit
 
 /// 通知管理器 - 负责处理应用内通知和系统通知
 @MainActor
-class NotificationManager: ObservableObject {
+class NotificationManager: NSObject, ObservableObject {
     
     // MARK: - Singleton
     static let shared = NotificationManager()
@@ -24,7 +24,8 @@ class NotificationManager: ObservableObject {
     private let notificationCenter = UNUserNotificationCenter.current()
     
     // MARK: - Initialization
-    private init() {
+    override private init() {
+        super.init()
         setupNotificationCenter()
         checkNotificationPermission()
     }
@@ -239,7 +240,7 @@ class NotificationManager: ObservableObject {
 
 // MARK: - UNUserNotificationCenterDelegate
 
-extension NotificationManager: UNUserNotificationCenterDelegate {
+extension NotificationManager: @preconcurrency UNUserNotificationCenterDelegate {
     
     /// 应用在前台时显示通知
     func userNotificationCenter(

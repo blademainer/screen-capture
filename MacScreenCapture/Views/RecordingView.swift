@@ -8,6 +8,7 @@
 import SwiftUI
 import ScreenCaptureKit
 
+@available(macOS 12.3, *)
 struct RecordingView: View {
     @EnvironmentObject var captureManager: CaptureManager
     @EnvironmentObject var permissionManager: PermissionManager
@@ -155,7 +156,9 @@ struct RecordingView: View {
                 // 开始/停止录制按钮
                 Button(action: {
                     if captureManager.isRecording {
-                        captureManager.stopRecording()
+                        Task {
+                            await captureManager.stopRecording()
+                        }
                     } else {
                         startRecording()
                     }
@@ -220,8 +223,7 @@ struct RecordingView: View {
             // 录制时长
             Text(formatDuration(captureManager.recordingDuration))
                 .font(.title)
-                .fontWeight(.bold)
-                .fontDesign(.monospaced)
+                .bold()
             
             // 录制信息
             VStack(alignment: .leading, spacing: 4) {
@@ -335,8 +337,12 @@ enum RecordingQuality: String, CaseIterable {
 }
 
 #Preview {
-    RecordingView()
-        .environmentObject(CaptureManager())
-        .environmentObject(PermissionManager())
-        .frame(width: 600, height: 400)
+    if #available(macOS 12.3, *) {
+        RecordingView()
+            .environmentObject(CaptureManager())
+            .environmentObject(PermissionManager())
+            .frame(width: 600, height: 400)
+    } else {
+        Text("需要 macOS 12.3 或更高版本")
+    }
 }

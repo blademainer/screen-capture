@@ -27,6 +27,7 @@ class CaptureManager: ObservableObject {
     @Published var availableDisplays: [SCDisplay] = []
     @Published var availableWindows: [SCWindow] = []
     @Published var lastCapturedImage: NSImage?
+    @Published var lastSavedImageURL: URL?
     @Published var recordingURL: URL?
     
     // MARK: - Private Properties
@@ -270,6 +271,11 @@ class CaptureManager: ObservableObject {
         }
         
         try pngData.write(to: fileURL)
+        
+        // 更新最后保存的文件URL
+        await MainActor.run {
+            lastSavedImageURL = fileURL
+        }
         
         // 发送通知
         NotificationCenter.default.post(name: .screenshotDidSave, object: fileURL)

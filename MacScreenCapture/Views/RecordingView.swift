@@ -90,11 +90,8 @@ struct RecordingView: View {
             
             Picker("录制模式", selection: $captureManager.captureMode) {
                 ForEach([CaptureMode.fullScreen, CaptureMode.window], id: \.self) { mode in
-                    HStack {
-                        Image(systemName: mode.systemImage)
-                        Text(mode.rawValue)
-                    }
-                    .tag(mode)
+                    Label(mode.rawValue, systemImage: mode.systemImage)
+                        .tag(mode)
                 }
             }
             .pickerStyle(.segmented)
@@ -237,6 +234,14 @@ struct RecordingView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+            
+            // 在Finder中显示按钮（录制完成后显示）
+            if !captureManager.isRecording && captureManager.recordingURL != nil {
+                Button("在Finder中显示") {
+                    showRecordingInFinder()
+                }
+                .buttonStyle(.bordered)
+            }
         }
         .padding()
         .background(Color(.controlBackgroundColor))
@@ -267,6 +272,11 @@ struct RecordingView: View {
         } else {
             return String(format: "%02d:%02d", minutes, seconds)
         }
+    }
+    
+    private func showRecordingInFinder() {
+        guard let fileURL = captureManager.recordingURL else { return }
+        NSWorkspace.shared.selectFile(fileURL.path, inFileViewerRootedAtPath: "")
     }
 }
 

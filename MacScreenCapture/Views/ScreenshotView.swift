@@ -91,11 +91,8 @@ struct ScreenshotView: View {
             
             Picker("截图模式", selection: $captureManager.captureMode) {
                 ForEach(CaptureMode.allCases, id: \.self) { mode in
-                    HStack {
-                        Image(systemName: mode.systemImage)
-                        Text(mode.rawValue)
-                    }
-                    .tag(mode)
+                    Label(mode.rawValue, systemImage: mode.systemImage)
+                        .tag(mode)
                 }
             }
             .pickerStyle(.segmented)
@@ -189,8 +186,9 @@ struct ScreenshotView: View {
                     
                     HStack {
                         Button("在Finder中显示") {
-                            // TODO: 实现在Finder中显示功能
+                            showInFinder()
                         }
+                        .disabled(captureManager.lastSavedImageURL == nil)
                         .buttonStyle(.bordered)
                         
                         Button("复制到剪贴板") {
@@ -226,6 +224,11 @@ struct ScreenshotView: View {
                 }
             }
         }
+    }
+    
+    private func showInFinder() {
+        guard let fileURL = captureManager.lastSavedImageURL else { return }
+        NSWorkspace.shared.selectFile(fileURL.path, inFileViewerRootedAtPath: "")
     }
 }
 

@@ -15,6 +15,8 @@ struct SettingsView: View {
     @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage("hideMenuBarIcon") private var hideMenuBarIcon = false
     @AppStorage("defaultSaveLocation") private var defaultSaveLocation = ""
+    @AppStorage("autoHideWindowDuringCapture") private var autoHideWindowDuringCapture = true
+    @AppStorage("autoShowWindowAfterCapture") private var autoShowWindowAfterCapture = false
     
     var body: some View {
         ScrollView {
@@ -31,6 +33,11 @@ struct SettingsView: View {
                 
                 // 录制设置
                 RecordingSettingsSection()
+                
+                Divider()
+                
+                // 窗口行为设置
+                WindowBehaviorSettingsSection()
                 
                 Divider()
                 
@@ -162,6 +169,37 @@ struct SettingsView: View {
                 
                 Toggle("默认录制音频", isOn: .constant(true))
                 Toggle("显示鼠标指针", isOn: .constant(true))
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func WindowBehaviorSettingsSection() -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("窗口行为")
+                .font(.headline)
+            
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("截屏时自动隐藏主窗口", isOn: $autoHideWindowDuringCapture)
+                    .help("启用后，开始截图或录制时会自动隐藏应用主窗口，避免干扰")
+                
+                Toggle("截屏完成后自动显示主窗口", isOn: $autoShowWindowAfterCapture)
+                    .help("启用后，截图完成后会自动重新显示应用主窗口")
+                
+                if autoHideWindowDuringCapture {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("提示：")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("• 可通过状态栏图标或快捷键重新显示窗口")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("• 录制时窗口会保持隐藏直到录制结束")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.leading, 20)
+                }
             }
         }
     }

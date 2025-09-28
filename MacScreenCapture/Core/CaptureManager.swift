@@ -230,6 +230,18 @@ class CaptureManager: ObservableObject {
     
     /// 截图
     func captureScreenshot() async throws -> NSImage {
+        // 通知WindowManager开始截图
+        await MainActor.run {
+            WindowManager.shared.updateCaptureState(.screenshotting)
+        }
+        
+        defer {
+            // 截图完成后恢复状态
+            Task { @MainActor in
+                WindowManager.shared.updateCaptureState(.idle)
+            }
+        }
+        
         guard #available(macOS 12.3, *) else {
             return try await captureLegacyScreenshot()
         }
@@ -282,6 +294,9 @@ class CaptureManager: ObservableObject {
         guard #available(macOS 12.3, *) else {
             throw CaptureError.unsupportedSystem
         }
+        
+        // 通知WindowManager开始录制
+        WindowManager.shared.updateCaptureState(.recording(startTime: Date()))
         
         // 在后台队列中执行耗时操作
         let (filter, screenSize, outputURL): (SCContentFilter, CGSize, URL) = try await withCheckedThrowingContinuation { continuation in
@@ -436,6 +451,9 @@ class CaptureManager: ObservableObject {
         recordingDuration = 0
         recordingStartTime = nil
         
+        // 通知WindowManager录制停止
+        WindowManager.shared.updateCaptureState(.idle)
+        
         // 清理资源
         stream = nil
         streamOutput = nil
@@ -456,11 +474,13 @@ class CaptureManager: ObservableObject {
             recordingStartTime = Date().addingTimeInterval(-recordingDuration)
             startRecordingTimer()
             isPaused = false
+            WindowManager.shared.updateCaptureState(.recording(startTime: recordingStartTime!))
         } else {
             // 暂停录制
             recordingTimer?.invalidate()
             recordingTimer = nil
             isPaused = true
+            WindowManager.shared.updateCaptureState(.paused(duration: recordingDuration))
         }
     }
     
@@ -473,6 +493,7 @@ class CaptureManager: ObservableObject {
         recordingStartTime = Date().addingTimeInterval(-recordingDuration)
         startRecordingTimer()
         isPaused = false
+        WindowManager.shared.updateCaptureState(.recording(startTime: recordingStartTime!))
         
         print("录制已恢复")
     }
@@ -620,6 +641,18 @@ class CaptureManager: ObservableObject {
     
     /// 区域截图 - 使用系统截图工具
     private func captureRegionScreenshot() async throws -> NSImage {
+        // 通知WindowManager开始截图
+        await MainActor.run {
+            WindowManager.shared.updateCaptureState(.screenshotting)
+        }
+        
+        defer {
+            // 截图完成后恢复状态
+            Task { @MainActor in
+                WindowManager.shared.updateCaptureState(.idle)
+            }
+        }
+        
         // 使用系统的截图工具进行区域选择
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
@@ -641,6 +674,9 @@ class CaptureManager: ObservableObject {
                             do {
                                 try await self.saveScreenshot(image)
                                 self.lastCapturedImage = image
+                                
+                                // 显示浮窗预览
+                                WindowManager.shared.showFloatingPreview(for: image)
                                 
                                 // 清理临时文件
                                 try? FileManager.default.removeItem(at: tempURL)

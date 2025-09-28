@@ -60,6 +60,33 @@ extension UserDefaults {
         }
     }
     
+    var autoCopyToClipboard: Bool {
+        get {
+            return bool(forKey: "autoCopyToClipboard")
+        }
+        set {
+            set(newValue, forKey: "autoCopyToClipboard")
+        }
+    }
+    
+    var showInFinderAfterSave: Bool {
+        get {
+            return bool(forKey: "showInFinderAfterSave")
+        }
+        set {
+            set(newValue, forKey: "showInFinderAfterSave")
+        }
+    }
+    
+    var floatingWindowShowShadow: Bool {
+        get {
+            return bool(forKey: "floatingWindowShowShadow")
+        }
+        set {
+            set(newValue, forKey: "floatingWindowShowShadow")
+        }
+    }
+    
     // MARK: - Initialize Default Values
     static func registerFloatingWindowDefaults() {
         UserDefaults.standard.register(defaults: [
@@ -68,7 +95,10 @@ extension UserDefaults {
             "floatingWindowAutoHideDelay": 3.0,
             "floatingWindowOpacity": 0.95,
             "floatingWindowShowPreview": true,
-            "floatingWindowPosition": "topRight"
+            "floatingWindowPosition": "topRight",
+            "autoCopyToClipboard": false,
+            "showInFinderAfterSave": false,
+            "floatingWindowShowShadow": true
         ])
     }
 }

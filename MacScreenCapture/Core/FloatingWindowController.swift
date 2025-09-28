@@ -407,13 +407,22 @@ class FloatingWindowController: NSWindowController {
     
     // MARK: - Actions
     private func saveImage(_ image: NSImage) {
-        let savePanel = NSSavePanel()
-        savePanel.allowedContentTypes = [.png, .jpeg, .tiff]
-        savePanel.nameFieldStringValue = "Screenshot_\(Date().timeIntervalSince1970).png"
-        
-        savePanel.begin { [weak self] result in
-            if result == .OK, let url = savePanel.url {
-                self?.writeImage(image, to: url)
+        DispatchQueue.main.async { [weak self] in
+            let savePanel = NSSavePanel()
+            savePanel.allowedContentTypes = [.png, .jpeg, .tiff]
+            savePanel.nameFieldStringValue = "Screenshot_\(Int(Date().timeIntervalSince1970)).png"
+            savePanel.canCreateDirectories = true
+            savePanel.isExtensionHidden = false
+            
+            // 设置默认保存位置到桌面
+            if let desktopURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first {
+                savePanel.directoryURL = desktopURL
+            }
+            
+            savePanel.begin { [weak self] result in
+                if result == .OK, let url = savePanel.url {
+                    self?.writeImage(image, to: url)
+                }
             }
         }
     }
@@ -435,32 +444,76 @@ class FloatingWindowController: NSWindowController {
     }
     
     private func writeImage(_ image: NSImage, to url: URL) {
-        guard let tiffData = image.tiffRepresentation,
-              let bitmapRep = NSBitmapImageRep(data: tiffData) else {
-            showNotification("保存失败：无法处理图片")
-            return
-        }
-        
-        let fileType: NSBitmapImageRep.FileType
-        switch url.pathExtension.lowercased() {
-        case "jpg", "jpeg":
-            fileType = .jpeg
-        case "tiff", "tif":
-            fileType = .tiff
-        default:
-            fileType = .png
-        }
-        
-        guard let data = bitmapRep.representation(using: fileType, properties: [:]) else {
-            showNotification("保存失败：无法生成文件数据")
-            return
-        }
-        
-        do {
-            try data.write(to: url)
-            showNotification("保存成功")
-        } catch {
-            showNotification("保存失败：\(error.localizedDescription)")
+        // 在后台线程处理图片数据，避免阻塞UI
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            
+            do {
+                // 获取图片的 TIFF 数据
+                guard let tiffData = image.tiffRepresentation else {
+                    DispatchQueue.main.async {
+                        self.showNotification("保存失败：无法获取图片数据")
+                    }
+                    return
+                }
+                
+                // 创建位图表示
+                guard let bitmapRep = NSBitmapImageRep(data: tiffData) else {
+                    DispatchQueue.main.async {
+                        self.showNotification("保存失败：无法处理图片格式")
+                    }
+                    return
+                }
+                
+                // 根据文件扩展名确定保存格式
+                let fileType: NSBitmapImageRep.FileType
+                let properties: [NSBitmapImageRep.PropertyKey: Any]
+                
+                switch url.pathExtension.lowercased() {
+                case "jpg", "jpeg":
+                    fileType = .jpeg
+                    properties = [.compressionFactor: 0.9] // JPEG 质量
+                case "tiff", "tif":
+                    fileType = .tiff
+                    properties = [:]
+                default:
+                    fileType = .png
+                    properties = [:]
+                }
+                
+                // 生成文件数据
+                guard let data = bitmapRep.representation(using: fileType, properties: properties) else {
+                    DispatchQueue.main.async {
+                        self.showNotification("保存失败：无法生成文件数据")
+                    }
+                    return
+                }
+                
+                // 确保目录存在
+                let directory = url.deletingLastPathComponent()
+                if !FileManager.default.fileExists(atPath: directory.path) {
+                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
+                }
+                
+                // 写入文件
+                try data.write(to: url)
+                
+                // 回到主线程更新UI
+                DispatchQueue.main.async {
+                    self.showNotification("保存成功：\(url.lastPathComponent)")
+                    
+                    // 可选：在 Finder 中显示保存的文件
+                    if UserDefaults.standard.bool(forKey: "showInFinderAfterSave") {
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                    }
+                }
+                
+            } catch {
+                DispatchQueue.main.async {
+                    self.showNotification("保存失败：\(error.localizedDescription)")
+                }
+                print("Save error: \(error)")
+            }
         }
     }
     

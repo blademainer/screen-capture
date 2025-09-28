@@ -14,7 +14,6 @@ import AppKit
 
 /// 捕获管理器 - 负责截图和录制功能的核心逻辑
 @available(macOS 12.3, *)
-@MainActor
 class CaptureManager: ObservableObject {
     
     // MARK: - Published Properties
@@ -36,6 +35,9 @@ class CaptureManager: ObservableObject {
     private var recordingTimer: Timer?
     private var recordingStartTime: Date?
     private var securityScopedURL: URL?
+    
+    // 线程安全的队列
+    private let captureQueue = DispatchQueue(label: "com.macscreencapture.capture", qos: .userInitiated)
     
     // MARK: - Configuration
     private var outputDirectory: URL {
@@ -103,16 +105,23 @@ class CaptureManager: ObservableObject {
     }
     
     deinit {
-        Task {
-            await stopRecording()
-        }
+        // 移除通知观察者
+        NotificationCenter.default.removeObserver(self)
         
         // 停止访问安全作用域资源
-        if let securityScopedURL = securityScopedURL {
-            securityScopedURL.stopAccessingSecurityScopedResource()
-        }
+        securityScopedURL?.stopAccessingSecurityScopedResource()
         
-        NotificationCenter.default.removeObserver(self)
+        // 在后台队列中清理资源，避免主线程阻塞
+        captureQueue.async { [stream, streamOutput] in
+            // 同步停止流
+            if let stream = stream {
+                // 使用同步方法停止流，避免异步回调
+                stream.stopCapture { _ in }
+            }
+            
+            // 完成写入
+            streamOutput?.finishWriting()
+        }
     }
     
     // MARK: - Public Methods
@@ -122,6 +131,43 @@ class CaptureManager: ObservableObject {
         Task {
             await updateAvailableContent()
         }
+    }
+    
+    /// 清理资源 - 在应用退出前调用
+    @MainActor
+    func cleanup() async {
+        // 如果正在录制，先停止录制
+        if isRecording {
+            await stopRecording()
+        }
+        
+        // 停止计时器
+        recordingTimer?.invalidate()
+        recordingTimer = nil
+        
+        // 在后台队列中清理流资源
+        let currentStream = stream
+        let currentOutput = streamOutput
+        
+        await withCheckedContinuation { continuation in
+            captureQueue.async {
+                // 清理流资源
+                if let stream = currentStream {
+                    stream.stopCapture { _ in
+                        // 完成视频写入
+                        currentOutput?.finishWriting()
+                        continuation.resume()
+                    }
+                } else {
+                    currentOutput?.finishWriting()
+                    continuation.resume()
+                }
+            }
+        }
+        
+        // 清理资源
+        stream = nil
+        streamOutput = nil
     }
     
     /// 截图
@@ -172,46 +218,90 @@ class CaptureManager: ObservableObject {
     }
     
     /// 开始录制
+    @MainActor
     func startRecording() async throws {
         guard !isRecording else { return }
         guard #available(macOS 12.3, *) else {
             throw CaptureError.unsupportedSystem
         }
         
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        
-        let filter: SCContentFilter
-        
-        switch captureMode {
-        case .fullScreen:
-            guard let display = selectedDisplay ?? content.displays.first else {
-                throw CaptureError.noDisplayAvailable
+        // 在后台队列中执行耗时操作
+        let (filter, screenSize, outputURL): (SCContentFilter, CGSize, URL) = try await withCheckedThrowingContinuation { continuation in
+            captureQueue.async {
+                Task {
+                    do {
+                        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+                        
+                        var filter: SCContentFilter?
+                        
+                        await MainActor.run {
+                            switch self.captureMode {
+                            case .fullScreen:
+                                guard let display = self.selectedDisplay ?? content.displays.first else {
+                                    continuation.resume(throwing: CaptureError.noDisplayAvailable)
+                                    return
+                                }
+                                filter = SCContentFilter(display: display, excludingWindows: [])
+                                
+                            case .window:
+                                guard let window = self.selectedWindow else {
+                                    continuation.resume(throwing: CaptureError.noWindowSelected)
+                                    return
+                                }
+                                filter = SCContentFilter(desktopIndependentWindow: window)
+                                
+                            case .region:
+                                continuation.resume(throwing: CaptureError.regionRecordingNotSupported)
+                                return
+                            }
+                        }
+                        
+                        guard let finalFilter = filter else {
+                            continuation.resume(throwing: CaptureError.noDisplayAvailable)
+                            return
+                        }
+                        
+                        // 获取实际屏幕分辨率
+                        let screenSize: CGSize = await MainActor.run {
+                            if case .fullScreen = self.captureMode, let display = self.selectedDisplay ?? content.displays.first {
+                                return CGSize(width: display.width, height: display.height)
+                            } else {
+                                // 默认使用主屏幕分辨率
+                                let mainScreen = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
+                                return mainScreen
+                            }
+                        }
+                        
+                        // 创建输出文件URL
+                        let fileName = "Recording_\(DateFormatter.fileNameFormatter.string(from: Date())).mov"
+                        let outputURL = await MainActor.run {
+                            self.outputDirectory.appendingPathComponent(fileName)
+                        }
+                        
+                        continuation.resume(returning: (finalFilter, screenSize, outputURL))
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
             }
-            filter = SCContentFilter(display: display, excludingWindows: [])
-            
-        case .window:
-            guard let window = selectedWindow else {
-                throw CaptureError.noWindowSelected
-            }
-            filter = SCContentFilter(desktopIndependentWindow: window)
-            
-        case .region:
-            throw CaptureError.regionRecordingNotSupported
         }
         
         let configuration = SCStreamConfiguration()
-        configuration.width = 1920
-        configuration.height = 1080
-        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 60) // 60 FPS
-        configuration.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        configuration.width = Int(screenSize.width)
+        configuration.height = Int(screenSize.height)
+        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30) // 30 FPS
+        configuration.pixelFormat = kCVPixelFormatType_32BGRA // 使用更兼容的像素格式
         configuration.showsCursor = true
+        configuration.queueDepth = 3 // 减少队列深度
+        
         if #available(macOS 13.0, *) {
             configuration.capturesAudio = true
         }
         
-        // 创建输出文件URL
-        let fileName = "Recording_\(DateFormatter.fileNameFormatter.string(from: Date())).mov"
-        recordingURL = outputDirectory.appendingPathComponent(fileName)
+        print("录制配置: \(Int(screenSize.width))x\(Int(screenSize.height)) @ 30fps")
+        
+        recordingURL = outputURL
+        print("录制文件路径: \(recordingURL!.path)")
         
         // 创建流输出
         streamOutput = CaptureStreamOutput(outputURL: recordingURL!)
@@ -219,9 +309,17 @@ class CaptureManager: ObservableObject {
         // 创建并启动流
         stream = SCStream(filter: filter, configuration: configuration, delegate: streamOutput)
         
-        try stream?.addStreamOutput(streamOutput!, type: .screen, sampleHandlerQueue: DispatchQueue.global(qos: .userInitiated))
+        // 添加视频流输出
+        try stream?.addStreamOutput(streamOutput!, type: .screen, sampleHandlerQueue: captureQueue)
         
+        // 添加音频流输出（如果支持）
+        if #available(macOS 13.0, *) {
+            try stream?.addStreamOutput(streamOutput!, type: .audio, sampleHandlerQueue: captureQueue)
+        }
+        
+        print("开始启动录制流...")
         try await stream?.startCapture()
+        print("录制流启动成功")
         
         // 更新状态
         isRecording = true
@@ -234,25 +332,55 @@ class CaptureManager: ObservableObject {
     }
     
     /// 停止录制
+    @MainActor
     func stopRecording() async {
         guard isRecording else { return }
         
-        try? await stream?.stopCapture()
-        stream = nil
-        streamOutput = nil
+        print("正在停止录制...")
         
+        // 停止计时器
+        recordingTimer?.invalidate()
+        recordingTimer = nil
+        
+        // 在后台队列中停止流
+        let currentStream = stream
+        let currentOutput = streamOutput
+        let currentURL = recordingURL
+        
+        await withCheckedContinuation { continuation in
+            captureQueue.async {
+                // 停止捕获流
+                if let stream = currentStream {
+                    stream.stopCapture { _ in
+                        // 完成视频写入
+                        currentOutput?.finishWriting()
+                        continuation.resume()
+                    }
+                } else {
+                    currentOutput?.finishWriting()
+                    continuation.resume()
+                }
+            }
+        }
+        
+        // 更新状态
         isRecording = false
         isPaused = false
         recordingDuration = 0
-        recordingTimer?.invalidate()
-        recordingTimer = nil
         recordingStartTime = nil
         
+        // 清理资源
+        stream = nil
+        streamOutput = nil
+        
+        print("录制已停止")
+        
         // 发送通知
-        NotificationCenter.default.post(name: .recordingDidStop, object: recordingURL)
+        NotificationCenter.default.post(name: .recordingDidStop, object: currentURL)
     }
     
     /// 暂停/恢复录制
+    @MainActor
     func togglePauseRecording() {
         guard isRecording else { return }
         
@@ -270,16 +398,34 @@ class CaptureManager: ObservableObject {
     }
     
     /// 更新可用内容
+    @MainActor
     func updateAvailableContent() async {
         guard #available(macOS 12.3, *) else { return }
         
         do {
-            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-            
-            availableDisplays = content.displays
-            availableWindows = content.windows.filter { window in
-                window.title?.isEmpty == false && window.frame.width > 100 && window.frame.height > 100
+            // 在后台队列中获取内容
+            let (displays, windows) = try await withCheckedThrowingContinuation { continuation in
+                captureQueue.async {
+                    Task {
+                        do {
+                            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+                            
+                            let displays = content.displays
+                            let windows = content.windows.filter { window in
+                                window.title?.isEmpty == false && window.frame.width > 100 && window.frame.height > 100
+                            }
+                            
+                            continuation.resume(returning: (displays, windows))
+                        } catch {
+                            continuation.resume(throwing: error)
+                        }
+                    }
+                }
             }
+            
+            // 在主线程上更新 UI
+            availableDisplays = displays
+            availableWindows = windows
             
             // 设置默认选择
             if selectedDisplay == nil {
@@ -305,16 +451,19 @@ class CaptureManager: ObservableObject {
     
     /// 处理显示器配置变化
     @objc private func handleDisplayConfigurationChange() {
-        Task {
+        Task { @MainActor in
             await updateAvailableContent()
         }
     }
     
     /// 开始录制计时器
+    @MainActor
     private func startRecordingTimer() {
         recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            guard let self = self, let startTime = self.recordingStartTime else { return }
-            self.recordingDuration = Date().timeIntervalSince(startTime)
+            Task { @MainActor in
+                guard let self = self, let startTime = self.recordingStartTime else { return }
+                self.recordingDuration = Date().timeIntervalSince(startTime)
+            }
         }
     }
     
@@ -569,29 +718,60 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
     private var audioInput: AVAssetWriterInput?
+    private var isWritingStarted = false
+    private var frameCount = 0
+    private var audioFrameCount = 0
+    private var micFrameCount = 0
     
     init(outputURL: URL) {
         self.outputURL = outputURL
         super.init()
-        setupAssetWriter()
     }
     
-    private func setupAssetWriter() {
+    func setupAssetWriter(with sampleBuffer: CMSampleBuffer) {
         do {
+            // 删除已存在的文件
+            if FileManager.default.fileExists(atPath: outputURL.path) {
+                try FileManager.default.removeItem(at: outputURL)
+            }
+            
+            // 使用 QuickTime 格式以确保最佳兼容性
             assetWriter = try AVAssetWriter(outputURL: outputURL, fileType: .mov)
             
-            // 视频输入设置
+            // 从样本缓冲区获取实际的视频尺寸
+            guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) else {
+                print("无法获取格式描述")
+                return
+            }
+            
+            let dimensions = CMVideoFormatDescriptionGetDimensions(formatDescription)
+            let width = Int(dimensions.width)
+            let height = Int(dimensions.height)
+            
+            print("录制分辨率: \(width)x\(height)")
+            
+            // 确保宽度和高度是偶数（H.264 要求）
+            let adjustedWidth = (width % 2 == 0) ? width : width - 1
+            let adjustedHeight = (height % 2 == 0) ? height : height - 1
+            
+            print("调整后录制分辨率: \(adjustedWidth)x\(adjustedHeight)")
+            
+            // 视频输入设置 - 使用最兼容的 H.264 设置
             let videoSettings: [String: Any] = [
                 AVVideoCodecKey: AVVideoCodecType.h264,
-                AVVideoWidthKey: 1920,
-                AVVideoHeightKey: 1080,
+                AVVideoWidthKey: adjustedWidth,
+                AVVideoHeightKey: adjustedHeight,
                 AVVideoCompressionPropertiesKey: [
-                    AVVideoAverageBitRateKey: 5000000
+                    AVVideoAverageBitRateKey: 6000000,
+                    AVVideoMaxKeyFrameIntervalKey: 30
                 ]
             ]
             
             videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
             videoInput?.expectsMediaDataInRealTime = true
+            
+            // 设置变换矩阵以确保正确的方向
+            videoInput?.transform = CGAffineTransform.identity
             
             if let videoInput = videoInput, assetWriter?.canAdd(videoInput) == true {
                 assetWriter?.add(videoInput)
@@ -613,47 +793,132 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
             }
             
         } catch {
-            print("Failed to setup asset writer: \(error)")
+            print("设置资产写入器失败: \(error)")
         }
     }
     
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard let assetWriter = assetWriter else { return }
+        // 如果还没有设置资产写入器，先设置
+        if assetWriter == nil && type == .screen {
+            print("首次收到视频帧，设置资产写入器...")
+            setupAssetWriter(with: sampleBuffer)
+        }
         
-        if assetWriter.status == .unknown {
-            assetWriter.startWriting()
+        guard let assetWriter = assetWriter else { 
+            print("资产写入器未初始化")
+            return 
+        }
+        
+        // 开始写入会话
+        if !isWritingStarted && assetWriter.status == .unknown {
+            guard assetWriter.startWriting() else {
+                print("开始写入失败: \(assetWriter.error?.localizedDescription ?? "未知错误")")
+                return
+            }
             assetWriter.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
+            isWritingStarted = true
+            print("录制会话已开始，时间戳: \(CMSampleBufferGetPresentationTimeStamp(sampleBuffer))")
+        }
+        
+        // 检查写入状态
+        guard assetWriter.status == .writing else {
+            print("资产写入器状态异常: \(assetWriter.status.rawValue)")
+            if let error = assetWriter.error {
+                print("写入器错误: \(error.localizedDescription)")
+            }
+            return
         }
         
         switch type {
         case .screen:
             if let videoInput = videoInput, videoInput.isReadyForMoreMediaData {
-                videoInput.append(sampleBuffer)
+                if videoInput.append(sampleBuffer) {
+                    // 每100帧打印一次成功信息
+                    frameCount += 1
+                    if frameCount % 100 == 0 {
+                        print("已写入 \(frameCount) 个视频帧")
+                    }
+                } else {
+                    print("视频帧写入失败，输入状态: \(videoInput.isReadyForMoreMediaData)")
+                }
+            } else {
+                print("视频输入未准备好或不存在")
             }
         case .audio:
             if let audioInput = audioInput, audioInput.isReadyForMoreMediaData {
-                audioInput.append(sampleBuffer)
+                if audioInput.append(sampleBuffer) {
+                    audioFrameCount += 1
+                    if audioFrameCount % 100 == 0 {
+                        print("已写入 \(audioFrameCount) 个音频帧")
+                    }
+                } else {
+                    print("音频帧写入失败")
+                }
             }
         case .microphone:
             if let audioInput = audioInput, audioInput.isReadyForMoreMediaData {
-                audioInput.append(sampleBuffer)
+                if audioInput.append(sampleBuffer) {
+                    micFrameCount += 1
+                    if micFrameCount % 100 == 0 {
+                        print("已写入 \(micFrameCount) 个麦克风音频帧")
+                    }
+                } else {
+                    print("麦克风音频写入失败")
+                }
             }
         @unknown default:
+            print("未知的流类型: \(type)")
             break
         }
     }
     
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        print("Stream stopped with error: \(error)")
-        finishWriting()
+        print("录制流停止，错误: \(error)")
+        DispatchQueue.main.async {
+            self.finishWriting()
+        }
     }
     
-    private func finishWriting() {
+    func finishWriting() {
+        guard let assetWriter = assetWriter else {
+            print("资产写入器为空，无法完成写入")
+            return
+        }
+        
+        print("开始完成录制写入...")
+        
+        // 标记输入完成
         videoInput?.markAsFinished()
         audioInput?.markAsFinished()
         
-        assetWriter?.finishWriting {
-            print("Recording finished")
+        // 完成写入
+        assetWriter.finishWriting { [weak self] in
+            DispatchQueue.main.async {
+                if let error = assetWriter.error {
+                    print("录制完成时出错: \(error.localizedDescription)")
+                } else {
+                    print("录制成功完成，文件保存至: \(self?.outputURL.path ?? "未知路径")")
+                    
+                    // 验证文件是否存在且有效
+                    if let url = self?.outputURL, FileManager.default.fileExists(atPath: url.path) {
+                        do {
+                            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+                            let fileSize = attributes[.size] as? Int64 ?? 0
+                            print("录制文件大小: \(fileSize) 字节")
+                            
+                            if fileSize > 0 {
+                                print("录制文件有效")
+                            } else {
+                                print("警告: 录制文件大小为0")
+                            }
+                        } catch {
+                            print("无法获取文件属性: \(error)")
+                        }
+                    } else {
+                        print("错误: 录制文件不存在")
+                    }
+                }
+            }
         }
     }
 }

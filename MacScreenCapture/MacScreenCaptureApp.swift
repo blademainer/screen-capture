@@ -37,5 +37,16 @@ struct MacScreenCaptureApp: App {
         // 应用启动时的初始化设置
         permissionManager.checkAllPermissions()
         captureManager.initialize()
+        
+        // 监听应用退出通知
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task {
+                await captureManager.cleanup()
+            }
+        }
     }
 }

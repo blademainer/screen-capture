@@ -290,9 +290,10 @@ class CaptureManager: ObservableObject {
         configuration.width = Int(screenSize.width)
         configuration.height = Int(screenSize.height)
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30) // 30 FPS
-        configuration.pixelFormat = kCVPixelFormatType_32BGRA // 使用更兼容的像素格式
+        configuration.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange // 使用 YUV 格式，更适合 H.264
         configuration.showsCursor = true
-        configuration.queueDepth = 3 // 减少队列深度
+        configuration.queueDepth = 5
+        configuration.colorSpaceName = CGColorSpace.sRGB // 使用标准 sRGB 色彩空间
         
         if #available(macOS 13.0, *) {
             configuration.capturesAudio = true
@@ -602,7 +603,7 @@ class CaptureManager: ObservableObject {
             throw CaptureError.noDisplayAvailable
         }
         
-        let filter = SCContentFilter(display: display, excludingWindows: [])
+        _ = SCContentFilter(display: display, excludingWindows: [])
         
         let configuration = SCStreamConfiguration()
         configuration.width = Int(rect.width)
@@ -718,6 +719,7 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
     private var audioInput: AVAssetWriterInput?
+    private var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
     private var isWritingStarted = false
     private var frameCount = 0
     private var audioFrameCount = 0
@@ -756,14 +758,18 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
             
             print("调整后录制分辨率: \(adjustedWidth)x\(adjustedHeight)")
             
-            // 视频输入设置 - 使用最兼容的 H.264 设置
+            // 视频输入设置 - 使用 QuickTime 兼容的 H.264 设置
             let videoSettings: [String: Any] = [
                 AVVideoCodecKey: AVVideoCodecType.h264,
                 AVVideoWidthKey: adjustedWidth,
                 AVVideoHeightKey: adjustedHeight,
                 AVVideoCompressionPropertiesKey: [
-                    AVVideoAverageBitRateKey: 6000000,
-                    AVVideoMaxKeyFrameIntervalKey: 30
+                    AVVideoProfileLevelKey: AVVideoProfileLevelH264BaselineAutoLevel,
+                    AVVideoAverageBitRateKey: 5000000,
+                    AVVideoMaxKeyFrameIntervalKey: 30,
+                    AVVideoAllowFrameReorderingKey: false,
+                    AVVideoExpectedSourceFrameRateKey: 30,
+                    AVVideoH264EntropyModeKey: AVVideoH264EntropyModeCAVLC
                 ]
             ]
             
@@ -773,8 +779,23 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
             // 设置变换矩阵以确保正确的方向
             videoInput?.transform = CGAffineTransform.identity
             
-            if let videoInput = videoInput, assetWriter?.canAdd(videoInput) == true {
-                assetWriter?.add(videoInput)
+            // 创建像素缓冲区适配器
+            let pixelBufferAttributes: [String: Any] = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferWidthKey as String: adjustedWidth,
+                kCVPixelBufferHeightKey as String: adjustedHeight,
+                kCVPixelBufferMetalCompatibilityKey as String: true
+            ]
+            
+            if let videoInput = videoInput {
+                pixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(
+                    assetWriterInput: videoInput,
+                    sourcePixelBufferAttributes: pixelBufferAttributes
+                )
+                
+                if assetWriter?.canAdd(videoInput) == true {
+                    assetWriter?.add(videoInput)
+                }
             }
             
             // 音频输入设置
@@ -832,14 +853,34 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
         switch type {
         case .screen:
             if let videoInput = videoInput, videoInput.isReadyForMoreMediaData {
-                if videoInput.append(sampleBuffer) {
-                    // 每100帧打印一次成功信息
-                    frameCount += 1
-                    if frameCount % 100 == 0 {
-                        print("已写入 \(frameCount) 个视频帧")
+                // 获取像素缓冲区
+                guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+                    print("无法获取像素缓冲区")
+                    return
+                }
+                
+                let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+                
+                // 使用像素缓冲区适配器写入
+                if let adaptor = pixelBufferAdaptor, adaptor.assetWriterInput.isReadyForMoreMediaData {
+                    if adaptor.append(pixelBuffer, withPresentationTime: presentationTime) {
+                        frameCount += 1
+                        if frameCount % 100 == 0 {
+                            print("已写入 \(frameCount) 个视频帧")
+                        }
+                    } else {
+                        print("像素缓冲区适配器写入失败")
                     }
                 } else {
-                    print("视频帧写入失败，输入状态: \(videoInput.isReadyForMoreMediaData)")
+                    // 回退到直接写入样本缓冲区
+                    if videoInput.append(sampleBuffer) {
+                        frameCount += 1
+                        if frameCount % 100 == 0 {
+                            print("已写入 \(frameCount) 个视频帧 (直接模式)")
+                        }
+                    } else {
+                        print("视频帧写入失败")
+                    }
                 }
             } else {
                 print("视频输入未准备好或不存在")

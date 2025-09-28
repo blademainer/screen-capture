@@ -20,6 +20,11 @@
 		A1234567890ABCDFC /* KeyboardShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDFB /* KeyboardShortcuts.swift */; };
 		A1234567890ABCDFE /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDFD /* NotificationManager.swift */; };
 		A1234567890ABCE00 /* FileManager+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDFF /* FileManager+Extensions.swift */; };
+		A1234567890ABCE02 /* HotKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE01 /* HotKeyManager.swift */; };
+		A1234567890ABCE04 /* WindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE03 /* WindowManager.swift */; };
+		A1234567890ABCE06 /* FloatingWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE05 /* FloatingWindowController.swift */; };
+		A1234567890ABCE08 /* HotKeySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE07 /* HotKeySettingsView.swift */; };
+		A1234567890ABCE0A /* FloatingWindowContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE09 /* FloatingWindowContentView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,6 +43,11 @@
 		A1234567890ABCDFB /* KeyboardShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcuts.swift; sourceTree = "<group>"; };
 		A1234567890ABCDFD /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		A1234567890ABCDFF /* FileManager+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FileManager+Extensions.swift"; sourceTree = "<group>"; };
+		A1234567890ABCE01 /* HotKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyManager.swift; sourceTree = "<group>"; };
+		A1234567890ABCE03 /* WindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowManager.swift; sourceTree = "<group>"; };
+		A1234567890ABCE05 /* FloatingWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingWindowController.swift; sourceTree = "<group>"; };
+		A1234567890ABCE07 /* HotKeySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeySettingsView.swift; sourceTree = "<group>"; };
+		A1234567890ABCE09 /* FloatingWindowContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingWindowContentView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -95,6 +105,9 @@
 			children = (
 				A1234567890ABCDEF /* CaptureManager.swift */,
 				A1234567890ABCDF1 /* PermissionManager.swift */,
+				A1234567890ABCE01 /* HotKeyManager.swift */,
+				A1234567890ABCE03 /* WindowManager.swift */,
+				A1234567890ABCE05 /* FloatingWindowController.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -106,6 +119,8 @@
 				A1234567890ABCDF5 /* RecordingView.swift */,
 				A1234567890ABCDF7 /* MenuBarView.swift */,
 				A1234567890ABCDF9 /* SettingsView.swift */,
+				A1234567890ABCE07 /* HotKeySettingsView.swift */,
+				A1234567890ABCE09 /* FloatingWindowContentView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -136,8 +151,6 @@
 			dependencies = (
 			);
 			name = MacScreenCapture;
-			packageProductDependencies = (
-			);
 			productName = MacScreenCapture;
 			productReference = A1234567890ABCDD /* MacScreenCapture.app */;
 			productType = "com.apple.product-type.application";
@@ -203,6 +216,11 @@
 				A1234567890ABCDFC /* KeyboardShortcuts.swift in Sources */,
 				A1234567890ABCDFE /* NotificationManager.swift in Sources */,
 				A1234567890ABCE00 /* FileManager+Extensions.swift in Sources */,
+				A1234567890ABCE02 /* HotKeyManager.swift in Sources */,
+				A1234567890ABCE04 /* WindowManager.swift in Sources */,
+				A1234567890ABCE06 /* FloatingWindowController.swift in Sources */,
+				A1234567890ABCE08 /* HotKeySettingsView.swift in Sources */,
+				A1234567890ABCE0A /* FloatingWindowContentView.swift in Sources */,
 				A1234567890ABCDE1 /* MacScreenCaptureApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

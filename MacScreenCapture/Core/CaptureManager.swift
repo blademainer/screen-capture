@@ -16,6 +16,9 @@ import AppKit
 @available(macOS 12.3, *)
 class CaptureManager: ObservableObject {
     
+    // MARK: - Singleton
+    static let shared = CaptureManager()
+    
     // MARK: - Published Properties
     @Published var isRecording = false
     @Published var isPaused = false
@@ -133,6 +136,61 @@ class CaptureManager: ObservableObject {
         }
     }
     
+    // MARK: - Hotkey Action Methods
+    
+    /// 全屏截图 - 快捷键调用
+    @MainActor
+    func captureFullScreen() async {
+        do {
+            let originalMode = captureMode
+            captureMode = .fullScreen
+            _ = try await captureScreenshot()
+            captureMode = originalMode
+        } catch {
+            print("全屏截图失败: \(error)")
+        }
+    }
+    
+    /// 区域截图 - 快捷键调用
+    @MainActor
+    func captureRegion() async {
+        do {
+            let originalMode = captureMode
+            captureMode = .region
+            _ = try await captureScreenshot()
+            captureMode = originalMode
+        } catch {
+            print("区域截图失败: \(error)")
+        }
+    }
+    
+    /// 窗口截图 - 快捷键调用
+    @MainActor
+    func captureWindow() async {
+        do {
+            let originalMode = captureMode
+            captureMode = .window
+            _ = try await captureScreenshot()
+            captureMode = originalMode
+        } catch {
+            print("窗口截图失败: \(error)")
+        }
+    }
+    
+    /// 滚动截图 - 快捷键调用
+    @MainActor
+    func captureScrollingWindow() async {
+        // 滚动截图功能暂未实现，显示提示
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "功能开发中"
+            alert.informativeText = "滚动截图功能正在开发中，敬请期待。"
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "确定")
+            alert.runModal()
+        }
+    }
+    
     /// 清理资源 - 在应用退出前调用
     @MainActor
     func cleanup() async {
@@ -232,28 +290,36 @@ class CaptureManager: ObservableObject {
                     do {
                         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
                         
+                        // 使用局部变量来避免在 MainActor.run 中调用 continuation.resume
+                        var captureError: CaptureError?
                         var filter: SCContentFilter?
                         
                         await MainActor.run {
                             switch self.captureMode {
                             case .fullScreen:
                                 guard let display = self.selectedDisplay ?? content.displays.first else {
-                                    continuation.resume(throwing: CaptureError.noDisplayAvailable)
+                                    captureError = CaptureError.noDisplayAvailable
                                     return
                                 }
                                 filter = SCContentFilter(display: display, excludingWindows: [])
                                 
                             case .window:
                                 guard let window = self.selectedWindow else {
-                                    continuation.resume(throwing: CaptureError.noWindowSelected)
+                                    captureError = CaptureError.noWindowSelected
                                     return
                                 }
                                 filter = SCContentFilter(desktopIndependentWindow: window)
                                 
                             case .region:
-                                continuation.resume(throwing: CaptureError.regionRecordingNotSupported)
+                                captureError = CaptureError.regionRecordingNotSupported
                                 return
                             }
+                        }
+                        
+                        // 检查是否有错误
+                        if let error = captureError {
+                            continuation.resume(throwing: error)
+                            return
                         }
                         
                         guard let finalFilter = filter else {
@@ -396,6 +462,19 @@ class CaptureManager: ObservableObject {
             recordingTimer = nil
             isPaused = true
         }
+    }
+    
+    /// 恢复录制 - 快捷键调用
+    @MainActor
+    func resumeRecording() async {
+        guard isRecording && isPaused else { return }
+        
+        // 恢复录制
+        recordingStartTime = Date().addingTimeInterval(-recordingDuration)
+        startRecordingTimer()
+        isPaused = false
+        
+        print("录制已恢复")
     }
     
     /// 更新可用内容

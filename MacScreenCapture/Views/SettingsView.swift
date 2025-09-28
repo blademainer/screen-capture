@@ -40,7 +40,18 @@ struct SettingsView: View {
                 Divider()
                 
                 // 快捷键设置
-                ShortcutSettingsSection()
+                if #available(macOS 12.3, *) {
+                    if #available(macOS 12.3, *) {
+                    ShortcutSettingsSection()
+                }
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("快捷键设置")
+                            .font(.headline)
+                        Text("快捷键设置需要 macOS 12.3 或更高版本")
+                            .foregroundColor(.secondary)
+                    }
+                }
                 
                 Divider()
                 
@@ -173,16 +184,18 @@ struct SettingsView: View {
     }
     
     @ViewBuilder
+    @available(macOS 12.3, *)
     private func ShortcutSettingsSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("快捷键")
+            Text("快捷键设置")
                 .font(.headline)
             
-            VStack(spacing: 8) {
-                ShortcutRow(title: "截图", shortcut: "⌘⇧S")
-                ShortcutRow(title: "录制", shortcut: "⌘⇧R")
-                ShortcutRow(title: "暂停/恢复录制", shortcut: "⌘Space")
-                ShortcutRow(title: "区域截图", shortcut: "⌘⇧A")
+            // 集成完整的快捷键设置界面
+            if #available(macOS 12.3, *) {
+                HotKeySettingsView()
+            } else {
+                Text("快捷键设置需要 macOS 12.3 或更高版本")
+                    .foregroundColor(.secondary)
             }
         }
     }
@@ -294,23 +307,7 @@ struct PermissionStatusRow: View {
     }
 }
 
-struct ShortcutRow: View {
-    let title: String
-    let shortcut: String
-    
-    var body: some View {
-        HStack {
-            Text(title)
-            Spacer()
-            Text(shortcut)
-                .font(.system(.caption, design: .monospaced))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
-                .background(Color(.controlBackgroundColor))
-                .cornerRadius(4)
-        }
-    }
-}
+
 
 #Preview {
     SettingsView()

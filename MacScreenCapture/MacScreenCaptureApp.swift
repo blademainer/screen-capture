@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Foundation
 
 @available(macOS 13.0, *)
 @main
@@ -37,6 +38,9 @@ struct MacScreenCaptureApp: App {
         // 应用启动时的初始化设置
         permissionManager.checkAllPermissions()
         captureManager.initialize()
+        
+        // 初始化快捷键管理器
+        _ = HotKeyManager.shared
         
         // 监听应用退出通知
         NotificationCenter.default.addObserver(

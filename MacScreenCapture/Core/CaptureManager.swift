@@ -35,14 +35,67 @@ class CaptureManager: ObservableObject {
     private var streamOutput: CaptureStreamOutput?
     private var recordingTimer: Timer?
     private var recordingStartTime: Date?
+    private var securityScopedURL: URL?
     
     // MARK: - Configuration
-    private let outputDirectory: URL = {
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let captureDir = documentsPath.appendingPathComponent("ScreenCaptures")
-        try? FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
-        return captureDir
-    }()
+    private var outputDirectory: URL {
+        // 首先尝试使用安全作用域书签
+        if let bookmarkData = UserDefaults.standard.data(forKey: "defaultSaveLocationBookmark") {
+            do {
+                var isStale = false
+                let url = try URL(resolvingBookmarkData: bookmarkData, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale)
+                
+                if !isStale {
+                    // 确保目录存在
+                    try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+                    return url
+                }
+            } catch {
+                print("解析书签失败: \(error)")
+            }
+        }
+        
+        // 回退到字符串路径（用于向后兼容）
+        let defaultSaveLocation = UserDefaults.standard.string(forKey: "defaultSaveLocation")
+        
+        let baseURL: URL
+        if let customPath = defaultSaveLocation, !customPath.isEmpty {
+            baseURL = URL(fileURLWithPath: customPath)
+        } else {
+            // 默认保存到 Documents/ScreenCaptures
+            let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            baseURL = documentsPath.appendingPathComponent("ScreenCaptures")
+        }
+        
+        // 确保目录存在
+        try? FileManager.default.createDirectory(at: baseURL, withIntermediateDirectories: true)
+        return baseURL
+    }
+    
+    /// 获取安全作用域访问的输出目录
+    private func getSecureOutputDirectory() -> URL? {
+        // 首先尝试使用安全作用域书签
+        if let bookmarkData = UserDefaults.standard.data(forKey: "defaultSaveLocationBookmark") {
+            do {
+                var isStale = false
+                let url = try URL(resolvingBookmarkData: bookmarkData, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale)
+                
+                if !isStale {
+                    // 开始访问安全作用域资源
+                    if url.startAccessingSecurityScopedResource() {
+                        // 确保目录存在
+                        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+                        return url
+                    } else {
+                        print("无法访问安全作用域资源: \(url.path)")
+                    }
+                }
+            } catch {
+                print("解析书签失败: \(error)")
+            }
+        }
+        return nil
+    }
     
     // MARK: - Initialization
     init() {
@@ -53,6 +106,12 @@ class CaptureManager: ObservableObject {
         Task {
             await stopRecording()
         }
+        
+        // 停止访问安全作用域资源
+        if let securityScopedURL = securityScopedURL {
+            securityScopedURL.stopAccessingSecurityScopedResource()
+        }
+        
         NotificationCenter.default.removeObserver(self)
     }
     
@@ -261,16 +320,65 @@ class CaptureManager: ObservableObject {
     
     /// 保存截图
     private func saveScreenshot(_ image: NSImage) async throws {
-        let fileName = "Screenshot_\(DateFormatter.fileNameFormatter.string(from: Date())).png"
-        let fileURL = outputDirectory.appendingPathComponent(fileName)
+        // 获取用户设置的图片格式
+        let screenshotFormat = UserDefaults.standard.string(forKey: "screenshotFormat") ?? "PNG"
+        let fileExtension = screenshotFormat.lowercased()
+        
+        let fileName = "Screenshot_\(DateFormatter.fileNameFormatter.string(from: Date())).\(fileExtension)"
+        
+        // 使用安全作用域资源访问
+        var securityScopedURL: URL?
+        var needsSecurityScope = false
+        
+        // 检查是否有安全作用域书签
+        if let bookmarkData = UserDefaults.standard.data(forKey: "defaultSaveLocationBookmark") {
+            do {
+                var isStale = false
+                let url = try URL(resolvingBookmarkData: bookmarkData, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale)
+                
+                if !isStale && url.startAccessingSecurityScopedResource() {
+                    securityScopedURL = url
+                    needsSecurityScope = true
+                }
+            } catch {
+                print("解析书签失败: \(error)")
+            }
+        }
+        
+        let baseDirectory = securityScopedURL ?? outputDirectory
+        let fileURL = baseDirectory.appendingPathComponent(fileName)
+        
+        defer {
+            // 确保在方法结束时停止访问安全作用域资源
+            if needsSecurityScope, let scopedURL = securityScopedURL {
+                scopedURL.stopAccessingSecurityScopedResource()
+            }
+        }
         
         guard let tiffData = image.tiffRepresentation,
-              let bitmapRep = NSBitmapImageRep(data: tiffData),
-              let pngData = bitmapRep.representation(using: .png, properties: [:]) else {
+              let bitmapRep = NSBitmapImageRep(data: tiffData) else {
             throw CaptureError.failedToSaveImage
         }
         
-        try pngData.write(to: fileURL)
+        // 根据格式选择相应的数据表示
+        let imageData: Data?
+        switch screenshotFormat.uppercased() {
+        case "JPEG":
+            imageData = bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.9])
+        case "TIFF":
+            imageData = bitmapRep.representation(using: .tiff, properties: [:])
+        default: // PNG
+            imageData = bitmapRep.representation(using: .png, properties: [:])
+        }
+        
+        guard let finalData = imageData else {
+            throw CaptureError.failedToSaveImage
+        }
+        
+        // 确保目录存在
+        try? FileManager.default.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
+        
+        try finalData.write(to: fileURL)
         
         // 更新最后保存的文件URL
         await MainActor.run {

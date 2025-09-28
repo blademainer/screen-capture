@@ -42,6 +42,8 @@
 	<string>此应用需要访问文档文件夹来保存截图和录制文件。</string>
 	<key>NSDownloadsFolderUsageDescription</key>
 	<string>此应用需要访问下载文件夹来保存截图和录制文件。</string>
+	<key>NSScreenCaptureDescription</key>
+	<string>此应用需要屏幕录制权限来进行截图和录屏功能。</string>
 	<key>LSUIElement</key>
 	<false/>
 	<key>LSBackgroundOnly</key>

@@ -230,10 +230,31 @@ struct SettingsView: View {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
+        panel.message = "选择截图保存位置"
+        panel.prompt = "选择"
         
         if panel.runModal() == .OK {
             if let url = panel.url {
-                defaultSaveLocation = url.path
+                // 开始访问安全作用域资源
+                guard url.startAccessingSecurityScopedResource() else {
+                    print("无法访问选择的文件夹")
+                    return
+                }
+                
+                // 创建安全作用域书签
+                do {
+                    let bookmarkData = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+                    UserDefaults.standard.set(bookmarkData, forKey: "defaultSaveLocationBookmark")
+                    // 同时保存路径字符串用于显示
+                    UserDefaults.standard.set(url.path, forKey: "defaultSaveLocation")
+                    defaultSaveLocation = url.path
+                    print("成功保存文件夹权限书签: \(url.path)")
+                } catch {
+                    print("创建书签失败: \(error)")
+                }
+                
+                // 停止访问安全作用域资源（书签已创建）
+                url.stopAccessingSecurityScopedResource()
             }
         }
     }

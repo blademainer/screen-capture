@@ -1,0 +1,153 @@
+import Foundation
+import SwiftUI
+import Cocoa
+
+// MARK: - Floating Window Manager
+class FloatingWindowManager: ObservableObject {
+    static let shared = FloatingWindowManager()
+    
+    @Published var activeWindows: [FloatingWindowController] = []
+    
+    private init() {}
+    
+    // MARK: - Window Management
+    func showFloatingPreview(for image: NSImage, at position: CGPoint? = nil) {
+        DispatchQueue.main.async { [weak self] in
+            let floatingWindow = FloatingWindowController(screenshot: image)
+            
+            // 设置窗口位置
+            if let position = position {
+                floatingWindow.window?.setFrameOrigin(position)
+            } else {
+                // 智能定位：避免与现有浮窗重叠
+                self?.positionNewWindow(floatingWindow.window)
+            }
+            
+            floatingWindow.showWindow(nil)
+            floatingWindow.window?.makeKeyAndOrderFront(nil)
+            
+            // 添加到活动窗口列表
+            self?.activeWindows.append(floatingWindow)
+            
+            // 设置窗口关闭回调
+            floatingWindow.onWindowClose = { [weak self] controller in
+                self?.removeWindow(controller)
+            }
+            
+            // 自动复制到剪贴板（如果启用）
+            if UserDefaults.standard.bool(forKey: "autoCopyToClipboard") {
+                self?.copyToClipboard(image)
+            }
+        }
+    }
+    
+    private func positionNewWindow(_ window: NSWindow?) {
+        guard let window = window else { return }
+        
+        if activeWindows.isEmpty {
+            // 第一个窗口居中显示
+            window.center()
+        } else {
+            // 后续窗口错开显示
+            let offset: CGFloat = 30
+            let baseFrame = activeWindows.first?.window?.frame ?? window.frame
+            let newOrigin = CGPoint(
+                x: baseFrame.origin.x + offset * CGFloat(activeWindows.count),
+                y: baseFrame.origin.y - offset * CGFloat(activeWindows.count)
+            )
+            window.setFrameOrigin(newOrigin)
+            
+            // 确保窗口在屏幕范围内
+            if let screen = NSScreen.main {
+                let screenFrame = screen.visibleFrame
+                var frame = window.frame
+                
+                if frame.maxX > screenFrame.maxX {
+                    frame.origin.x = screenFrame.maxX - frame.width
+                }
+                if frame.minY < screenFrame.minY {
+                    frame.origin.y = screenFrame.minY
+                }
+                
+                window.setFrame(frame, display: true)
+            }
+        }
+    }
+    
+    private func removeWindow(_ controller: FloatingWindowController) {
+        activeWindows.removeAll { $0 === controller }
+    }
+    
+    private func copyToClipboard(_ image: NSImage) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects([image])
+        
+        // 显示通知
+        let notification = NSUserNotification()
+        notification.title = "MacScreenCapture"
+        notification.informativeText = "截图已自动复制到剪贴板"
+        notification.soundName = NSUserNotificationDefaultSoundName
+        NSUserNotificationCenter.default.deliver(notification)
+    }
+    
+    // MARK: - Batch Operations
+    func closeAllWindows() {
+        for controller in activeWindows {
+            controller.close()
+        }
+        activeWindows.removeAll()
+    }
+    
+    func minimizeAllWindows() {
+        for controller in activeWindows {
+            controller.window?.miniaturize(nil)
+        }
+    }
+    
+    func restoreAllWindows() {
+        for controller in activeWindows {
+            if controller.window?.isMiniaturized == true {
+                controller.window?.deminiaturize(nil)
+            }
+        }
+    }
+}
+
+// MARK: - UserDefaults Extensions
+extension UserDefaults {
+    private enum FloatingWindowKeys {
+        static let autoCopyToClipboard = "autoCopyToClipboard"
+        static let floatingWindowAlwaysOnTop = "floatingWindowAlwaysOnTop"
+        static let floatingWindowShowShadow = "floatingWindowShowShadow"
+        static let floatingWindowOpacity = "floatingWindowOpacity"
+    }
+    
+    var autoCopyToClipboard: Bool {
+        get { bool(forKey: FloatingWindowKeys.autoCopyToClipboard) }
+        set { set(newValue, forKey: FloatingWindowKeys.autoCopyToClipboard) }
+    }
+    
+    var floatingWindowAlwaysOnTop: Bool {
+        get { bool(forKey: FloatingWindowKeys.floatingWindowAlwaysOnTop) }
+        set { set(newValue, forKey: FloatingWindowKeys.floatingWindowAlwaysOnTop) }
+    }
+    
+    var floatingWindowShowShadow: Bool {
+        get { 
+            if object(forKey: FloatingWindowKeys.floatingWindowShowShadow) == nil {
+                return true // 默认显示阴影
+            }
+            return bool(forKey: FloatingWindowKeys.floatingWindowShowShadow)
+        }
+        set { set(newValue, forKey: FloatingWindowKeys.floatingWindowShowShadow) }
+    }
+    
+    var floatingWindowOpacity: Double {
+        get { 
+            let value = double(forKey: FloatingWindowKeys.floatingWindowOpacity)
+            return value > 0 ? value : 1.0 // 默认不透明
+        }
+        set { set(newValue, forKey: FloatingWindowKeys.floatingWindowOpacity) }
+    }
+}

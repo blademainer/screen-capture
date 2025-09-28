@@ -362,9 +362,10 @@ class WindowManager: ObservableObject {
     }
     
     func showFloatingPreview(for image: NSImage) {
-        // 显示截图预览浮窗
-        let floatingWindow = FloatingWindowController(screenshot: image)
-        floatingWindow.showWindow(nil)
+        // 使用FloatingWindowManager来管理浮窗
+        // 使用现有的FloatingWindowController显示浮窗预览
+        let floatingController = FloatingWindowController(screenshot: image)
+        floatingController.showWindow(nil)
     }
 }
 

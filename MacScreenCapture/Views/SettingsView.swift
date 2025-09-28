@@ -41,6 +41,11 @@ struct SettingsView: View {
                 
                 Divider()
                 
+                // 浮窗设置
+                FloatingWindowSettingsSection()
+                
+                Divider()
+                
                 // 通用设置
                 GeneralSettingsSection()
                 
@@ -199,6 +204,61 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                     }
                     .padding(.leading, 20)
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func FloatingWindowSettingsSection() -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("浮窗设置")
+                .font(.headline)
+            
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("截图后自动显示浮窗", isOn: .constant(true))
+                    .help("截图完成后立即显示预览浮窗")
+                
+                Toggle("自动复制到剪贴板", isOn: .constant(false))
+                    .help("截图后自动将图片复制到系统剪贴板")
+                
+                Toggle("始终置顶显示", isOn: .constant(true))
+                    .help("浮窗始终显示在其他窗口之上")
+                
+                Toggle("显示窗口阴影", isOn: .constant(true))
+                    .help("为浮窗添加阴影效果")
+                
+                HStack {
+                    Text("窗口透明度:")
+                    Spacer()
+                    Slider(value: .constant(1.0), in: 0.3...1.0, step: 0.1)
+                        .frame(width: 120)
+                    Text("100%")
+                        .frame(width: 40, alignment: .trailing)
+                        .foregroundColor(.secondary)
+                }
+                .help("调整浮窗的透明度")
+                
+                HStack {
+                    Button("关闭所有浮窗") {
+                        // 关闭所有浮窗的功能暂时注释，因为FloatingWindowManager还未完全集成
+                        // FloatingWindowManager.shared.closeAllWindows()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    
+                    Button("最小化所有浮窗") {
+                        // 最小化所有浮窗的功能暂时注释，因为FloatingWindowManager还未完全集成
+                        // FloatingWindowManager.shared.minimizeAllWindows()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    
+                    Spacer()
+                    
+                    Text("活动浮窗: 0") // 暂时显示固定值，等FloatingWindowManager完全集成后再更新
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
         }

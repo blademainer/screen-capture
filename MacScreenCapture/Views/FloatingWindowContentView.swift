@@ -15,59 +15,147 @@ struct FloatingWindowContentView: View {
     @State private var lineWidth: CGFloat = 2.0
     @State private var isEditing = false
     @State private var showingColorPicker = false
+    @State private var isToolbarVisible = true
+    @State private var isActionBarVisible = true
     
     var body: some View {
-        VStack(spacing: 0) {
-            // 顶部工具栏
-            EditingToolbar(
-                selectedTool: $selectedTool,
-                selectedColor: $selectedColor,
-                lineWidth: $lineWidth,
-                showingColorPicker: $showingColorPicker,
-                onToolSelected: { tool in
-                    selectedTool = tool
-                    isEditing = tool != .none
+        ZStack {
+            // 主内容区域
+            VStack(spacing: 0) {
+                // 顶部工具栏
+                if isToolbarVisible {
+                    EditingToolbar(
+                        selectedTool: $selectedTool,
+                        selectedColor: $selectedColor,
+                        lineWidth: $lineWidth,
+                        showingColorPicker: $showingColorPicker,
+                        onToolSelected: { tool in
+                            selectedTool = tool
+                            isEditing = tool != .none
+                        }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
+                    )
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
-            )
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(Color(NSColor.controlBackgroundColor))
-            
-            Divider()
-            
-            // 图片预览和编辑区域
-            GeometryReader { geometry in
-                ImageEditingCanvas(
-                    image: screenshot,
-                    editingSession: editingSession,
-                    selectedTool: selectedTool,
-                    selectedColor: selectedColor,
-                    lineWidth: lineWidth,
-                    canvasSize: geometry.size
-                )
+                
+                // 图片预览和编辑区域
+                GeometryReader { geometry in
+                    ImageEditingCanvas(
+                        image: screenshot,
+                        editingSession: editingSession,
+                        selectedTool: selectedTool,
+                        selectedColor: selectedColor,
+                        lineWidth: lineWidth,
+                        canvasSize: geometry.size
+                    )
+                }
+                .background(Color.black.opacity(0.02))
+                .onTapGesture(count: 2) {
+                    // 双击切换工具栏显示/隐藏
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        isToolbarVisible.toggle()
+                        isActionBarVisible.toggle()
+                    }
+                }
+                
+                // 底部操作栏
+                if isActionBarVisible {
+                    QuickActionBar(
+                        onSave: { onSave(editingSession.currentImage) },
+                        onCopy: { onCopy(editingSession.currentImage) },
+                        onShare: { onShare(editingSession.currentImage) },
+                        onUndo: { editingSession.undo() },
+                        onRedo: { editingSession.redo() },
+                        onClear: { editingSession.clear() },
+                        onClose: onClose,
+                        canUndo: editingSession.canUndo,
+                        canRedo: editingSession.canRedo,
+                        hasOperations: !editingSession.operations.isEmpty
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
-            .background(Color.black.opacity(0.05))
             
-            Divider()
-            
-            // 底部操作栏
-            QuickActionBar(
-                onSave: { onSave(editingSession.currentImage) },
-                onCopy: { onCopy(editingSession.currentImage) },
-                onShare: { onShare(editingSession.currentImage) },
-                onUndo: { editingSession.undo() },
-                onRedo: { editingSession.redo() },
-                onClear: { editingSession.clear() },
-                onClose: onClose,
-                canUndo: editingSession.canUndo,
-                canRedo: editingSession.canRedo,
-                hasOperations: !editingSession.operations.isEmpty
-            )
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(Color(NSColor.controlBackgroundColor))
+            // 浮动控制按钮（当工具栏隐藏时显示）
+            if !isToolbarVisible {
+                VStack {
+                    HStack {
+                        Spacer()
+                        
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                isToolbarVisible = true
+                                isActionBarVisible = true
+                            }
+                        }) {
+                            Image(systemName: "chevron.down.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .background(Circle().fill(Color.black.opacity(0.6)))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.trailing, 16)
+                        .padding(.top, 16)
+                    }
+                    
+                    Spacer()
+                }
+                .transition(.opacity)
+            }
         }
         .frame(minWidth: 400, minHeight: 300)
+        .background(
+            VisualEffectView(material: .underWindowBackground, blendingMode: .behindWindow)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(
+            color: .black.opacity(UserDefaults.standard.bool(forKey: "floatingWindowShowShadow") ? 0.3 : 0),
+            radius: UserDefaults.standard.bool(forKey: "floatingWindowShowShadow") ? 20 : 0,
+            x: 0,
+            y: UserDefaults.standard.bool(forKey: "floatingWindowShowShadow") ? 10 : 0
+        )
+        .opacity(UserDefaults.standard.double(forKey: "floatingWindowOpacity"))
+        .onAppear {
+            // 应用用户设置
+            updateWindowAppearance()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
+            // 监听设置变化
+            updateWindowAppearance()
+        }
+    }
+    
+    private func updateWindowAppearance() {
+        // 这里可以添加更多外观更新逻辑
+        // 由于SwiftUI的限制，一些设置需要在NSWindow层面处理
+    }
+}
+
+// MARK: - Visual Effect View
+struct VisualEffectView: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+    let blendingMode: NSVisualEffectView.BlendingMode
+    
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = .active
+        return view
+    }
+    
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = blendingMode
     }
 }
 

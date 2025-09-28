@@ -301,6 +301,7 @@ class ImageEditingSession: ObservableObject {
 class FloatingWindowController: NSWindowController {
     private var screenshot: NSImage
     private var editingSession: ImageEditingSession
+    var onWindowClose: ((FloatingWindowController) -> Void)?
     
     init(screenshot: NSImage) {
         self.screenshot = screenshot
@@ -350,8 +351,14 @@ class FloatingWindowController: NSWindowController {
         window.level = .floating  // 置顶显示
         window.isMovableByWindowBackground = true
         window.backgroundColor = NSColor.windowBackgroundColor
-        window.titlebarAppearsTransparent = false
-        window.titleVisibility = .visible
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.styleMask.insert(.fullSizeContentView)
+        
+        // 设置窗口样式为更现代的浮窗样式
+        window.hasShadow = true
+        window.isOpaque = false
+        window.backgroundColor = NSColor.clear
         
         // 居中显示
         window.center()
@@ -364,6 +371,17 @@ class FloatingWindowController: NSWindowController {
         
         // 窗口关闭时的处理
         window.delegate = self
+        
+        // 确保窗口始终置顶
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        
+        // 添加窗口出现动画
+        window.alphaValue = 0
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.3
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            window.animator().alphaValue = 1.0
+        }
     }
     
     private func setupContent() {
@@ -447,12 +465,64 @@ class FloatingWindowController: NSWindowController {
     }
     
     private func showNotification(_ message: String) {
-        DispatchQueue.main.async {
-            let alert = NSAlert()
-            alert.messageText = message
-            alert.alertStyle = .informational
-            alert.addButton(withTitle: "确定")
-            alert.runModal()
+        // 使用系统通知而不是弹窗，避免打断用户
+        let notification = NSUserNotification()
+        notification.title = "MacScreenCapture"
+        notification.informativeText = message
+        notification.soundName = NSUserNotificationDefaultSoundName
+        
+        NSUserNotificationCenter.default.deliver(notification)
+        
+        // 同时在浮窗中显示临时提示
+        showInWindowNotification(message)
+    }
+    
+    private func showInWindowNotification(_ message: String) {
+        guard let contentView = window?.contentView else { return }
+        
+        // 创建临时提示视图
+        let notificationView = NSView()
+        notificationView.wantsLayer = true
+        notificationView.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        notificationView.layer?.cornerRadius = 8
+        
+        let label = NSTextField(labelWithString: message)
+        label.textColor = .white
+        label.font = NSFont.systemFont(ofSize: 14, weight: .medium)
+        label.alignment = .center
+        
+        notificationView.addSubview(label)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: notificationView.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: notificationView.centerYAnchor),
+            label.leadingAnchor.constraint(greaterThanOrEqualTo: notificationView.leadingAnchor, constant: 16),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: notificationView.trailingAnchor, constant: -16)
+        ])
+        
+        contentView.addSubview(notificationView)
+        notificationView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            notificationView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            notificationView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 20),
+            notificationView.heightAnchor.constraint(equalToConstant: 40),
+            notificationView.widthAnchor.constraint(greaterThanOrEqualToConstant: 120)
+        ])
+        
+        // 动画显示和隐藏
+        notificationView.alphaValue = 0
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.3
+            notificationView.animator().alphaValue = 1.0
+        } completionHandler: {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.3
+                    notificationView.animator().alphaValue = 0
+                } completionHandler: {
+                    notificationView.removeFromSuperview()
+                }
+            }
         }
     }
 }
@@ -461,10 +531,34 @@ class FloatingWindowController: NSWindowController {
 extension FloatingWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         // 窗口关闭时的清理工作
+        onWindowClose?(self)
     }
     
     func windowDidBecomeKey(_ notification: Notification) {
         // 窗口获得焦点时确保置顶
-        window?.level = .floating
+        if UserDefaults.standard.bool(forKey: "floatingWindowAlwaysOnTop") {
+            window?.level = .floating
+        }
+    }
+    
+    func windowDidChangeOcclusionState(_ notification: Notification) {
+        // 当窗口被遮挡状态改变时，确保置顶设置
+        if UserDefaults.standard.bool(forKey: "floatingWindowAlwaysOnTop") {
+            window?.level = .floating
+        }
+    }
+    
+    func windowDidResize(_ notification: Notification) {
+        // 窗口大小改变时保存用户偏好
+        if let window = window {
+            UserDefaults.standard.set(NSStringFromSize(window.frame.size), forKey: "lastFloatingWindowSize")
+        }
+    }
+    
+    func windowDidMove(_ notification: Notification) {
+        // 窗口位置改变时保存用户偏好
+        if let window = window {
+            UserDefaults.standard.set(NSStringFromPoint(window.frame.origin), forKey: "lastFloatingWindowPosition")
+        }
     }
 }

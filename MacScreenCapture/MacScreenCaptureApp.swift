@@ -15,6 +15,18 @@ struct MacScreenCaptureApp: App {
     @StateObject private var permissionManager = PermissionManager()
     @StateObject private var captureManager = CaptureManager()
     
+    init() {
+        // 初始化UserDefaults默认值
+        UserDefaults.standard.register(defaults: [
+            "floatingWindowAlwaysOnTop": true,
+            "floatingWindowAutoHide": false,
+            "floatingWindowAutoHideDelay": 3.0,
+            "floatingWindowOpacity": 0.95,
+            "floatingWindowShowPreview": true,
+            "floatingWindowPosition": "topRight"
+        ])
+    }
+    
     var body: some Scene {
         WindowGroup {
             ContentView()

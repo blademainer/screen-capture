@@ -1,0 +1,199 @@
+name: Build and Release MacScreenCapture
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+env:
+  XCODE_VERSION: '15.0'
+  MACOS_VERSION: 'macos-13'
+
+jobs:
+  build-and-release:
+    runs-on: macos-13
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: ${{ env.XCODE_VERSION }}
+        
+    - name: Get version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Update version in project
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        VERSION_NUMBER="${VERSION#v}"
+        
+        # 更新 Info.plist 中的版本号
+        /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION_NUMBER" MacScreenCapture/Info.plist
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION_NUMBER" MacScreenCapture/Info.plist
+        
+        echo "Updated version to $VERSION_NUMBER"
+        
+    - name: Import Code-Signing Certificates
+      uses: Apple-Actions/import-codesign-certs@v2
+      with:
+        p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
+        p12-password: ${{ secrets.CERTIFICATES_P12_PASSWORD }}
+      if: ${{ secrets.CERTIFICATES_P12 }}
+        
+    - name: Build for Release
+      run: |
+        # 清理之前的构建
+        xcodebuild clean -project MacScreenCapture.xcodeproj -scheme MacScreenCapture
+        
+        # 构建 Release 版本
+        xcodebuild archive \
+          -project MacScreenCapture.xcodeproj \
+          -scheme MacScreenCapture \
+          -configuration Release \
+          -archivePath ./build/MacScreenCapture.xcarchive \
+          CODE_SIGN_IDENTITY="${{ secrets.CODE_SIGN_IDENTITY || '-' }}" \
+          DEVELOPMENT_TEAM="${{ secrets.DEVELOPMENT_TEAM || '' }}" \
+          CODE_SIGN_STYLE=Manual
+          
+    - name: Export App
+      run: |
+        # 创建导出选项 plist
+        cat > ./ExportOptions.plist << EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>method</key>
+            <string>developer-id</string>
+            <key>teamID</key>
+            <string>${{ secrets.DEVELOPMENT_TEAM || '' }}</string>
+            <key>uploadBitcode</key>
+            <false/>
+            <key>uploadSymbols</key>
+            <true/>
+            <key>compileBitcode</key>
+            <false/>
+        </dict>
+        </plist>
+        EOF
+        
+        # 导出应用
+        xcodebuild -exportArchive \
+          -archivePath ./build/MacScreenCapture.xcarchive \
+          -exportPath ./build/export \
+          -exportOptionsPlist ./ExportOptions.plist
+          
+    - name: Notarize App (if certificates available)
+      run: |
+        if [ -n "${{ secrets.NOTARIZATION_USERNAME }}" ] && [ -n "${{ secrets.NOTARIZATION_PASSWORD }}" ]; then
+          echo "Starting notarization process..."
+          
+          # 创建 DMG
+          hdiutil create -volname "MacScreenCapture" -srcfolder ./build/export -ov -format UDZO ./build/MacScreenCapture.dmg
+          
+          # 公证 DMG
+          xcrun notarytool submit ./build/MacScreenCapture.dmg \
+            --apple-id "${{ secrets.NOTARIZATION_USERNAME }}" \
+            --password "${{ secrets.NOTARIZATION_PASSWORD }}" \
+            --team-id "${{ secrets.DEVELOPMENT_TEAM }}" \
+            --wait
+            
+          # 装订公证票据
+          xcrun stapler staple ./build/MacScreenCapture.dmg
+          
+          echo "Notarization completed"
+        else
+          echo "Skipping notarization - credentials not available"
+          # 创建未公证的 DMG
+          hdiutil create -volname "MacScreenCapture" -srcfolder ./build/export -ov -format UDZO ./build/MacScreenCapture.dmg
+        fi
+      if: ${{ secrets.CERTIFICATES_P12 }}
+      
+    - name: Create ZIP for unsigned build
+      run: |
+        if [ ! -f "./build/MacScreenCapture.dmg" ]; then
+          echo "Creating ZIP package for unsigned build..."
+          cd ./build/export
+          zip -r ../MacScreenCapture.zip .
+          cd ../..
+        fi
+      if: ${{ !secrets.CERTIFICATES_P12 }}
+      
+    - name: Generate Release Notes
+      id: release_notes
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        cat > release_notes.md << EOF
+        # MacScreenCapture $VERSION
+        
+        ## 🎉 新功能
+        - 高质量屏幕录制 (支持 60fps)
+        - 多种截图模式 (全屏、区域、窗口)
+        - 音频录制支持 (系统音频 + 麦克风)
+        - 多显示器支持
+        - 实时性能监控
+        
+        ## 🛠 技术特性
+        - 基于 ScreenCaptureKit 框架
+        - SwiftUI 现代化界面
+        - H.264 视频编码，兼容 QuickTime
+        - 优化的内存和 CPU 使用
+        
+        ## 📋 系统要求
+        - macOS 12.0 或更高版本
+        - 支持 ScreenCaptureKit 的 Mac 设备
+        
+        ## 🔧 安装说明
+        1. 下载并解压应用程序
+        2. 将 MacScreenCapture.app 拖拽到应用程序文件夹
+        3. 首次运行时授予屏幕录制权限
+        
+        ## 📝 更新日志
+        - 修复了视频文件 QuickTime 兼容性问题
+        - 优化了录制性能和稳定性
+        - 改进了用户界面响应速度
+        - 增强了多显示器支持
+        EOF
+        
+        echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
+        cat release_notes.md >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.VERSION }}
+        name: MacScreenCapture ${{ steps.version.outputs.VERSION }}
+        body: ${{ steps.release_notes.outputs.RELEASE_NOTES }}
+        draft: false
+        prerelease: false
+        files: |
+          ./build/MacScreenCapture.dmg
+          ./build/MacScreenCapture.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: MacScreenCapture-${{ steps.version.outputs.VERSION }}
+        path: |
+          ./build/export/
+          ./build/MacScreenCapture.dmg
+          ./build/MacScreenCapture.zip
+        retention-days: 30

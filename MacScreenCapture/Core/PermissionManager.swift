@@ -67,7 +67,7 @@ class PermissionManager: ObservableObject {
                     await MainActor.run {
                         self.hasScreenRecordingPermission = false
                         self.permissionCheckInProgress = false
-                        self.showPermissionAlert(for: .screenRecording)
+                        // self.showPermissionAlert(for: .screenRecording)
                     }
                 }
             }
@@ -90,13 +90,13 @@ class PermissionManager: ObservableObject {
                 DispatchQueue.main.async {
                     self?.hasMicrophonePermission = granted
                     if !granted {
-                        self?.showPermissionAlert(for: .microphone)
+                        // self?.showPermissionAlert(for: .microphone)
                     }
                 }
             }
         case .denied, .restricted:
             hasMicrophonePermission = false
-            showPermissionAlert(for: .microphone)
+            // showPermissionAlert(for: .microphone)
         @unknown default:
             hasMicrophonePermission = false
         }
@@ -110,7 +110,7 @@ class PermissionManager: ObservableObject {
         hasAccessibilityPermission = trusted
         
         if !trusted {
-            showPermissionAlert(for: .accessibility)
+            // showPermissionAlert(for: .accessibility)
         }
     }
     
@@ -164,7 +164,7 @@ class PermissionManager: ObservableObject {
             hasScreenRecordingPermission = true
         } else {
             hasScreenRecordingPermission = false
-            showPermissionAlert(for: .screenRecording)
+            // showPermissionAlert(for: .screenRecording)
         }
         
         permissionCheckInProgress = false

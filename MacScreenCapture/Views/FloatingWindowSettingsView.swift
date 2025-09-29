@@ -57,23 +57,23 @@ struct FloatingWindowSettingsView: View {
                 GroupBox("快捷操作") {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Button("关闭所有浮窗") {
-                                FloatingWindowManager.shared.closeAllWindows()
+                            Button("关闭所有编辑窗口") {
+                                EditingWindowManager.shared.closeAllWindows()
                             }
                             .buttonStyle(.bordered)
                             
-                            Button("最小化所有浮窗") {
-                                FloatingWindowManager.shared.minimizeAllWindows()
+                            Button("最小化所有编辑窗口") {
+                                EditingWindowManager.shared.minimizeAllWindows()
                             }
                             .buttonStyle(.bordered)
                             
-                            Button("恢复所有浮窗") {
-                                FloatingWindowManager.shared.restoreAllWindows()
+                            Button("恢复所有编辑窗口") {
+                                EditingWindowManager.shared.restoreAllWindows()
                             }
                             .buttonStyle(.bordered)
                         }
                         
-                        Text("当前活动浮窗: \(FloatingWindowManager.shared.activeWindows.count)")
+                        Text("当前活动编辑窗口: \(EditingWindowManager.shared.activeWindowCount)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }

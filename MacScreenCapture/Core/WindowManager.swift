@@ -3,6 +3,235 @@ import SwiftUI
 import Cocoa
 import Combine
 
+// MARK: - Editing Window Manager (临时放在这里解决编译问题)
+class EditingWindowManager: ObservableObject {
+    static let shared = EditingWindowManager()
+    
+    @Published var activeWindows: [EditingWindowController] = []
+    
+    private init() {}
+    
+    func openEditingWindow(for image: NSImage, at position: CGPoint? = nil) {
+        DispatchQueue.main.async { [weak self] in
+            let editingWindow = EditingWindowController(screenshot: image)
+            
+            if let position = position {
+                editingWindow.window?.setFrameOrigin(position)
+            } else {
+                self?.positionNewWindow(editingWindow.window)
+            }
+            
+            editingWindow.showWindow(nil)
+            editingWindow.window?.makeKeyAndOrderFront(nil)
+            
+            self?.activeWindows.append(editingWindow)
+            
+            editingWindow.onWindowClose = { [weak self] controller in
+                self?.removeWindow(controller)
+            }
+            
+            if UserDefaults.standard.bool(forKey: "autoCopyToClipboard") {
+                self?.copyToClipboard(image)
+            }
+        }
+    }
+    
+    private func positionNewWindow(_ window: NSWindow?) {
+        guard let window = window else { return }
+        
+        if activeWindows.isEmpty {
+            window.center()
+        } else {
+            let offset: CGFloat = 40
+            let baseFrame = activeWindows.first?.window?.frame ?? window.frame
+            let newOrigin = CGPoint(
+                x: baseFrame.origin.x + offset * CGFloat(activeWindows.count),
+                y: baseFrame.origin.y - offset * CGFloat(activeWindows.count)
+            )
+            window.setFrameOrigin(newOrigin)
+            
+            if let screen = NSScreen.main {
+                let screenFrame = screen.visibleFrame
+                var frame = window.frame
+                
+                if frame.maxX > screenFrame.maxX {
+                    frame.origin.x = screenFrame.maxX - frame.width
+                }
+                if frame.minY < screenFrame.minY {
+                    frame.origin.y = screenFrame.minY
+                }
+                
+                window.setFrame(frame, display: true)
+            }
+        }
+    }
+    
+    private func removeWindow(_ controller: EditingWindowController) {
+        activeWindows.removeAll { $0 === controller }
+    }
+    
+    private func copyToClipboard(_ image: NSImage) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects([image])
+        
+        let notification = NSUserNotification()
+        notification.title = "MacScreenCapture"
+        notification.informativeText = "截图已自动复制到剪贴板"
+        notification.soundName = NSUserNotificationDefaultSoundName
+        NSUserNotificationCenter.default.deliver(notification)
+    }
+    
+    func closeAllWindows() {
+        for controller in activeWindows {
+            controller.close()
+        }
+        activeWindows.removeAll()
+    }
+    
+    func minimizeAllWindows() {
+        for controller in activeWindows {
+            controller.window?.miniaturize(nil)
+        }
+    }
+    
+    func restoreAllWindows() {
+        for controller in activeWindows {
+            if controller.window?.isMiniaturized == true {
+                controller.window?.deminiaturize(nil)
+            }
+        }
+    }
+    
+    var hasActiveWindows: Bool {
+        return !activeWindows.isEmpty
+    }
+    
+    var activeWindowCount: Int {
+        return activeWindows.count
+    }
+}
+
+// MARK: - Editing Window Controller (临时放在这里解决编译问题)
+class EditingWindowController: NSWindowController {
+    private var screenshot: NSImage
+    private var editingSession: ImageEditingSession
+    var onWindowClose: ((EditingWindowController) -> Void)?
+    
+    init(screenshot: NSImage) {
+        self.screenshot = screenshot
+        self.editingSession = ImageEditingSession(originalImage: screenshot)
+        
+        let imageSize = screenshot.size
+        let maxSize = CGSize(width: 900, height: 700)
+        let aspectRatio = imageSize.width / imageSize.height
+        
+        var windowSize = imageSize
+        if windowSize.width > maxSize.width {
+            windowSize.width = maxSize.width
+            windowSize.height = windowSize.width / aspectRatio
+        }
+        if windowSize.height > maxSize.height {
+            windowSize.height = maxSize.height
+            windowSize.width = windowSize.height * aspectRatio
+        }
+        
+        windowSize.height += 140
+        windowSize.width = max(windowSize.width, 500)
+        
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: windowSize),
+            styleMask: [.titled, .closable, .resizable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        
+        super.init(window: window)
+        
+        setupWindow()
+        setupContent()
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    private func setupWindow() {
+        guard let window = window else { return }
+        
+        window.title = "图片编辑"
+        window.level = .normal
+        window.backgroundColor = NSColor.windowBackgroundColor
+        window.titlebarAppearsTransparent = false
+        window.titleVisibility = .visible
+        
+        window.hasShadow = true
+        window.isOpaque = true
+        
+        window.center()
+        
+        window.minSize = NSSize(width: 500, height: 400)
+        
+        window.animationBehavior = .documentWindow
+        
+        window.delegate = self
+        
+        window.collectionBehavior = [.managed, .participatesInCycle]
+        
+        window.alphaValue = 0
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.25
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            window.animator().alphaValue = 1.0
+        }
+    }
+    
+    private func setupContent() {
+        // 使用简化的内容视图，避免复杂的依赖
+        let hostingView = NSHostingView(rootView: 
+            VStack {
+                Text("图片编辑窗口")
+                    .font(.title)
+                    .padding()
+                
+                Image(nsImage: screenshot)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: 400, maxHeight: 300)
+                
+                HStack {
+                    Button("保存") {
+                        // 保存功能
+                    }
+                    .buttonStyle(.borderedProminent)
+                    
+                    Button("复制") {
+                        let pasteboard = NSPasteboard.general
+                        pasteboard.clearContents()
+                        pasteboard.writeObjects([self.screenshot])
+                    }
+                    .buttonStyle(.bordered)
+                    
+                    Button("关闭") {
+                        self.close()
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding()
+            }
+            .padding()
+        )
+        
+        window?.contentView = hostingView
+    }
+}
+
+extension EditingWindowController: NSWindowDelegate {
+    func windowWillClose(_ notification: Notification) {
+        onWindowClose?(self)
+    }
+}
+
 // MARK: - Capture State
 enum CaptureState: Equatable {
     case idle
@@ -361,11 +590,9 @@ class WindowManager: ObservableObject {
         }
     }
     
-    func showFloatingPreview(for image: NSImage) {
-        // 使用FloatingWindowManager来管理浮窗
-        // 使用现有的FloatingWindowController显示浮窗预览
-        let floatingController = FloatingWindowController(screenshot: image)
-        floatingController.showWindow(nil)
+    func showEditingWindow(for image: NSImage) {
+        // 使用新的EditingWindowManager来管理编辑窗口
+        EditingWindowManager.shared.openEditingWindow(for: image)
     }
 }
 

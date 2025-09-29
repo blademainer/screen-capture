@@ -675,8 +675,8 @@ class CaptureManager: ObservableObject {
                                 try await self.saveScreenshot(image)
                                 self.lastCapturedImage = image
                                 
-                                // 显示浮窗预览
-                                WindowManager.shared.showFloatingPreview(for: image)
+                                // 显示编辑窗口
+                                WindowManager.shared.showEditingWindow(for: image)
                                 
                                 // 清理临时文件
                                 try? FileManager.default.removeItem(at: tempURL)

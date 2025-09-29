@@ -241,15 +241,15 @@ struct SettingsView: View {
                 
                 HStack {
                     Button("关闭所有浮窗") {
-                        // 关闭所有浮窗的功能暂时注释，因为FloatingWindowManager还未完全集成
-                        // FloatingWindowManager.shared.closeAllWindows()
+                        // 使用新的EditingWindowManager
+                        EditingWindowManager.shared.closeAllWindows()
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     
                     Button("最小化所有浮窗") {
-                        // 最小化所有浮窗的功能暂时注释，因为FloatingWindowManager还未完全集成
-                        // FloatingWindowManager.shared.minimizeAllWindows()
+                        // 使用新的EditingWindowManager
+                        EditingWindowManager.shared.minimizeAllWindows()
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)

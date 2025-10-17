@@ -52,18 +52,7 @@ struct SettingsView: View {
                 Divider()
                 
                 // 快捷键设置
-                if #available(macOS 12.3, *) {
-                    if #available(macOS 12.3, *) {
-                    ShortcutSettingsSection()
-                }
-                } else {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("快捷键设置")
-                            .font(.headline)
-                        Text("快捷键设置需要 macOS 12.3 或更高版本")
-                            .foregroundColor(.secondary)
-                    }
-                }
+                ShortcutSettingsSection()
                 
                 Divider()
                 
@@ -282,19 +271,13 @@ struct SettingsView: View {
     }
     
     @ViewBuilder
-    @available(macOS 12.3, *)
     private func ShortcutSettingsSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("快捷键设置")
                 .font(.headline)
             
             // 集成完整的快捷键设置界面
-            if #available(macOS 12.3, *) {
-                HotKeySettingsView()
-            } else {
-                Text("快捷键设置需要 macOS 12.3 或更高版本")
-                    .foregroundColor(.secondary)
-            }
+            HotKeySettingsView()
         }
     }
     

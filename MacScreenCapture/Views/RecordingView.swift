@@ -233,6 +233,40 @@ struct RecordingView: View {
                 Text("模式: \(captureManager.captureMode.rawValue)")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                
+                // 音频录制状态
+                HStack(spacing: 8) {
+                    let includeSystemAudio = UserDefaults.standard.bool(forKey: "includeSystemAudio")
+                    let includeMicrophone = UserDefaults.standard.bool(forKey: "includeMicrophone")
+                    
+                    if includeSystemAudio {
+                        HStack(spacing: 2) {
+                            Image(systemName: "speaker.wave.2.fill")
+                                .foregroundColor(.blue)
+                            Text("系统音频")
+                        }
+                        .font(.caption)
+                    }
+                    
+                    if includeMicrophone {
+                        HStack(spacing: 2) {
+                            Image(systemName: permissionManager.hasMicrophonePermission ? "mic.fill" : "mic.slash.fill")
+                                .foregroundColor(permissionManager.hasMicrophonePermission ? .green : .red)
+                            Text("麦克风")
+                        }
+                        .font(.caption)
+                    }
+                    
+                    if !includeSystemAudio && !includeMicrophone {
+                        HStack(spacing: 2) {
+                            Image(systemName: "speaker.slash.fill")
+                                .foregroundColor(.gray)
+                            Text("静音录制")
+                        }
+                        .font(.caption)
+                    }
+                }
+                .foregroundColor(.secondary)
             }
             
             // 在Finder中显示按钮（录制完成后显示）
@@ -282,9 +316,11 @@ struct RecordingView: View {
 
 struct RecordingSettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var permissionManager: PermissionManager
     @State private var frameRate: Double = 60
     @State private var quality: RecordingQuality = .high
-    @State private var includeAudio = true
+    @State private var includeSystemAudio = true
+    @State private var includeMicrophone = true
     @State private var showCursor = true
     
     var body: some View {
@@ -315,7 +351,28 @@ struct RecordingSettingsView: View {
                 }
                 
                 Section("音频设置") {
-                    Toggle("录制音频", isOn: $includeAudio)
+                    Toggle("录制系统音频", isOn: $includeSystemAudio)
+                    
+                    HStack {
+                        Toggle("录制麦克风", isOn: $includeMicrophone)
+                        
+                        if !permissionManager.hasMicrophonePermission {
+                            Button("授权") {
+                                permissionManager.requestMicrophonePermission()
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        } else {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                        }
+                    }
+                    
+                    if includeMicrophone && !permissionManager.hasMicrophonePermission {
+                        Text("需要麦克风权限才能录制音频")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
                 }
             }
             
@@ -328,14 +385,34 @@ struct RecordingSettingsView: View {
                 Spacer()
                 
                 Button("保存") {
-                    // TODO: 保存设置
+                    // 保存设置到 UserDefaults
+                    UserDefaults.standard.set(frameRate, forKey: "recordingFrameRate")
+                    UserDefaults.standard.set(quality.rawValue, forKey: "recordingQuality")
+                    UserDefaults.standard.set(includeSystemAudio, forKey: "includeSystemAudio")
+                    UserDefaults.standard.set(includeMicrophone, forKey: "includeMicrophone")
+                    UserDefaults.standard.set(showCursor, forKey: "showCursor")
+                    
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
             }
         }
         .padding()
-        .frame(width: 400, height: 300)
+        .frame(width: 450, height: 350)
+        .onAppear {
+            // 加载保存的设置
+            frameRate = UserDefaults.standard.double(forKey: "recordingFrameRate")
+            if frameRate == 0 { frameRate = 60 }
+            
+            if let qualityString = UserDefaults.standard.string(forKey: "recordingQuality"),
+               let savedQuality = RecordingQuality(rawValue: qualityString) {
+                quality = savedQuality
+            }
+            
+            includeSystemAudio = UserDefaults.standard.bool(forKey: "includeSystemAudio")
+            includeMicrophone = UserDefaults.standard.bool(forKey: "includeMicrophone")
+            showCursor = UserDefaults.standard.bool(forKey: "showCursor")
+        }
     }
 }
 

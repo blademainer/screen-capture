@@ -7,7 +7,7 @@
 
 import Foundation
 import AVFoundation
-import ScreenCaptureKit
+@preconcurrency import ScreenCaptureKit
 import AppKit
 
 /// 权限管理器 - 负责处理所有系统权限相关的功能
@@ -144,27 +144,20 @@ class PermissionManager: ObservableObject {
         hasAccessibilityPermission = AXIsProcessTrusted()
     }
     
-    /// 为旧系统检查屏幕录制权限
+    /// 使用 ScreenCaptureKit 检查屏幕录制权限
     private func checkLegacyScreenRecordingPermission() {
-        // 尝试创建一个CGDisplayStream来检查权限
-        let displayID = CGMainDisplayID()
-        
-        let stream = CGDisplayStream(
-            dispatchQueueDisplay: displayID,
-            outputWidth: 1,
-            outputHeight: 1,
-            pixelFormat: Int32(kCVPixelFormatType_32BGRA),
-            properties: nil,
-            queue: DispatchQueue.global(qos: .background)
-        ) { _, _, _, _ in }
-        
-        if let stream = stream {
-            stream.start()
-            stream.stop()
-            hasScreenRecordingPermission = true
-        } else {
-            hasScreenRecordingPermission = false
-            // showPermissionAlert(for: .screenRecording)
+        Task {
+            do {
+                // 尝试获取可共享内容来检查权限
+                _ = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+                await MainActor.run {
+                    hasScreenRecordingPermission = true
+                }
+            } catch {
+                await MainActor.run {
+                    hasScreenRecordingPermission = false
+                }
+            }
         }
         
         permissionCheckInProgress = false

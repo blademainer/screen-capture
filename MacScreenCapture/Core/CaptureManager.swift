@@ -7,7 +7,7 @@
 
 import Foundation
 import SwiftUI
-import ScreenCaptureKit
+@preconcurrency import ScreenCaptureKit
 import AVFoundation
 import CoreGraphics
 import AppKit
@@ -105,6 +105,7 @@ class CaptureManager: ObservableObject {
     // MARK: - Initialization
     init() {
         setupNotifications()
+        setupDefaultSettings()
     }
     
     deinit {
@@ -242,9 +243,7 @@ class CaptureManager: ObservableObject {
             }
         }
         
-        guard #available(macOS 12.3, *) else {
-            return try await captureLegacyScreenshot()
-        }
+
         
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         
@@ -283,16 +282,31 @@ class CaptureManager: ObservableObject {
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.showsCursor = true
         
-        // 使用旧版本兼容的截图方法
-        return try await captureLegacyScreenshot()
+        // 使用 ScreenCaptureKit 进行截图
+        let cgImage = try await SCScreenshotManager.captureImage(
+            contentFilter: filter,
+            configuration: configuration
+        )
+        let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        
+        try await saveScreenshot(nsImage)
+        lastCapturedImage = nsImage
+        
+        return nsImage
     }
     
     /// 开始录制
     @MainActor
     func startRecording() async throws {
         guard !isRecording else { return }
-        guard #available(macOS 12.3, *) else {
-            throw CaptureError.unsupportedSystem
+
+        
+        // 检查麦克风权限
+        let permissionManager = PermissionManager()
+        if !permissionManager.hasMicrophonePermission {
+            permissionManager.requestMicrophonePermission()
+            // 给用户一些时间来授予权限
+            try await Task.sleep(nanoseconds: 1_000_000_000) // 1秒
         }
         
         // 通知WindowManager开始录制
@@ -376,9 +390,14 @@ class CaptureManager: ObservableObject {
         configuration.queueDepth = 5
         configuration.colorSpaceName = CGColorSpace.sRGB // 使用标准 sRGB 色彩空间
         
-        if #available(macOS 13.0, *) {
-            configuration.capturesAudio = true
-        }
+        // 根据用户设置决定是否录制音频
+        let includeSystemAudio = UserDefaults.standard.bool(forKey: "includeSystemAudio")
+        let includeMicrophone = UserDefaults.standard.bool(forKey: "includeMicrophone")
+        
+        configuration.capturesAudio = includeSystemAudio
+        configuration.captureMicrophone = includeMicrophone
+        
+        print("音频录制设置 - 系统音频: \(includeSystemAudio), 麦克风: \(includeMicrophone)")
         
         print("录制配置: \(Int(screenSize.width))x\(Int(screenSize.height)) @ 30fps")
         
@@ -395,8 +414,14 @@ class CaptureManager: ObservableObject {
         try stream?.addStreamOutput(streamOutput!, type: .screen, sampleHandlerQueue: captureQueue)
         
         // 添加音频流输出（如果支持）
-        if #available(macOS 13.0, *) {
+        if includeSystemAudio {
             try stream?.addStreamOutput(streamOutput!, type: .audio, sampleHandlerQueue: captureQueue)
+            print("已添加系统音频流输出")
+        }
+        
+        if includeMicrophone {
+            try stream?.addStreamOutput(streamOutput!, type: .microphone, sampleHandlerQueue: captureQueue)
+            print("已添加麦克风音频流输出")
         }
         
         print("开始启动录制流...")
@@ -501,7 +526,7 @@ class CaptureManager: ObservableObject {
     /// 更新可用内容
     @MainActor
     func updateAvailableContent() async {
-        guard #available(macOS 12.3, *) else { return }
+
         
         do {
             // 在后台队列中获取内容
@@ -548,6 +573,21 @@ class CaptureManager: ObservableObject {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
+    }
+    
+    /// 设置默认录制设置
+    private func setupDefaultSettings() {
+        // 如果是首次启动，设置默认值
+        if !UserDefaults.standard.bool(forKey: "hasSetupDefaultRecordingSettings") {
+            UserDefaults.standard.set(true, forKey: "includeSystemAudio")
+            UserDefaults.standard.set(true, forKey: "includeMicrophone")
+            UserDefaults.standard.set(true, forKey: "showCursor")
+            UserDefaults.standard.set(60.0, forKey: "recordingFrameRate")
+            UserDefaults.standard.set("高", forKey: "recordingQuality")
+            UserDefaults.standard.set(true, forKey: "hasSetupDefaultRecordingSettings")
+            
+            print("已设置默认录制设置 - 麦克风录制已启用")
+        }
     }
     
     /// 处理显示器配置变化
@@ -706,9 +746,7 @@ class CaptureManager: ObservableObject {
     
     /// 捕获指定区域
     private func captureRegion(_ rect: NSRect) async throws -> NSImage {
-        guard #available(macOS 12.3, *) else {
-            return try await captureLegacyRegion(rect)
-        }
+
         
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         
@@ -735,11 +773,22 @@ class CaptureManager: ObservableObject {
     
     /// 旧系统区域截图方法
     private func captureLegacyRegion(_ rect: NSRect) async throws -> NSImage {
-        let displayID = CGMainDisplayID()
-        
-        guard let cgImage = CGDisplayCreateImage(displayID) else {
-            throw CaptureError.failedToCapture
+        // 使用 ScreenCaptureKit 替代已弃用的 CGDisplayCreateImage
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        guard let display = content.displays.first else {
+            throw CaptureError.noDisplayAvailable
         }
+        
+        let filter = SCContentFilter(display: display, excludingWindows: [])
+        let configuration = SCStreamConfiguration()
+        configuration.width = Int(display.width)
+        configuration.height = Int(display.height)
+        configuration.pixelFormat = kCVPixelFormatType_32BGRA
+        
+        let cgImage = try await SCScreenshotManager.captureImage(
+            contentFilter: filter,
+            configuration: configuration
+        )
         
         // 裁剪图像到指定区域
         let scale = CGFloat(cgImage.width) / NSScreen.main!.frame.width
@@ -764,11 +813,22 @@ class CaptureManager: ObservableObject {
     
     /// 旧系统截图方法
     private func captureLegacyScreenshot() async throws -> NSImage {
-        let displayID = CGMainDisplayID()
-        
-        guard let cgImage = CGDisplayCreateImage(displayID) else {
-            throw CaptureError.failedToCapture
+        // 使用 ScreenCaptureKit 替代已弃用的 CGDisplayCreateImage
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        guard let display = content.displays.first else {
+            throw CaptureError.noDisplayAvailable
         }
+        
+        let filter = SCContentFilter(display: display, excludingWindows: [])
+        let configuration = SCStreamConfiguration()
+        configuration.width = Int(display.width)
+        configuration.height = Int(display.height)
+        configuration.pixelFormat = kCVPixelFormatType_32BGRA
+        
+        let cgImage = try await SCScreenshotManager.captureImage(
+            contentFilter: filter,
+            configuration: configuration
+        )
         
         let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
         
@@ -834,6 +894,7 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
     private var audioInput: AVAssetWriterInput?
+    private var microphoneInput: AVAssetWriterInput?
     private var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
     private var isWritingStarted = false
     private var frameCount = 0
@@ -913,19 +974,38 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                 }
             }
             
-            // 音频输入设置
-            let audioSettings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatMPEG4AAC,
-                AVSampleRateKey: 44100,
-                AVNumberOfChannelsKey: 2,
-                AVEncoderBitRateKey: 128000
-            ]
+            // 检查是否需要音频输入
+            let includeSystemAudio = UserDefaults.standard.bool(forKey: "includeSystemAudio")
+            let includeMicrophone = UserDefaults.standard.bool(forKey: "includeMicrophone")
             
-            audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
-            audioInput?.expectsMediaDataInRealTime = true
-            
-            if let audioInput = audioInput, assetWriter?.canAdd(audioInput) == true {
-                assetWriter?.add(audioInput)
+            if includeSystemAudio || includeMicrophone {
+                // 音频输入设置 - 系统音频
+                let audioSettings: [String: Any] = [
+                    AVFormatIDKey: kAudioFormatMPEG4AAC,
+                    AVSampleRateKey: 44100,
+                    AVNumberOfChannelsKey: 2,
+                    AVEncoderBitRateKey: 128000
+                ]
+                
+                if includeSystemAudio {
+                    audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+                    audioInput?.expectsMediaDataInRealTime = true
+                    
+                    if let audioInput = audioInput, assetWriter?.canAdd(audioInput) == true {
+                        assetWriter?.add(audioInput)
+                        print("系统音频输入已添加到资产写入器")
+                    }
+                }
+                
+                if includeMicrophone {
+                    microphoneInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+                    microphoneInput?.expectsMediaDataInRealTime = true
+                    
+                    if let microphoneInput = microphoneInput, assetWriter?.canAdd(microphoneInput) == true {
+                        assetWriter?.add(microphoneInput)
+                        print("麦克风音频输入已添加到资产写入器")
+                    }
+                }
             }
             
         } catch {
@@ -1012,8 +1092,8 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                 }
             }
         case .microphone:
-            if let audioInput = audioInput, audioInput.isReadyForMoreMediaData {
-                if audioInput.append(sampleBuffer) {
+            if let microphoneInput = microphoneInput, microphoneInput.isReadyForMoreMediaData {
+                if microphoneInput.append(sampleBuffer) {
                     micFrameCount += 1
                     if micFrameCount % 100 == 0 {
                         print("已写入 \(micFrameCount) 个麦克风音频帧")
@@ -1021,6 +1101,8 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                 } else {
                     print("麦克风音频写入失败")
                 }
+            } else {
+                print("麦克风音频输入未准备好或不存在")
             }
         @unknown default:
             print("未知的流类型: \(type)")
@@ -1046,6 +1128,7 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
         // 标记输入完成
         videoInput?.markAsFinished()
         audioInput?.markAsFinished()
+        microphoneInput?.markAsFinished()
         
         // 完成写入
         assetWriter.finishWriting { [weak self] in

@@ -300,13 +300,64 @@ class CaptureManager: ObservableObject {
     func startRecording() async throws {
         guard !isRecording else { return }
 
+        logMicrophone("========== 开始录制流程 ==========")
         
-        // 检查麦克风权限
-        let permissionManager = PermissionManager()
-        if !permissionManager.hasMicrophonePermission {
-            permissionManager.requestMicrophonePermission()
-            // 给用户一些时间来授予权限
-            try await Task.sleep(nanoseconds: 1_000_000_000) // 1秒
+        // 检查麦克风权限（如果用户启用了麦克风录制）
+        let includeMicrophonePreference = UserDefaults.standard.bool(forKey: "includeMicrophone")
+        logMicrophone("用户设置 - includeMicrophone: \(includeMicrophonePreference)")
+        
+        if includeMicrophonePreference {
+            let permissionManager = PermissionManager()
+            
+            // 检查麦克风设备是否可用
+            let deviceAvailable = permissionManager.checkMicrophoneDeviceAvailable()
+            logMicrophone("麦克风设备可用性: \(deviceAvailable)", level: deviceAvailable ? "SUCCESS" : "ERROR")
+            
+            if !deviceAvailable {
+                print("⚠️ 警告：未检测到可用的麦克风设备")
+                // 显示警告但继续录制
+                let shouldContinue = await MainActor.run {
+                    let alert = NSAlert()
+                    alert.messageText = "未检测到麦克风"
+                    alert.informativeText = "系统未检测到可用的麦克风设备，将仅录制屏幕和系统音频。"
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: "继续")
+                    alert.addButton(withTitle: "取消")
+                    
+                    return alert.runModal() != .alertSecondButtonReturn
+                }
+                
+                if !shouldContinue {
+                    throw CaptureError.noMicrophoneAvailable
+                }
+            }
+            
+            // 异步请求麦克风权限并等待结果
+            let hasPermission = await permissionManager.requestMicrophonePermissionAsync()
+            logMicrophone("麦克风权限状态: \(hasPermission)", level: hasPermission ? "SUCCESS" : "ERROR")
+            
+            if !hasPermission {
+                print("⚠️ 警告：麦克风权限未授予")
+                // 显示警告但继续录制
+                let shouldContinue = await MainActor.run {
+                    let alert = NSAlert()
+                    alert.messageText = "麦克风权限未授予"
+                    alert.informativeText = "无法录制麦克风音频，将仅录制屏幕和系统音频。是否继续？"
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: "继续")
+                    alert.addButton(withTitle: "取消")
+                    
+                    return alert.runModal() != .alertSecondButtonReturn
+                }
+                
+                if !shouldContinue {
+                    throw CaptureError.microphonePermissionDenied
+                }
+                // 禁用麦克风录制
+                UserDefaults.standard.set(false, forKey: "includeMicrophone")
+            } else {
+                print("✓ 麦克风权限已授予")
+            }
         }
         
         // 通知WindowManager开始录制
@@ -397,6 +448,10 @@ class CaptureManager: ObservableObject {
         configuration.capturesAudio = includeSystemAudio
         configuration.captureMicrophone = includeMicrophone
         
+        logMicrophone("SCStreamConfiguration 配置:")
+        logMicrophone("  - capturesAudio: \(includeSystemAudio)")
+        logMicrophone("  - captureMicrophone: \(includeMicrophone)", level: includeMicrophone ? "SUCCESS" : "WARN")
+        
         print("音频录制设置 - 系统音频: \(includeSystemAudio), 麦克风: \(includeMicrophone)")
         
         print("录制配置: \(Int(screenSize.width))x\(Int(screenSize.height)) @ 30fps")
@@ -416,17 +471,30 @@ class CaptureManager: ObservableObject {
         // 添加音频流输出（如果支持）
         if includeSystemAudio {
             try stream?.addStreamOutput(streamOutput!, type: .audio, sampleHandlerQueue: captureQueue)
+            logMicrophone("✓ 已添加系统音频流输出", level: "SUCCESS")
             print("已添加系统音频流输出")
         }
         
         if includeMicrophone {
-            try stream?.addStreamOutput(streamOutput!, type: .microphone, sampleHandlerQueue: captureQueue)
-            print("已添加麦克风音频流输出")
+            do {
+                try stream?.addStreamOutput(streamOutput!, type: .microphone, sampleHandlerQueue: captureQueue)
+                logMicrophone("✓ 已成功添加麦克风音频流输出到 SCStream", level: "SUCCESS")
+                print("已添加麦克风音频流输出")
+            } catch {
+                logMicrophone("✗ 添加麦克风音频流输出失败: \(error.localizedDescription)", level: "ERROR")
+                throw error
+            }
+        } else {
+            logMicrophone("⚠️ 麦克风录制未启用，跳过添加麦克风流", level: "WARN")
         }
         
         print("开始启动录制流...")
         try await stream?.startCapture()
         print("录制流启动成功")
+        
+        logMicrophone("========== SCStream 启动成功 ==========", level: "SUCCESS")
+        logMicrophone("等待接收音频帧...")
+        logMicrophone("如果 5 秒后没有看到麦克风音频帧，说明麦克风流未正常工作")
         
         // 更新状态
         isRecording = true
@@ -865,6 +933,8 @@ enum CaptureError: LocalizedError {
     case unsupportedSystem
     case failedToCapture
     case failedToSaveImage
+    case noMicrophoneAvailable
+    case microphonePermissionDenied
     
     var errorDescription: String? {
         switch self {
@@ -882,6 +952,10 @@ enum CaptureError: LocalizedError {
             return "捕获失败"
         case .failedToSaveImage:
             return "保存图片失败"
+        case .noMicrophoneAvailable:
+            return "没有可用的麦克风设备"
+        case .microphonePermissionDenied:
+            return "麦克风权限被拒绝"
         }
     }
 }
@@ -908,13 +982,28 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     
     func setupAssetWriter(with sampleBuffer: CMSampleBuffer) {
         do {
+            logMicrophone("========== 设置 AVAssetWriter ==========")
+            logMicrophone("输出文件路径: \(outputURL.path)")
+            logMicrophone("输出文件 URL: \(outputURL.absoluteString)")
+            
+            // 确保父目录存在
+            let parentDirectory = outputURL.deletingLastPathComponent()
+            if !FileManager.default.fileExists(atPath: parentDirectory.path) {
+                logMicrophone("父目录不存在，正在创建: \(parentDirectory.path)")
+                try FileManager.default.createDirectory(at: parentDirectory, withIntermediateDirectories: true)
+            } else {
+                logMicrophone("父目录已存在: \(parentDirectory.path)")
+            }
+            
             // 删除已存在的文件
             if FileManager.default.fileExists(atPath: outputURL.path) {
+                logMicrophone("删除已存在的文件: \(outputURL.path)")
                 try FileManager.default.removeItem(at: outputURL)
             }
             
             // 使用 QuickTime 格式以确保最佳兼容性
             assetWriter = try AVAssetWriter(outputURL: outputURL, fileType: .mov)
+            logMicrophone("✓ AVAssetWriter 创建成功", level: "SUCCESS")
             
             // 从样本缓冲区获取实际的视频尺寸
             guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) else {
@@ -978,13 +1067,20 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
             let includeSystemAudio = UserDefaults.standard.bool(forKey: "includeSystemAudio")
             let includeMicrophone = UserDefaults.standard.bool(forKey: "includeMicrophone")
             
+            logMicrophone("AVAssetWriter 音频配置:")
+            logMicrophone("  - includeSystemAudio: \(includeSystemAudio)")
+            logMicrophone("  - includeMicrophone: \(includeMicrophone)")
+            
+            print("🎵 音频配置 - 系统音频: \(includeSystemAudio), 麦克风: \(includeMicrophone)")
+            
             if includeSystemAudio || includeMicrophone {
-                // 音频输入设置 - 系统音频
+                // 音频输入设置 - 使用更高质量的音频设置
                 let audioSettings: [String: Any] = [
                     AVFormatIDKey: kAudioFormatMPEG4AAC,
-                    AVSampleRateKey: 44100,
+                    AVSampleRateKey: 48000,  // 提高采样率到 48kHz
                     AVNumberOfChannelsKey: 2,
-                    AVEncoderBitRateKey: 128000
+                    AVEncoderBitRateKey: 192000,  // 提高比特率到 192kbps
+                    AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
                 ]
                 
                 if includeSystemAudio {
@@ -993,19 +1089,52 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                     
                     if let audioInput = audioInput, assetWriter?.canAdd(audioInput) == true {
                         assetWriter?.add(audioInput)
-                        print("系统音频输入已添加到资产写入器")
+                        print("✓ 系统音频输入已添加到资产写入器")
+                    } else {
+                        print("✗ 无法添加系统音频输入到资产写入器")
                     }
                 }
                 
                 if includeMicrophone {
-                    microphoneInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+                    // 为麦克风创建独立的音频输入
+                    // 注意：使用不同的音频设置以避免冲突
+                    let micAudioSettings: [String: Any] = [
+                        AVFormatIDKey: kAudioFormatMPEG4AAC,
+                        AVSampleRateKey: 48000,
+                        AVNumberOfChannelsKey: 1,  // 麦克风通常是单声道
+                        AVEncoderBitRateKey: 128000,  // 使用不同的比特率
+                        AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+                    ]
+                    
+                    microphoneInput = AVAssetWriterInput(mediaType: .audio, outputSettings: micAudioSettings)
                     microphoneInput?.expectsMediaDataInRealTime = true
                     
-                    if let microphoneInput = microphoneInput, assetWriter?.canAdd(microphoneInput) == true {
-                        assetWriter?.add(microphoneInput)
-                        print("麦克风音频输入已添加到资产写入器")
+                    logMicrophone("创建麦克风 AVAssetWriterInput:")
+                    logMicrophone("  - mediaType: audio")
+                    logMicrophone("  - sampleRate: 48000Hz")
+                    logMicrophone("  - channels: 1 (单声道)")
+                    logMicrophone("  - bitRate: 128000")
+                    logMicrophone("  - expectsMediaDataInRealTime: true")
+                    
+                    if let microphoneInput = microphoneInput {
+                        let canAdd = assetWriter?.canAdd(microphoneInput) ?? false
+                        logMicrophone("assetWriter.canAdd(microphoneInput): \(canAdd)")
+                        
+                        if canAdd {
+                            assetWriter?.add(microphoneInput)
+                            logMicrophone("✓ 麦克风音频输入已成功添加到 AVAssetWriter", level: "SUCCESS")
+                            print("✓ 麦克风音频输入已添加到资产写入器")
+                        } else {
+                            logMicrophone("✗ 无法添加麦克风音频输入到 AVAssetWriter", level: "ERROR")
+                            logMicrophone("  可能原因: QuickTime 格式不支持多个音频轨道", level: "ERROR")
+                            print("✗ 无法添加麦克风音频输入到资产写入器")
+                        }
+                    } else {
+                        logMicrophone("✗ microphoneInput 创建失败", level: "ERROR")
                     }
                 }
+            } else {
+                print("⚠️ 未启用任何音频录制")
             }
             
         } catch {
@@ -1081,28 +1210,73 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                 print("视频输入未准备好或不存在")
             }
         case .audio:
-            if let audioInput = audioInput, audioInput.isReadyForMoreMediaData {
-                if audioInput.append(sampleBuffer) {
-                    audioFrameCount += 1
-                    if audioFrameCount % 100 == 0 {
-                        print("已写入 \(audioFrameCount) 个音频帧")
+            if let audioInput = audioInput {
+                if audioInput.isReadyForMoreMediaData {
+                    if audioInput.append(sampleBuffer) {
+                        audioFrameCount += 1
+                        if audioFrameCount == 1 {
+                            print("✓ 首个系统音频帧写入成功")
+                        }
+                        if audioFrameCount % 100 == 0 {
+                            print("🎵 已写入 \(audioFrameCount) 个系统音频帧")
+                        }
+                    } else {
+                        if audioFrameCount % 50 == 0 {
+                            print("✗ 系统音频帧写入失败 (总计: \(audioFrameCount))")
+                        }
                     }
                 } else {
-                    print("音频帧写入失败")
-                }
-            }
-        case .microphone:
-            if let microphoneInput = microphoneInput, microphoneInput.isReadyForMoreMediaData {
-                if microphoneInput.append(sampleBuffer) {
-                    micFrameCount += 1
-                    if micFrameCount % 100 == 0 {
-                        print("已写入 \(micFrameCount) 个麦克风音频帧")
+                    if audioFrameCount == 0 {
+                        print("⚠️ 系统音频输入未准备好接收数据")
                     }
-                } else {
-                    print("麦克风音频写入失败")
                 }
             } else {
-                print("麦克风音频输入未准备好或不存在")
+                if audioFrameCount == 0 {
+                    print("⚠️ 系统音频输入不存在")
+                }
+            }
+            
+        case .microphone:
+            if let microphoneInput = microphoneInput {
+                if microphoneInput.isReadyForMoreMediaData {
+                    if microphoneInput.append(sampleBuffer) {
+                        micFrameCount += 1
+                        if micFrameCount == 1 {
+                            logMicrophone("✓ 首个麦克风音频帧写入成功！", level: "SUCCESS")
+                            print("✓ 首个麦克风音频帧写入成功")
+                            // 打印音频格式信息
+                            if let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer) {
+                                if let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc) {
+                                    logMicrophone("麦克风音频格式: \(asbd.pointee.mSampleRate)Hz, \(asbd.pointee.mChannelsPerFrame)声道")
+                                    print("  麦克风音频格式: \(asbd.pointee.mSampleRate)Hz, \(asbd.pointee.mChannelsPerFrame)声道")
+                                }
+                            }
+                        }
+                        if micFrameCount % 100 == 0 {
+                            logMicrophone("🎤 已写入 \(micFrameCount) 个麦克风音频帧")
+                            print("🎤 已写入 \(micFrameCount) 个麦克风音频帧")
+                        }
+                    } else {
+                        if micFrameCount % 50 == 0 {
+                            logMicrophone("✗ 麦克风音频帧写入失败 (总计: \(micFrameCount))", level: "ERROR")
+                            print("✗ 麦克风音频帧写入失败 (总计: \(micFrameCount))")
+                            if let error = assetWriter.error {
+                                logMicrophone("  错误详情: \(error.localizedDescription)", level: "ERROR")
+                                print("  错误详情: \(error.localizedDescription)")
+                            }
+                        }
+                    }
+                } else {
+                    if micFrameCount == 0 {
+                        logMicrophone("⚠️ 麦克风音频输入未准备好接收数据", level: "WARN")
+                        print("⚠️ 麦克风音频输入未准备好接收数据")
+                    }
+                }
+            } else {
+                if micFrameCount == 0 {
+                    logMicrophone("✗ 麦克风音频输入不存在 - 可能未启用或权限不足", level: "ERROR")
+                    print("⚠️ 麦克风音频输入不存在 - 可能未启用或权限不足")
+                }
             }
         @unknown default:
             print("未知的流类型: \(type)")
@@ -1120,45 +1294,143 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     func finishWriting() {
         guard let assetWriter = assetWriter else {
             print("资产写入器为空，无法完成写入")
+            logMicrophone("资产写入器为空，无法完成写入", level: "ERROR")
             return
         }
         
-        print("开始完成录制写入...")
+        logMicrophone("========== 录制完成统计 ==========")
+        logMicrophone("视频帧总数: \(frameCount)")
+        logMicrophone("系统音频帧总数: \(audioFrameCount)")
+        logMicrophone("麦克风音频帧总数: \(micFrameCount)", level: micFrameCount > 0 ? "SUCCESS" : "ERROR")
+        
+        // 检查 AVAssetWriter 的输入状态
+        logMicrophone("========== AVAssetWriter 输入状态 ==========")
+        logMicrophone("videoInput 存在: \(videoInput != nil)")
+        logMicrophone("audioInput 存在: \(audioInput != nil)")
+        logMicrophone("microphoneInput 存在: \(microphoneInput != nil)")
+        logMicrophone("AVAssetWriter.inputs 数量: \(assetWriter.inputs.count)")
+        
+        for (index, input) in assetWriter.inputs.enumerated() {
+            logMicrophone("  Input[\(index)]: mediaType=\(input.mediaType.rawValue), isReadyForMoreMediaData=\(input.isReadyForMoreMediaData)")
+        }
+        
+        if micFrameCount == 0 {
+            logMicrophone("⚠️ 警告：没有录制到任何麦克风音频帧！", level: "ERROR")
+        }
+        
+        print("📝 开始完成录制写入...")
+        print("  - 视频帧总数: \(frameCount)")
+        print("  - 系统音频帧总数: \(audioFrameCount)")
+        print("  - 麦克风音频帧总数: \(micFrameCount)")
         
         // 标记输入完成
         videoInput?.markAsFinished()
         audioInput?.markAsFinished()
         microphoneInput?.markAsFinished()
         
-        // 完成写入
-        assetWriter.finishWriting { [weak self] in
+        // 完成写入前检查状态
+        logMicrophone("AVAssetWriter.status 在 finishWriting 前: \(assetWriter.status.rawValue)")
+        if let error = assetWriter.error {
+            logMicrophone("AVAssetWriter.error 在 finishWriting 前: \(error.localizedDescription)", level: "ERROR")
+        }
+        
+        // 完成写入 - 捕获 outputURL 避免在回调中丢失
+        let finalOutputURL = outputURL
+        
+        assetWriter.finishWriting {
             DispatchQueue.main.async {
+                logMicrophone("AVAssetWriter.status 在 finishWriting 后: \(assetWriter.status.rawValue)")
+                
                 if let error = assetWriter.error {
-                    print("录制完成时出错: \(error.localizedDescription)")
+                    print("✗ 录制完成时出错: \(error.localizedDescription)")
+                    logMicrophone("✗ AVAssetWriter 完成时出错: \(error.localizedDescription)", level: "ERROR")
+                    logMicrophone("  错误域: \(error._domain)", level: "ERROR")
+                    logMicrophone("  错误代码: \(error._code)", level: "ERROR")
                 } else {
-                    print("录制成功完成，文件保存至: \(self?.outputURL.path ?? "未知路径")")
+                    print("✓ 录制成功完成，文件保存至: \(finalOutputURL.path)")
+                    logMicrophone("✓ AVAssetWriter.finishWriting() 成功", level: "SUCCESS")
                     
                     // 验证文件是否存在且有效
-                    if let url = self?.outputURL, FileManager.default.fileExists(atPath: url.path) {
+                    logMicrophone("检查文件是否存在: \(finalOutputURL.path)")
+                    let fileExists = FileManager.default.fileExists(atPath: finalOutputURL.path)
+                    logMicrophone("文件存在性检查结果: \(fileExists)", level: fileExists ? "SUCCESS" : "ERROR")
+                    
+                    if fileExists {
                         do {
-                            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+                            let attributes = try FileManager.default.attributesOfItem(atPath: finalOutputURL.path)
                             let fileSize = attributes[.size] as? Int64 ?? 0
                             print("录制文件大小: \(fileSize) 字节")
+                            logMicrophone("录制文件大小: \(fileSize) 字节")
                             
                             if fileSize > 0 {
                                 print("录制文件有效")
+                                
+                                // 使用 AVAsset 检查音频轨道
+                                self.inspectVideoFile(url: finalOutputURL)
                             } else {
                                 print("警告: 录制文件大小为0")
+                                logMicrophone("警告: 录制文件大小为0", level: "WARN")
                             }
                         } catch {
                             print("无法获取文件属性: \(error)")
+                            logMicrophone("无法获取文件属性: \(error.localizedDescription)", level: "ERROR")
                         }
                     } else {
                         print("错误: 录制文件不存在")
+                        logMicrophone("✗ 错误: 录制文件不存在于路径: \(finalOutputURL.path)", level: "ERROR")
+                        
+                        // 检查父目录是否存在
+                        let parentDir = finalOutputURL.deletingLastPathComponent()
+                        let parentExists = FileManager.default.fileExists(atPath: parentDir.path)
+                        logMicrophone("父目录存在性: \(parentExists) - \(parentDir.path)", level: parentExists ? "INFO" : "ERROR")
+                        
+                        // 列出父目录中的文件
+                        if parentExists {
+                            do {
+                                let files = try FileManager.default.contentsOfDirectory(atPath: parentDir.path)
+                                logMicrophone("父目录中的文件数量: \(files.count)")
+                                for file in files.prefix(5) {
+                                    logMicrophone("  - \(file)")
+                                }
+                            } catch {
+                                logMicrophone("无法列出父目录内容: \(error.localizedDescription)", level: "ERROR")
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+    
+    /// 检查视频文件的音频轨道
+    private func inspectVideoFile(url: URL) {
+        let asset = AVAsset(url: url)
+        
+        logMicrophone("========== 视频文件轨道检查 ==========")
+        logMicrophone("文件路径: \(url.path)")
+        
+        let videoTracks = asset.tracks(withMediaType: .video)
+        let audioTracks = asset.tracks(withMediaType: .audio)
+        
+        logMicrophone("视频轨道数量: \(videoTracks.count)")
+        logMicrophone("音频轨道数量: \(audioTracks.count)", level: audioTracks.count > 0 ? "SUCCESS" : "ERROR")
+        
+        if audioTracks.isEmpty {
+            logMicrophone("⚠️ 警告：视频文件中没有音频轨道！", level: "ERROR")
+            logMicrophone("可能原因：AVAssetWriter 不支持同时添加多个音频轨道", level: "ERROR")
+        } else {
+            for (index, track) in audioTracks.enumerated() {
+                logMicrophone("音频轨道[\(index)]:")
+                if let formatDescriptions = track.formatDescriptions as? [CMFormatDescription], let formatDesc = formatDescriptions.first {
+                    if let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc) {
+                        logMicrophone("  - 采样率: \(asbd.pointee.mSampleRate)Hz")
+                        logMicrophone("  - 声道数: \(asbd.pointee.mChannelsPerFrame)")
+                    }
+                }
+            }
+        }
+        
+        logMicrophone("========================================")
     }
 }
 
@@ -1176,4 +1448,33 @@ extension Notification.Name {
     static let recordingDidStart = Notification.Name("recordingDidStart")
     static let recordingDidStop = Notification.Name("recordingDidStop")
     static let screenshotDidSave = Notification.Name("screenshotDidSave")
+}
+
+// MARK: - Microphone Debug Logger
+
+/// 麦克风调试日志函数
+fileprivate func logMicrophone(_ message: String, level: String = "INFO") {
+    let desktopURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
+    let logFileURL = desktopURL.appendingPathComponent("MacScreenCapture_Microphone_Debug.log")
+    
+    let dateFormatter = DateFormatter()
+    dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+    let timestamp = dateFormatter.string(from: Date())
+    let logMessage = "[\(timestamp)] [\(level)] \(message)\n"
+    
+    print("🎤 \(logMessage.trimmingCharacters(in: .newlines))")
+    
+    DispatchQueue.global(qos: .utility).async {
+        if let data = logMessage.data(using: .utf8) {
+            if FileManager.default.fileExists(atPath: logFileURL.path) {
+                if let fileHandle = try? FileHandle(forWritingTo: logFileURL) {
+                    fileHandle.seekToEndOfFile()
+                    fileHandle.write(data)
+                    fileHandle.closeFile()
+                }
+            } else {
+                try? data.write(to: logFileURL)
+            }
+        }
+    }
 }

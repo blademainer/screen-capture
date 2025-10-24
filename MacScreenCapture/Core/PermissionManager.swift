@@ -90,15 +90,93 @@ class PermissionManager: ObservableObject {
                 DispatchQueue.main.async {
                     self?.hasMicrophonePermission = granted
                     if !granted {
-                        // self?.showPermissionAlert(for: .microphone)
+                        self?.showPermissionAlert(for: .microphone)
                     }
                 }
             }
         case .denied, .restricted:
             hasMicrophonePermission = false
-            // showPermissionAlert(for: .microphone)
+            showPermissionAlert(for: .microphone)
         @unknown default:
             hasMicrophonePermission = false
+        }
+    }
+    
+    /// 异步请求麦克风权限并等待结果
+    func requestMicrophonePermissionAsync() async -> Bool {
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        
+        switch status {
+        case .authorized:
+            await MainActor.run {
+                self.hasMicrophonePermission = true
+            }
+            return true
+            
+        case .notDetermined:
+            let granted = await AVCaptureDevice.requestAccess(for: .audio)
+            await MainActor.run {
+                self.hasMicrophonePermission = granted
+                if !granted {
+                    self.showPermissionAlert(for: .microphone)
+                }
+            }
+            return granted
+            
+        case .denied, .restricted:
+            await MainActor.run {
+                self.hasMicrophonePermission = false
+                self.showPermissionAlert(for: .microphone)
+            }
+            return false
+            
+        @unknown default:
+            await MainActor.run {
+                self.hasMicrophonePermission = false
+            }
+            return false
+        }
+    }
+    
+    /// 检查麦克风设备是否可用
+    func checkMicrophoneDeviceAvailable() -> Bool {
+        let discoverySession = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInMicrophone, .externalUnknown],
+            mediaType: .audio,
+            position: .unspecified
+        )
+        let devices = discoverySession.devices
+        
+        logToFile("检测到的音频设备数量: \(devices.count)")
+        for (index, device) in devices.enumerated() {
+            logToFile("  设备 \(index + 1): \(device.localizedName)")
+        }
+        
+        return !devices.isEmpty
+    }
+    
+    /// 写入日志到桌面文件
+    private func logToFile(_ message: String) {
+        let desktopURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
+        let logFileURL = desktopURL.appendingPathComponent("MacScreenCapture_Microphone_Debug.log")
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+        let timestamp = dateFormatter.string(from: Date())
+        let logMessage = "[\(timestamp)] [INFO] \(message)\n"
+        
+        print("🎤 \(logMessage.trimmingCharacters(in: .newlines))")
+        
+        if let data = logMessage.data(using: .utf8) {
+            if FileManager.default.fileExists(atPath: logFileURL.path) {
+                if let fileHandle = try? FileHandle(forWritingTo: logFileURL) {
+                    fileHandle.seekToEndOfFile()
+                    fileHandle.write(data)
+                    fileHandle.closeFile()
+                }
+            } else {
+                try? data.write(to: logFileURL)
+            }
         }
     }
     

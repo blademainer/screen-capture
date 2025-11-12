@@ -974,6 +974,8 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     private var frameCount = 0
     private var audioFrameCount = 0
     private var micFrameCount = 0
+    private var audioFailCount = 0
+    private var micFailCount = 0
     
     init(outputURL: URL) {
         self.outputURL = outputURL
@@ -1073,66 +1075,49 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
             
             print("🎵 音频配置 - 系统音频: \(includeSystemAudio), 麦克风: \(includeMicrophone)")
             
+            // 新策略：创建两个独立的音频输入，分别用于系统音频和麦克风
+            // 使用标准的 AAC 编码以确保 QuickTime 兼容性
             if includeSystemAudio || includeMicrophone {
-                // 音频输入设置 - 使用更高质量的音频设置
+                // 标准 AAC 音频设置 - QuickTime 兼容
                 let audioSettings: [String: Any] = [
                     AVFormatIDKey: kAudioFormatMPEG4AAC,
-                    AVSampleRateKey: 48000,  // 提高采样率到 48kHz
+                    AVSampleRateKey: 48000,
                     AVNumberOfChannelsKey: 2,
-                    AVEncoderBitRateKey: 192000,  // 提高比特率到 192kbps
-                    AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+                    AVEncoderBitRateKey: 128000
                 ]
                 
                 if includeSystemAudio {
+                    // 系统音频输入
                     audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
                     audioInput?.expectsMediaDataInRealTime = true
                     
                     if let audioInput = audioInput, assetWriter?.canAdd(audioInput) == true {
                         assetWriter?.add(audioInput)
+                        logMicrophone("✓ 系统音频输入已添加 (AAC 48kHz 立体声)", level: "SUCCESS")
                         print("✓ 系统音频输入已添加到资产写入器")
                     } else {
-                        print("✗ 无法添加系统音频输入到资产写入器")
+                        logMicrophone("✗ 无法添加系统音频输入", level: "ERROR")
                     }
                 }
                 
                 if includeMicrophone {
-                    // 为麦克风创建独立的音频输入
-                    // 注意：使用不同的音频设置以避免冲突
-                    let micAudioSettings: [String: Any] = [
-                        AVFormatIDKey: kAudioFormatMPEG4AAC,
-                        AVSampleRateKey: 48000,
-                        AVNumberOfChannelsKey: 1,  // 麦克风通常是单声道
-                        AVEncoderBitRateKey: 128000,  // 使用不同的比特率
-                        AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
-                    ]
-                    
-                    microphoneInput = AVAssetWriterInput(mediaType: .audio, outputSettings: micAudioSettings)
+                    // 麦克风音频输入 - 使用相同的设置以确保兼容性
+                    microphoneInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
                     microphoneInput?.expectsMediaDataInRealTime = true
                     
-                    logMicrophone("创建麦克风 AVAssetWriterInput:")
-                    logMicrophone("  - mediaType: audio")
-                    logMicrophone("  - sampleRate: 48000Hz")
-                    logMicrophone("  - channels: 1 (单声道)")
-                    logMicrophone("  - bitRate: 128000")
-                    logMicrophone("  - expectsMediaDataInRealTime: true")
-                    
-                    if let microphoneInput = microphoneInput {
-                        let canAdd = assetWriter?.canAdd(microphoneInput) ?? false
-                        logMicrophone("assetWriter.canAdd(microphoneInput): \(canAdd)")
-                        
-                        if canAdd {
-                            assetWriter?.add(microphoneInput)
-                            logMicrophone("✓ 麦克风音频输入已成功添加到 AVAssetWriter", level: "SUCCESS")
-                            print("✓ 麦克风音频输入已添加到资产写入器")
-                        } else {
-                            logMicrophone("✗ 无法添加麦克风音频输入到 AVAssetWriter", level: "ERROR")
-                            logMicrophone("  可能原因: QuickTime 格式不支持多个音频轨道", level: "ERROR")
-                            print("✗ 无法添加麦克风音频输入到资产写入器")
-                        }
+                    if let microphoneInput = microphoneInput, assetWriter?.canAdd(microphoneInput) == true {
+                        assetWriter?.add(microphoneInput)
+                        logMicrophone("✓ 麦克风音频输入已添加 (AAC 48kHz 立体声)", level: "SUCCESS")
+                        print("✓ 麦克风音频输入已添加到资产写入器")
                     } else {
-                        logMicrophone("✗ microphoneInput 创建失败", level: "ERROR")
+                        logMicrophone("✗ 无法添加麦克风音频输入", level: "ERROR")
                     }
                 }
+                
+                logMicrophone("音频配置完成:")
+                logMicrophone("  - 系统音频: \(includeSystemAudio ? "启用" : "禁用")")
+                logMicrophone("  - 麦克风: \(includeMicrophone ? "启用" : "禁用")")
+                logMicrophone("  - 编码格式: AAC 48kHz 立体声")
             } else {
                 print("⚠️ 未启用任何音频录制")
             }
@@ -1143,26 +1128,34 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     }
     
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        // 如果还没有设置资产写入器，先设置
+        // 如果还没有设置资产写入器，先设置（只在收到视频帧时设置）
         if assetWriter == nil && type == .screen {
             print("首次收到视频帧，设置资产写入器...")
             setupAssetWriter(with: sampleBuffer)
         }
         
-        guard let assetWriter = assetWriter else { 
+        // 如果资产写入器还未初始化，且当前不是视频帧，则等待视频帧到来
+        guard let assetWriter = assetWriter else {
+            if type != .screen {
+                // 音频帧在视频帧之前到达，等待视频帧初始化资产写入器
+                return
+            }
             print("资产写入器未初始化")
-            return 
+            return
         }
         
-        // 开始写入会话
+        // 开始写入会话（使用第一个到达的帧的时间戳）
         if !isWritingStarted && assetWriter.status == .unknown {
             guard assetWriter.startWriting() else {
                 print("开始写入失败: \(assetWriter.error?.localizedDescription ?? "未知错误")")
+                logMicrophone("✗ AVAssetWriter.startWriting() 失败: \(assetWriter.error?.localizedDescription ?? "未知错误")", level: "ERROR")
                 return
             }
-            assetWriter.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
+            let startTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            assetWriter.startSession(atSourceTime: startTime)
             isWritingStarted = true
-            print("录制会话已开始，时间戳: \(CMSampleBufferGetPresentationTimeStamp(sampleBuffer))")
+            print("录制会话已开始，时间戳: \(startTime), 帧类型: \(type)")
+            logMicrophone("✓ AVAssetWriter 会话已启动，起始时间: \(startTime)", level: "SUCCESS")
         }
         
         // 检查写入状态
@@ -1170,6 +1163,7 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
             print("资产写入器状态异常: \(assetWriter.status.rawValue)")
             if let error = assetWriter.error {
                 print("写入器错误: \(error.localizedDescription)")
+                logMicrophone("✗ AVAssetWriter 状态错误: \(error.localizedDescription)", level: "ERROR")
             }
             return
         }
@@ -1210,33 +1204,65 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                 print("视频输入未准备好或不存在")
             }
         case .audio:
+            // 系统音频 - 写入到 audioInput
+            if audioFrameCount == 0 && audioFailCount == 0 {
+                logMicrophone("📥 收到首个系统音频帧", level: "INFO")
+                logMicrophone("  - AVAssetWriter.status: \(assetWriter.status.rawValue)")
+                logMicrophone("  - isWritingStarted: \(isWritingStarted)")
+                if let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer) {
+                    if let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc) {
+                        logMicrophone("  - 音频格式: \(asbd.pointee.mSampleRate)Hz, \(asbd.pointee.mChannelsPerFrame)声道")
+                    }
+                }
+            }
+            
             if let audioInput = audioInput {
                 if audioInput.isReadyForMoreMediaData {
                     if audioInput.append(sampleBuffer) {
                         audioFrameCount += 1
                         if audioFrameCount == 1 {
+                            logMicrophone("✓ 首个系统音频帧写入成功", level: "SUCCESS")
                             print("✓ 首个系统音频帧写入成功")
                         }
                         if audioFrameCount % 100 == 0 {
+                            logMicrophone("🎵 已写入 \(audioFrameCount) 个系统音频帧")
                             print("🎵 已写入 \(audioFrameCount) 个系统音频帧")
                         }
                     } else {
-                        if audioFrameCount % 50 == 0 {
-                            print("✗ 系统音频帧写入失败 (总计: \(audioFrameCount))")
+                        audioFailCount += 1
+                        if audioFailCount <= 5 {
+                            logMicrophone("✗ 系统音频帧写入失败 (失败计数: \(audioFailCount))", level: "ERROR")
+                            logMicrophone("  - AVAssetWriter.status: \(assetWriter.status.rawValue)", level: "ERROR")
+                            if let error = assetWriter.error {
+                                logMicrophone("  - 错误: \(error.localizedDescription)", level: "ERROR")
+                                logMicrophone("  - 错误代码: \(error._code)", level: "ERROR")
+                            }
                         }
                     }
                 } else {
-                    if audioFrameCount == 0 {
-                        print("⚠️ 系统音频输入未准备好接收数据")
+                    if audioFrameCount == 0 && audioFailCount == 0 {
+                        logMicrophone("⚠️ 系统音频输入未准备好接收数据", level: "WARN")
                     }
                 }
             } else {
-                if audioFrameCount == 0 {
-                    print("⚠️ 系统音频输入不存在")
+                if audioFrameCount == 0 && audioFailCount == 0 {
+                    logMicrophone("✗ 系统音频输入不存在", level: "ERROR")
                 }
             }
             
         case .microphone:
+            // 麦克风音频 - 写入到 microphoneInput
+            if micFrameCount == 0 && micFailCount == 0 {
+                logMicrophone("📥 收到首个麦克风音频帧", level: "INFO")
+                logMicrophone("  - AVAssetWriter.status: \(assetWriter.status.rawValue)")
+                logMicrophone("  - isWritingStarted: \(isWritingStarted)")
+                if let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer) {
+                    if let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc) {
+                        logMicrophone("  - 音频格式: \(asbd.pointee.mSampleRate)Hz, \(asbd.pointee.mChannelsPerFrame)声道")
+                    }
+                }
+            }
+            
             if let microphoneInput = microphoneInput {
                 if microphoneInput.isReadyForMoreMediaData {
                     if microphoneInput.append(sampleBuffer) {
@@ -1244,38 +1270,30 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                         if micFrameCount == 1 {
                             logMicrophone("✓ 首个麦克风音频帧写入成功！", level: "SUCCESS")
                             print("✓ 首个麦克风音频帧写入成功")
-                            // 打印音频格式信息
-                            if let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer) {
-                                if let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc) {
-                                    logMicrophone("麦克风音频格式: \(asbd.pointee.mSampleRate)Hz, \(asbd.pointee.mChannelsPerFrame)声道")
-                                    print("  麦克风音频格式: \(asbd.pointee.mSampleRate)Hz, \(asbd.pointee.mChannelsPerFrame)声道")
-                                }
-                            }
                         }
                         if micFrameCount % 100 == 0 {
                             logMicrophone("🎤 已写入 \(micFrameCount) 个麦克风音频帧")
                             print("🎤 已写入 \(micFrameCount) 个麦克风音频帧")
                         }
                     } else {
-                        if micFrameCount % 50 == 0 {
-                            logMicrophone("✗ 麦克风音频帧写入失败 (总计: \(micFrameCount))", level: "ERROR")
-                            print("✗ 麦克风音频帧写入失败 (总计: \(micFrameCount))")
+                        micFailCount += 1
+                        if micFailCount <= 5 {
+                            logMicrophone("✗ 麦克风音频帧写入失败 (失败计数: \(micFailCount))", level: "ERROR")
+                            logMicrophone("  - AVAssetWriter.status: \(assetWriter.status.rawValue)", level: "ERROR")
                             if let error = assetWriter.error {
-                                logMicrophone("  错误详情: \(error.localizedDescription)", level: "ERROR")
-                                print("  错误详情: \(error.localizedDescription)")
+                                logMicrophone("  - 错误: \(error.localizedDescription)", level: "ERROR")
+                                logMicrophone("  - 错误代码: \(error._code)", level: "ERROR")
                             }
                         }
                     }
                 } else {
-                    if micFrameCount == 0 {
-                        logMicrophone("⚠️ 麦克风音频输入未准备好接收数据", level: "WARN")
-                        print("⚠️ 麦克风音频输入未准备好接收数据")
+                    if micFrameCount == 0 && micFailCount == 0 {
+                        logMicrophone("⚠️ 麦克风输入未准备好接收数据", level: "WARN")
                     }
                 }
             } else {
-                if micFrameCount == 0 {
-                    logMicrophone("✗ 麦克风音频输入不存在 - 可能未启用或权限不足", level: "ERROR")
-                    print("⚠️ 麦克风音频输入不存在 - 可能未启用或权限不足")
+                if micFrameCount == 0 && micFailCount == 0 {
+                    logMicrophone("✗ 麦克风输入不存在", level: "ERROR")
                 }
             }
         @unknown default:
@@ -1300,8 +1318,8 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
         
         logMicrophone("========== 录制完成统计 ==========")
         logMicrophone("视频帧总数: \(frameCount)")
-        logMicrophone("系统音频帧总数: \(audioFrameCount)")
-        logMicrophone("麦克风音频帧总数: \(micFrameCount)", level: micFrameCount > 0 ? "SUCCESS" : "ERROR")
+        logMicrophone("系统音频帧总数: \(audioFrameCount) (失败: \(audioFailCount))")
+        logMicrophone("麦克风音频帧总数: \(micFrameCount) (失败: \(micFailCount))", level: micFrameCount > 0 ? "SUCCESS" : "ERROR")
         
         // 检查 AVAssetWriter 的输入状态
         logMicrophone("========== AVAssetWriter 输入状态 ==========")

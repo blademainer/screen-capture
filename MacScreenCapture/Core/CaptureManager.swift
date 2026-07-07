@@ -41,6 +41,11 @@ class CaptureManager: ObservableObject {
     private var securityScopedURL: URL?
     private var colorSampler: NSColorSampler?
 
+    private struct ScrollingCaptureTarget {
+        let display: SCDisplay
+        let cropRect: CGRect
+    }
+
     // 线程安全的队列
     private let captureQueue = DispatchQueue(label: "com.macscreencapture.capture", qos: .userInitiated)
 
@@ -187,10 +192,11 @@ class CaptureManager: ObservableObject {
         let delay = max(0.2, UserDefaults.standard.double(forKey: "scrollingCaptureDelay"))
         let scrollLines = max(3, UserDefaults.standard.integer(forKey: "scrollingCaptureLines"))
         let trimOverlap = UserDefaults.standard.object(forKey: "scrollingCaptureTrimOverlap") as? Bool ?? true
+        let cropToWindow = UserDefaults.standard.object(forKey: "scrollingCaptureCropToWindow") as? Bool ?? true
 
         let alert = NSAlert()
         alert.messageText = "长截图助手"
-        alert.informativeText = "请把鼠标放到需要滚动的窗口上。应用会截取 \(sliceCount) 屏，每屏之间自动向下滚动并拼接成长图。"
+        alert.informativeText = "点击开始后，请在 1 秒内把鼠标放到需要滚动的窗口上。应用会截取 \(sliceCount) 屏，每屏之间自动向下滚动并拼接成长图。"
         alert.alertStyle = .informational
         alert.addButton(withTitle: "开始")
         alert.addButton(withTitle: "取消")
@@ -199,6 +205,13 @@ class CaptureManager: ObservableObject {
 
         do {
             var images: [NSImage] = []
+            var target: ScrollingCaptureTarget?
+
+            if cropToWindow {
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+                let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+                target = scrollingCaptureTargetUnderMouse(from: content)
+            }
 
             for index in 0..<sliceCount {
                 if index > 0 {
@@ -206,8 +219,12 @@ class CaptureManager: ObservableObject {
                     try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 }
 
-                let image = try await captureDisplayImageWithoutSaving()
-                images.append(image)
+                let image = try await captureDisplayImageWithoutSaving(display: target?.display)
+                if let target {
+                    images.append(cropDisplayImage(image, to: target.cropRect, in: target.display))
+                } else {
+                    images.append(image)
+                }
             }
 
             let stitchedImage = stitchImagesVertically(images, trimOverlap: trimOverlap)
@@ -1089,9 +1106,9 @@ class CaptureManager: ObservableObject {
     }
 
     /// 捕获当前显示器画面但不保存，供长截图、带壳截图等高级功能复用。
-    private func captureDisplayImageWithoutSaving() async throws -> NSImage {
+    private func captureDisplayImageWithoutSaving(display requestedDisplay: SCDisplay? = nil) async throws -> NSImage {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        guard let display = selectedDisplay ?? content.displays.first else {
+        guard let display = requestedDisplay ?? selectedDisplay ?? content.displays.first else {
             throw CaptureError.noDisplayAvailable
         }
 
@@ -1108,6 +1125,79 @@ class CaptureManager: ObservableObject {
         )
 
         return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+    }
+
+    private func scrollingCaptureTargetUnderMouse(from content: SCShareableContent) -> ScrollingCaptureTarget? {
+        guard let mouseLocation = CGEvent(source: nil)?.location,
+              let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return nil
+        }
+
+        let currentPID = Int(ProcessInfo.processInfo.processIdentifier)
+        for windowInfo in windowList {
+            let layer = windowInfo[kCGWindowLayer as String] as? Int ?? Int.max
+            guard layer == 0 else { continue }
+
+            let ownerPID = windowInfo[kCGWindowOwnerPID as String] as? Int ?? 0
+            guard ownerPID != currentPID else { continue }
+
+            let alpha = windowInfo[kCGWindowAlpha as String] as? Double ?? 1
+            guard alpha > 0 else { continue }
+
+            guard let boundsDictionary = windowInfo[kCGWindowBounds as String] as? [String: Any],
+                  let windowBounds = CGRect(dictionaryRepresentation: boundsDictionary as CFDictionary),
+                  windowBounds.width > 120,
+                  windowBounds.height > 120,
+                  windowBounds.contains(mouseLocation) else {
+                continue
+            }
+
+            guard let display = content.displays.first(where: { display in
+                CGDisplayBounds(display.displayID).intersects(windowBounds)
+            }) else {
+                continue
+            }
+
+            let displayBounds = CGDisplayBounds(display.displayID)
+            let cropRect = windowBounds.intersection(displayBounds)
+            guard cropRect.width > 80, cropRect.height > 80 else { continue }
+            return ScrollingCaptureTarget(display: display, cropRect: cropRect)
+        }
+
+        return nil
+    }
+
+    private func cropDisplayImage(_ image: NSImage, to quartzRect: CGRect, in display: SCDisplay) -> NSImage {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return image
+        }
+
+        let displayBounds = CGDisplayBounds(display.displayID)
+        guard displayBounds.width > 0, displayBounds.height > 0 else {
+            return image
+        }
+
+        let scaleX = CGFloat(cgImage.width) / displayBounds.width
+        let scaleY = CGFloat(cgImage.height) / displayBounds.height
+        let cropRect = CGRect(
+            x: (quartzRect.minX - displayBounds.minX) * scaleX,
+            y: (quartzRect.minY - displayBounds.minY) * scaleY,
+            width: quartzRect.width * scaleX,
+            height: quartzRect.height * scaleY
+        )
+        .integral
+        .intersection(CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height))
+
+        guard cropRect.width > 1,
+              cropRect.height > 1,
+              let croppedImage = cgImage.cropping(to: cropRect) else {
+            return image
+        }
+
+        return NSImage(
+            cgImage: croppedImage,
+            size: NSSize(width: croppedImage.width, height: croppedImage.height)
+        )
     }
 
     @MainActor

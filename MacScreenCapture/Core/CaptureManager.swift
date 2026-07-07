@@ -261,10 +261,12 @@ class CaptureManager: ObservableObject {
         let trimOverlap = UserDefaults.standard.object(forKey: "scrollingCaptureTrimOverlap") as? Bool ?? true
         let cropToWindow = UserDefaults.standard.object(forKey: "scrollingCaptureCropToWindow") as? Bool ?? true
         let stopWhenUnchanged = UserDefaults.standard.object(forKey: "scrollingCaptureStopWhenUnchanged") as? Bool ?? true
+        let scrollDirection = UserDefaults.standard.string(forKey: "scrollingCaptureDirection") == "up" ? "up" : "down"
+        let directionLabel = scrollDirection == "up" ? "向上" : "向下"
 
         let alert = NSAlert()
         alert.messageText = "长截图助手"
-        alert.informativeText = "点击开始后，请在 1 秒内把鼠标放到需要滚动的窗口上。应用最多截取 \(sliceCount) 屏，每屏之间自动向下滚动并拼接成长图；滚动到底会提前停止。"
+        alert.informativeText = "点击开始后，请在 1 秒内把鼠标放到需要滚动的窗口上。应用最多截取 \(sliceCount) 屏，每屏之间自动\(directionLabel)滚动并拼接成长图；滚动到底会提前停止。"
         alert.alertStyle = .informational
         alert.addButton(withTitle: "开始")
         alert.addButton(withTitle: "取消")
@@ -283,7 +285,7 @@ class CaptureManager: ObservableObject {
 
             for index in 0..<sliceCount {
                 if index > 0 {
-                    scrollActiveView(lines: scrollLines)
+                    scrollActiveView(lines: scrollLines, direction: scrollDirection)
                     try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 }
 
@@ -1208,6 +1210,7 @@ class CaptureManager: ObservableObject {
             UserDefaults.standard.set(30, forKey: "scrollingCaptureSlices")
             UserDefaults.standard.set(0.8, forKey: "scrollingCaptureDelay")
             UserDefaults.standard.set(12, forKey: "scrollingCaptureLines")
+            UserDefaults.standard.set("down", forKey: "scrollingCaptureDirection")
             UserDefaults.standard.set(true, forKey: "scrollingCaptureTrimOverlap")
             UserDefaults.standard.set(true, forKey: "scrollingCaptureDetectContentArea")
             UserDefaults.standard.set(true, forKey: "scrollingCaptureStopWhenUnchanged")
@@ -2415,12 +2418,13 @@ class CaptureManager: ObservableObject {
         )
     }
 
-    private func scrollActiveView(lines: Int) {
+    private func scrollActiveView(lines: Int, direction: String) {
+        let wheelDelta = direction == "up" ? Int32(lines) : -Int32(lines)
         let event = CGEvent(
             scrollWheelEvent2Source: nil,
             units: .line,
             wheelCount: 1,
-            wheel1: -Int32(lines),
+            wheel1: wheelDelta,
             wheel2: 0,
             wheel3: 0
         )

@@ -23,6 +23,7 @@ struct SettingsView: View {
     @AppStorage("scrollingCaptureSlices") private var scrollingCaptureSlices = 30
     @AppStorage("scrollingCaptureDelay") private var scrollingCaptureDelay = 0.8
     @AppStorage("scrollingCaptureLines") private var scrollingCaptureLines = 12
+    @AppStorage("scrollingCaptureDirection") private var scrollingCaptureDirection = "down"
     @AppStorage("scrollingCaptureTrimOverlap") private var scrollingCaptureTrimOverlap = true
     @AppStorage("scrollingCaptureCropToWindow") private var scrollingCaptureCropToWindow = true
     @AppStorage("scrollingCaptureDetectContentArea") private var scrollingCaptureDetectContentArea = true
@@ -200,6 +201,17 @@ struct SettingsView: View {
                     }
 
                     Stepper("每次滚动: \(scrollingCaptureLines) 行", value: $scrollingCaptureLines, in: 3...40)
+
+                    HStack {
+                        Text("滚动方向:")
+                        Spacer()
+                        Picker("滚动方向", selection: $scrollingCaptureDirection) {
+                            Text("向下").tag("down")
+                            Text("向上").tag("up")
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 132)
+                    }
 
                     Toggle("裁剪到鼠标所在窗口", isOn: $scrollingCaptureCropToWindow)
 

@@ -44,6 +44,7 @@ struct MacScreenCaptureApp: App {
             "annotationCustom3TextOutlined": AnnotationStylePreset.professional.textOutlined,
             "multiWindowDesktopBackdrop": true,
             "scrollingCaptureSlices": 30,
+            "scrollingCaptureDirection": "down",
             "scrollingCaptureCropToWindow": true,
             "scrollingCaptureDetectContentArea": true,
             "scrollingCaptureStopWhenUnchanged": true,

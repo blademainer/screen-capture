@@ -55,6 +55,7 @@ struct SettingsView: View {
     @AppStorage("colorCodeFormat") private var colorCodeFormat = "#HEX"
     @AppStorage("customColorCodeTemplate") private var customColorCodeTemplate = "{hex}"
     @AppStorage("openAfterCaptureAppPath") private var openAfterCaptureAppPath = ""
+    @AppStorage("autoOpenAfterCaptureInConfiguredApp") private var autoOpenAfterCaptureInConfiguredApp = false
     @AppStorage("doubleOptionQuickOpenEnabled") private var doubleOptionQuickOpenEnabled = true
     @AppStorage("doubleOptionQuickOpenInterval") private var doubleOptionQuickOpenInterval = 0.45
     @AppStorage("doubleOptionQuickOpenCooldown") private var doubleOptionQuickOpenCooldown = 1.0
@@ -446,7 +447,17 @@ struct SettingsView: View {
                     }
                 }
 
+                Toggle("截图保存后自动用指定 App 打开", isOn: $autoOpenAfterCaptureInConfiguredApp)
+
                 Toggle("双击 ⌥ 后截图并打开指定 App", isOn: $doubleOptionQuickOpenEnabled)
+
+                if autoOpenAfterCaptureInConfiguredApp || doubleOptionQuickOpenEnabled {
+                    if openAfterCaptureAppPath.isEmpty {
+                        Text("未选择指定 App 时会用系统默认 App 打开。")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
 
                 if doubleOptionQuickOpenEnabled {
                     HStack {
@@ -468,11 +479,6 @@ struct SettingsView: View {
                     }
                 }
 
-                if doubleOptionQuickOpenEnabled && openAfterCaptureAppPath.isEmpty {
-                    Text("请先选择指定 App；未选择时会用系统默认 App 打开。")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
             }
         }
     }

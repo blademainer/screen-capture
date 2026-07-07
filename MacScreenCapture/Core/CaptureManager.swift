@@ -408,7 +408,7 @@ class CaptureManager: ObservableObject {
     /// 贴图 - 交互选择区域后打开置顶浮窗，可重复创建多个贴图。
     @MainActor
     func capturePinnedRegion() async throws -> NSImage {
-        let image = try await captureInteractiveScreenshot(arguments: ["-i", "-r"], showEditor: false)
+        let image = try await captureInteractiveScreenshot(arguments: ["-i", "-r"], showEditor: false, autoOpenAfterCapture: false)
         FloatingWindowManager.shared.showFloatingPreview(for: image)
         return image
     }
@@ -452,7 +452,7 @@ class CaptureManager: ObservableObject {
     /// 框选截图区域后直接 OCR 并复制文本，覆盖截图工具的 OCR 直达流程。
     @MainActor
     func captureRegionAndRecognizeText() async throws -> String {
-        let image = try await captureInteractiveScreenshot(arguments: ["-i", "-r"], forceStyle: false, showEditor: false)
+        let image = try await captureInteractiveScreenshot(arguments: ["-i", "-r"], forceStyle: false, showEditor: false, autoOpenAfterCapture: false)
         return try await recognizeTextAndCopy(from: image)
     }
 
@@ -477,7 +477,7 @@ class CaptureManager: ObservableObject {
     /// 框选截图区域后直接 OCR 并翻译，覆盖 iShot 的截图翻译直达流程。
     @MainActor
     func captureRegionAndTranslate() async throws -> ScreenshotTranslationResult {
-        let image = try await captureInteractiveScreenshot(arguments: ["-i", "-r"], forceStyle: false, showEditor: false)
+        let image = try await captureInteractiveScreenshot(arguments: ["-i", "-r"], forceStyle: false, showEditor: false, autoOpenAfterCapture: false)
         return try await translateScreenshotImage(image)
     }
 
@@ -549,7 +549,7 @@ class CaptureManager: ObservableObject {
         captureMode = .region
         defer { captureMode = originalMode }
 
-        let image = try await captureScreenshot()
+        let image = try await captureScreenshot(autoOpenAfterCapture: false)
         try openLastScreenshotInConfiguredApp()
         return image
     }
@@ -602,7 +602,7 @@ class CaptureManager: ObservableObject {
     }
 
     /// 截图
-    func captureScreenshot() async throws -> NSImage {
+    func captureScreenshot(autoOpenAfterCapture: Bool = true) async throws -> NSImage {
         // 通知WindowManager开始截图
         await MainActor.run {
             WindowManager.shared.updateCaptureState(.screenshotting)
@@ -636,7 +636,7 @@ class CaptureManager: ObservableObject {
 
         case .region:
             // 区域截图需要先选择区域
-            return try await captureRegionScreenshot()
+            return try await captureRegionScreenshot(autoOpenAfterCapture: autoOpenAfterCapture)
         }
 
         let configuration = SCStreamConfiguration()
@@ -659,7 +659,7 @@ class CaptureManager: ObservableObject {
             configuration: configuration
         )
         let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-        return try await finalizeCapturedImage(nsImage, showEditor: false)
+        return try await finalizeCapturedImage(nsImage, showEditor: false, autoOpenAfterCapture: autoOpenAfterCapture)
     }
 
     /// 开始录制
@@ -1381,7 +1381,7 @@ class CaptureManager: ObservableObject {
     }
 
     /// 区域截图 - 使用系统截图工具
-    private func captureRegionScreenshot() async throws -> NSImage {
+    private func captureRegionScreenshot(autoOpenAfterCapture: Bool = true) async throws -> NSImage {
         // 通知WindowManager开始截图
         await MainActor.run {
             WindowManager.shared.updateCaptureState(.screenshotting)
@@ -1419,6 +1419,15 @@ class CaptureManager: ObservableObject {
 
                                 // 显示编辑窗口
                                 WindowManager.shared.showEditingWindow(for: finalImage)
+
+                                if autoOpenAfterCapture,
+                                   UserDefaults.standard.object(forKey: "autoOpenAfterCaptureInConfiguredApp") as? Bool ?? false {
+                                    do {
+                                        try self.openLastScreenshotInConfiguredApp()
+                                    } catch {
+                                        print("自动打开截图失败: \(error)")
+                                    }
+                                }
 
                                 // 清理临时文件
                                 try? FileManager.default.removeItem(at: tempURL)
@@ -2062,7 +2071,7 @@ class CaptureManager: ObservableObject {
 
     /// 使用系统 screencapture 交互选择并保存结果。
     @MainActor
-    private func captureInteractiveScreenshot(arguments: [String], forceStyle: Bool = true, showEditor: Bool) async throws -> NSImage {
+    private func captureInteractiveScreenshot(arguments: [String], forceStyle: Bool = true, showEditor: Bool, autoOpenAfterCapture: Bool = true) async throws -> NSImage {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
 
@@ -2075,7 +2084,7 @@ class CaptureManager: ObservableObject {
                 Task { @MainActor in
                     if process.terminationStatus == 0, let image = NSImage(contentsOf: tempURL) {
                         do {
-                            let finalImage = try await self.finalizeCapturedImage(image, forceStyle: forceStyle, showEditor: showEditor)
+                            let finalImage = try await self.finalizeCapturedImage(image, forceStyle: forceStyle, showEditor: showEditor, autoOpenAfterCapture: autoOpenAfterCapture)
                             try? FileManager.default.removeItem(at: tempURL)
                             continuation.resume(returning: finalImage)
                         } catch {
@@ -2097,7 +2106,7 @@ class CaptureManager: ObservableObject {
     }
 
     @discardableResult
-    private func finalizeCapturedImage(_ image: NSImage, forceStyle: Bool = true, showEditor: Bool) async throws -> NSImage {
+    private func finalizeCapturedImage(_ image: NSImage, forceStyle: Bool = true, showEditor: Bool, autoOpenAfterCapture: Bool = true) async throws -> NSImage {
         let finalImage = forceStyle ? applyOutputStyle(to: image) : image
         try await saveScreenshot(finalImage)
 
@@ -2105,6 +2114,15 @@ class CaptureManager: ObservableObject {
             lastCapturedImage = finalImage
             if showEditor {
                 WindowManager.shared.showEditingWindow(for: finalImage)
+            }
+
+            if autoOpenAfterCapture,
+               UserDefaults.standard.object(forKey: "autoOpenAfterCaptureInConfiguredApp") as? Bool ?? false {
+                do {
+                    try openLastScreenshotInConfiguredApp()
+                } catch {
+                    print("自动打开截图失败: \(error)")
+                }
             }
         }
 

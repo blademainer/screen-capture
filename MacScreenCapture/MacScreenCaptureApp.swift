@@ -24,6 +24,7 @@ struct MacScreenCaptureApp: App {
             "floatingWindowOpacity": 0.95,
             "floatingWindowShowPreview": true,
             "floatingWindowPosition": "topRight",
+            "autoOpenAfterCaptureInConfiguredApp": false,
             "doubleOptionQuickOpenEnabled": true,
             "doubleOptionQuickOpenInterval": 0.45,
             "doubleOptionQuickOpenCooldown": 1.0,

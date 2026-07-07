@@ -43,6 +43,9 @@ struct SettingsView: View {
     @AppStorage("annotationDefaultColorHex") private var annotationDefaultColorHex = AnnotationStylePreset.professional.colorHex
     @AppStorage("annotationDefaultLineWidth") private var annotationDefaultLineWidth = AnnotationStylePreset.professional.lineWidth
     @AppStorage("annotationTextOutlined") private var annotationTextOutlined = false
+    @AppStorage("annotationCustomColorHex") private var annotationCustomColorHex = AnnotationStylePreset.professional.colorHex
+    @AppStorage("annotationCustomLineWidth") private var annotationCustomLineWidth = AnnotationStylePreset.professional.lineWidth
+    @AppStorage("annotationCustomTextOutlined") private var annotationCustomTextOutlined = false
     @AppStorage("colorCodeFormat") private var colorCodeFormat = "#HEX"
     @AppStorage("customColorCodeTemplate") private var customColorCodeTemplate = "{hex}"
     @AppStorage("openAfterCaptureAppPath") private var openAfterCaptureAppPath = ""
@@ -330,6 +333,13 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                     }
                     Toggle("文字和序号启用描边", isOn: $annotationTextOutlined)
+                    HStack {
+                        Spacer()
+                        Button("保存当前样式为自定义模板") {
+                            saveCustomAnnotationPreset()
+                        }
+                        .buttonStyle(.bordered)
+                    }
                 }
                 .padding(.top, 4)
 
@@ -670,9 +680,23 @@ struct SettingsView: View {
 
     private func applyAnnotationPreset(_ presetValue: String) {
         guard let preset = AnnotationStylePreset(rawValue: presetValue) else { return }
+        if preset == .custom {
+            annotationDefaultColorHex = annotationCustomColorHex
+            annotationDefaultLineWidth = annotationCustomLineWidth
+            annotationTextOutlined = annotationCustomTextOutlined
+            return
+        }
+
         annotationDefaultColorHex = preset.colorHex
         annotationDefaultLineWidth = preset.lineWidth
         annotationTextOutlined = preset.textOutlined
+    }
+
+    private func saveCustomAnnotationPreset() {
+        annotationCustomColorHex = annotationDefaultColorHex
+        annotationCustomLineWidth = annotationDefaultLineWidth
+        annotationCustomTextOutlined = annotationTextOutlined
+        annotationStylePreset = AnnotationStylePreset.custom.rawValue
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

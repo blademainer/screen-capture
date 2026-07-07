@@ -689,6 +689,69 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(usableMicrophone.hasAnySource)
     }
 
+    func testRecordingCompletionSummaryReportsSuccessfulSystemAudioCapture() throws {
+        let diagnostics = makeRecordingDiagnostics(
+            requestedSystemAudio: true,
+            requestedMicrophone: false,
+            videoFrameCount: 120,
+            systemAudioFrameCount: 240,
+            videoTrackCount: 1,
+            audioTrackCount: 1,
+            fileSize: 4_096,
+            assetWriterSucceeded: true,
+            audioOnly: false
+        )
+
+        let summary = RecordingCompletionSummary.make(
+            outputURL: URL(fileURLWithPath: "/tmp/test.mov"),
+            diagnostics: diagnostics,
+            fallbackModeLabel: "全屏"
+        )
+
+        XCTAssertEqual(summary.severity, .success)
+        XCTAssertEqual(summary.title, "录制已保存")
+        XCTAssertEqual(summary.detail, "系统音频 240 帧，音轨 1/1")
+        XCTAssertEqual(summary.modeLabel, "全屏")
+    }
+
+    func testRecordingCompletionSummarySurfacesMissingSystemAudio() throws {
+        let diagnostics = makeRecordingDiagnostics(
+            requestedSystemAudio: true,
+            requestedMicrophone: false,
+            videoFrameCount: 120,
+            systemAudioFrameCount: 0,
+            videoTrackCount: 1,
+            audioTrackCount: 1,
+            fileSize: 4_096,
+            assetWriterSucceeded: true,
+            audioOnly: false
+        )
+
+        let summary = RecordingCompletionSummary.make(
+            outputURL: URL(fileURLWithPath: "/tmp/test.mov"),
+            diagnostics: diagnostics,
+            fallbackModeLabel: "窗口"
+        )
+
+        XCTAssertEqual(summary.severity, .warning)
+        XCTAssertEqual(summary.title, "录制完成，音频需检查")
+        XCTAssertEqual(summary.detail, "系统音频 0 帧，音轨 1/1")
+        XCTAssertEqual(summary.modeLabel, "窗口")
+    }
+
+    func testRecordingCompletionSummaryLabelsAudioOnlyOutput() throws {
+        let summary = RecordingCompletionSummary.make(
+            outputURL: URL(fileURLWithPath: "/tmp/test.m4a"),
+            diagnostics: nil,
+            fallbackModeLabel: "全屏"
+        )
+
+        XCTAssertEqual(summary.severity, .success)
+        XCTAssertEqual(summary.title, "录音已保存")
+        XCTAssertEqual(summary.detail, "文件已保存")
+        XCTAssertEqual(summary.modeLabel, "仅录音")
+    }
+
     func testIShotInteractionTimingNormalizesDelayAndDoubleOptionWindows() throws {
         XCTAssertEqual(IShotInteractionTiming.delayedScreenshotSeconds(0), 5)
         XCTAssertEqual(IShotInteractionTiming.delayedScreenshotSeconds(-3), 1)

@@ -243,7 +243,7 @@ struct RecordingView: View {
                     .font(.title)
                     .bold()
             } else if captureManager.recordingURL != nil {
-                Text("文件已保存")
+                Text(completedRecordingSummary.detail)
                     .font(.title3)
                     .bold()
             }
@@ -338,7 +338,7 @@ struct RecordingView: View {
 
     private var statusTitle: String {
         if !captureManager.isRecording {
-            return completedRecordingIsAudioOnly ? "录音已保存" : "录制已保存"
+            return completedRecordingSummary.title
         }
         if captureManager.isPaused {
             return captureManager.isAudioOnlyRecording ? "录音已暂停" : "录制已暂停"
@@ -348,7 +348,14 @@ struct RecordingView: View {
 
     private var recordingStatusColor: Color {
         if !captureManager.isRecording {
-            return .green
+            switch completedRecordingSummary.severity {
+            case .success:
+                return .green
+            case .warning:
+                return .orange
+            case .error:
+                return .red
+            }
         }
         return captureManager.isPaused ? .orange : .red
     }
@@ -358,10 +365,21 @@ struct RecordingView: View {
     }
 
     private var recordingModeLabel: String {
-        if captureManager.isAudioOnlyRecording || (!captureManager.isRecording && completedRecordingIsAudioOnly) {
+        if !captureManager.isRecording {
+            return completedRecordingSummary.modeLabel
+        }
+        if captureManager.isAudioOnlyRecording {
             return "仅录音"
         }
         return captureManager.captureMode.rawValue
+    }
+
+    private var completedRecordingSummary: RecordingCompletionSummary {
+        RecordingCompletionSummary.make(
+            outputURL: captureManager.recordingURL,
+            diagnostics: captureManager.lastRecordingAudioDiagnostics,
+            fallbackModeLabel: captureManager.captureMode.rawValue
+        )
     }
 
     private func formatDuration(_ duration: TimeInterval) -> String {

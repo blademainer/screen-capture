@@ -243,6 +243,45 @@ final class MacScreenCaptureTests: XCTestCase {
         }
         XCTAssertTrue(containsWhiteScreen)
     }
+
+    func testOCRTextOrdererSortsByVisualReadingOrder() throws {
+        let boxes = [
+            makeTextBox("第二行右", x: 0.55, y: 0.40),
+            makeTextBox("第一行右", x: 0.60, y: 0.72),
+            makeTextBox("第二行左", x: 0.12, y: 0.41),
+            makeTextBox("第一行左", x: 0.10, y: 0.70)
+        ]
+
+        XCTAssertEqual(
+            OCRTextOrderer.joinedText(boxes),
+            "第一行左\n第一行右\n第二行左\n第二行右"
+        )
+    }
+
+    func testOCRTextOrdererKeepsSlightVerticalJitterOnSameLine() throws {
+        let boxes = [
+            makeTextBox("中", x: 0.40, y: 0.50, height: 0.10),
+            makeTextBox("左", x: 0.10, y: 0.54, height: 0.10),
+            makeTextBox("右", x: 0.70, y: 0.47, height: 0.10)
+        ]
+
+        XCTAssertEqual(
+            OCRTextOrderer.sortedTextBoxes(boxes).map(\.text),
+            ["左", "中", "右"]
+        )
+    }
+
+    func testOCRTextOrdererTreatsLargeVerticalGapAsNewLine() throws {
+        let boxes = [
+            makeTextBox("下方靠左", x: 0.10, y: 0.35, height: 0.08),
+            makeTextBox("上方靠右", x: 0.70, y: 0.70, height: 0.08)
+        ]
+
+        XCTAssertEqual(
+            OCRTextOrderer.sortedTextBoxes(boxes).map(\.text),
+            ["上方靠右", "下方靠左"]
+        )
+    }
     
     func testNotificationManagerInitialization() throws {
         throw XCTSkip("NotificationManager requires a real app bundle host for UNUserNotificationCenter.")
@@ -405,6 +444,13 @@ final class MacScreenCaptureTests: XCTestCase {
         NSRect(x: 0, y: 0, width: width, height: height).fill()
         image.unlockFocus()
         return image
+    }
+
+    private func makeTextBox(_ text: String, x: CGFloat, y: CGFloat, width: CGFloat = 0.20, height: CGFloat = 0.08) -> OCRTextOrderer.TextBox {
+        OCRTextOrderer.TextBox(
+            text: text,
+            boundingBox: CGRect(x: x, y: y, width: width, height: height)
+        )
     }
 
     private func rgbaPixel(in image: NSImage, x: Int, y: Int) throws -> (red: Int, green: Int, blue: Int, alpha: Int) {

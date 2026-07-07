@@ -28,6 +28,7 @@
 		A1234567890ABCE0C /* ColorCodeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE0B /* ColorCodeFormatter.swift */; };
 		A1234567890ABCE0E /* ScrollingImageStitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE0D /* ScrollingImageStitcher.swift */; };
 		A1234567890ABCE10 /* ScreenshotStyleRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE0F /* ScreenshotStyleRenderer.swift */; };
+		A1234567890ABCE12 /* OCRTextOrderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE11 /* OCRTextOrderer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,6 +55,7 @@
 		A1234567890ABCE0B /* ColorCodeFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorCodeFormatter.swift; sourceTree = "<group>"; };
 		A1234567890ABCE0D /* ScrollingImageStitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollingImageStitcher.swift; sourceTree = "<group>"; };
 		A1234567890ABCE0F /* ScreenshotStyleRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotStyleRenderer.swift; sourceTree = "<group>"; };
+		A1234567890ABCE11 /* OCRTextOrderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRTextOrderer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -140,6 +142,7 @@
 				A1234567890ABCE0B /* ColorCodeFormatter.swift */,
 				A1234567890ABCE0D /* ScrollingImageStitcher.swift */,
 				A1234567890ABCE0F /* ScreenshotStyleRenderer.swift */,
+				A1234567890ABCE11 /* OCRTextOrderer.swift */,
 			);
 			path = Utils;
 			sourceTree = "<group>";
@@ -228,6 +231,7 @@
 				A1234567890ABCE0C /* ColorCodeFormatter.swift in Sources */,
 				A1234567890ABCE0E /* ScrollingImageStitcher.swift in Sources */,
 				A1234567890ABCE10 /* ScreenshotStyleRenderer.swift in Sources */,
+				A1234567890ABCE12 /* OCRTextOrderer.swift in Sources */,
 				A1234567890ABCE02 /* HotKeyManager.swift in Sources */,
 				A1234567890ABCE04 /* WindowManager.swift in Sources */,
 				A1234567890ABCE06 /* FloatingWindowController.swift in Sources */,

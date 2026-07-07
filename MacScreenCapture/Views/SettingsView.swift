@@ -170,7 +170,7 @@ struct SettingsView: View {
                         .font(.subheadline)
                         .fontWeight(.medium)
 
-                    Stepper("截取屏数: \(scrollingCaptureSlices)", value: $scrollingCaptureSlices, in: 2...20)
+                    Stepper("最多截取屏数: \(scrollingCaptureSlices)", value: $scrollingCaptureSlices, in: 2...100)
 
                     HStack {
                         Text("滚动间隔:")

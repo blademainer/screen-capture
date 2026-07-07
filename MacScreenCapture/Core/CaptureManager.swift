@@ -256,7 +256,7 @@ class CaptureManager: ObservableObject {
 
         let alert = NSAlert()
         alert.messageText = "长截图助手"
-        alert.informativeText = "点击开始后，请在 1 秒内把鼠标放到需要滚动的窗口上。应用最多截取 \(sliceCount) 屏，每屏之间自动向下滚动并拼接成长图。"
+        alert.informativeText = "点击开始后，请在 1 秒内把鼠标放到需要滚动的窗口上。应用最多截取 \(sliceCount) 屏，每屏之间自动向下滚动并拼接成长图；滚动到底会提前停止。"
         alert.alertStyle = .informational
         alert.addButton(withTitle: "开始")
         alert.addButton(withTitle: "取消")
@@ -1203,7 +1203,7 @@ class CaptureManager: ObservableObject {
 
         if !UserDefaults.standard.bool(forKey: "hasSetupDefaultAdvancedCaptureSettings") {
             UserDefaults.standard.set(5, forKey: "delayedScreenshotSeconds")
-            UserDefaults.standard.set(5, forKey: "scrollingCaptureSlices")
+            UserDefaults.standard.set(30, forKey: "scrollingCaptureSlices")
             UserDefaults.standard.set(0.8, forKey: "scrollingCaptureDelay")
             UserDefaults.standard.set(12, forKey: "scrollingCaptureLines")
             UserDefaults.standard.set(true, forKey: "scrollingCaptureTrimOverlap")

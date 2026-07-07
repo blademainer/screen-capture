@@ -27,6 +27,7 @@ struct MacScreenCaptureApp: App {
             "doubleOptionQuickOpenEnabled": true,
             "numberedAnnotationStart": 1,
             "multiWindowDesktopBackdrop": true,
+            "scrollingCaptureSlices": 30,
             "scrollingCaptureCropToWindow": true,
             "scrollingCaptureStopWhenUnchanged": true,
             "deviceFrameBezelWidth": 42.0,

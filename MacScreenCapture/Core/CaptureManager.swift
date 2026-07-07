@@ -11,6 +11,7 @@ import SwiftUI
 import AVFoundation
 import CoreGraphics
 import AppKit
+@preconcurrency import Vision
 
 /// 捕获管理器 - 负责截图和录制功能的核心逻辑
 @available(macOS 12.3, *)
@@ -38,6 +39,7 @@ class CaptureManager: ObservableObject {
     private var recordingTimer: Timer?
     private var recordingStartTime: Date?
     private var securityScopedURL: URL?
+    private var colorSampler: NSColorSampler?
     
     // 线程安全的队列
     private let captureQueue = DispatchQueue(label: "com.macscreencapture.capture", qos: .userInitiated)
@@ -181,14 +183,116 @@ class CaptureManager: ObservableObject {
     /// 滚动截图 - 快捷键调用
     @MainActor
     func captureScrollingWindow() async {
-        // 滚动截图功能暂未实现，显示提示
-        DispatchQueue.main.async {
-            let alert = NSAlert()
-            alert.messageText = "功能开发中"
-            alert.informativeText = "滚动截图功能正在开发中，敬请期待。"
-            alert.alertStyle = .informational
-            alert.addButton(withTitle: "确定")
-            alert.runModal()
+        let sliceCount = max(2, UserDefaults.standard.integer(forKey: "scrollingCaptureSlices"))
+        let delay = max(0.2, UserDefaults.standard.double(forKey: "scrollingCaptureDelay"))
+        let scrollLines = max(3, UserDefaults.standard.integer(forKey: "scrollingCaptureLines"))
+        
+        let alert = NSAlert()
+        alert.messageText = "长截图助手"
+        alert.informativeText = "请把鼠标放到需要滚动的窗口上。应用会截取 \(sliceCount) 屏，每屏之间自动向下滚动并拼接成长图。"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "开始")
+        alert.addButton(withTitle: "取消")
+        
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        
+        do {
+            var images: [NSImage] = []
+            
+            for index in 0..<sliceCount {
+                if index > 0 {
+                    scrollActiveView(lines: scrollLines)
+                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                }
+                
+                let image = try await captureDisplayImageWithoutSaving()
+                images.append(image)
+            }
+            
+            let stitchedImage = stitchImagesVertically(images)
+            try await finalizeCapturedImage(stitchedImage, showEditor: true)
+        } catch {
+            showAlert(title: "长截图失败", message: error.localizedDescription)
+        }
+    }
+    
+    /// 延时截图
+    @MainActor
+    func captureDelayedScreenshot(seconds: Int? = nil) async throws -> NSImage {
+        let delay = seconds ?? max(1, UserDefaults.standard.integer(forKey: "delayedScreenshotSeconds"))
+        try await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
+        return try await captureScreenshot()
+    }
+    
+    /// 多窗口截图 - 使用 macOS 系统交互选择窗口，按住 Shift 可连续选择多个窗口。
+    @MainActor
+    func captureMultipleWindowsScreenshot() async throws -> NSImage {
+        return try await captureInteractiveScreenshot(arguments: ["-i", "-W"], showEditor: true)
+    }
+    
+    /// 全屏带壳截图
+    @MainActor
+    func captureDeviceFramedFullScreen() async throws -> NSImage {
+        let image = try await captureDisplayImageWithoutSaving()
+        let framedImage = renderDeviceFrame(around: image)
+        try await finalizeCapturedImage(framedImage, forceStyle: false, showEditor: true)
+        return framedImage
+    }
+    
+    /// 取色
+    @MainActor
+    func pickScreenColor() {
+        colorSampler = NSColorSampler()
+        colorSampler?.show { [weak self] color in
+            Task { @MainActor in
+                guard let self = self, let color = color else { return }
+                let code = self.formattedColorCode(for: color)
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(code, forType: .string)
+                self.showAlert(title: "取色完成", message: "已复制颜色值：\(code)")
+                self.colorSampler = nil
+            }
+        }
+    }
+    
+    /// OCR 当前最后一张截图
+    @MainActor
+    func recognizeTextFromLastScreenshot() async throws -> String {
+        guard let image = lastCapturedImage else {
+            throw CaptureError.noImageAvailable
+        }
+        
+        let text = try await recognizeText(in: image)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        return text
+    }
+    
+    /// OCR 后打开翻译页面
+    @MainActor
+    func translateLastScreenshot() async throws {
+        let text = try await recognizeTextFromLastScreenshot()
+        guard let encoded = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "https://translate.google.com/?sl=auto&tl=zh-CN&text=\(encoded)&op=translate") else {
+            throw CaptureError.failedToTranslate
+        }
+        
+        NSWorkspace.shared.open(url)
+    }
+    
+    /// 使用用户指定的 App 打开最近一次保存的截图。
+    @MainActor
+    func openLastScreenshotInConfiguredApp() throws {
+        guard let imageURL = lastSavedImageURL else {
+            throw CaptureError.noImageAvailable
+        }
+        
+        if let appPath = UserDefaults.standard.string(forKey: "openAfterCaptureAppPath"), !appPath.isEmpty {
+            let appURL = URL(fileURLWithPath: appPath)
+            let configuration = NSWorkspace.OpenConfiguration()
+            NSWorkspace.shared.open([imageURL], withApplicationAt: appURL, configuration: configuration)
+        } else {
+            NSWorkspace.shared.open(imageURL)
         }
     }
     
@@ -280,7 +384,7 @@ class CaptureManager: ObservableObject {
         configuration.width = Int(displaySize.width)
         configuration.height = Int(displaySize.height)
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
-        configuration.showsCursor = true
+        configuration.showsCursor = UserDefaults.standard.bool(forKey: "showCursor")
         
         // 使用 ScreenCaptureKit 进行截图
         let cgImage = try await SCScreenshotManager.captureImage(
@@ -288,11 +392,7 @@ class CaptureManager: ObservableObject {
             configuration: configuration
         )
         let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-        
-        try await saveScreenshot(nsImage)
-        lastCapturedImage = nsImage
-        
-        return nsImage
+        return try await finalizeCapturedImage(nsImage, showEditor: false)
     }
     
     /// 开始录制
@@ -360,6 +460,11 @@ class CaptureManager: ObservableObject {
             }
         }
         
+        let startDelay = UserDefaults.standard.integer(forKey: "recordingStartDelaySeconds")
+        if startDelay > 0 {
+            try await Task.sleep(nanoseconds: UInt64(startDelay) * 1_000_000_000)
+        }
+        
         // 通知WindowManager开始录制
         WindowManager.shared.updateCaptureState(.recording(startTime: Date()))
         
@@ -419,7 +524,9 @@ class CaptureManager: ObservableObject {
                         }
                         
                         // 创建输出文件URL
-                        let fileName = "Recording_\(DateFormatter.fileNameFormatter.string(from: Date())).mov"
+                        let recordingFormat = UserDefaults.standard.string(forKey: "recordingFileFormat") ?? "MOV"
+                        let fileExtension = recordingFormat.lowercased()
+                        let fileName = "Recording_\(DateFormatter.fileNameFormatter.string(from: Date())).\(fileExtension)"
                         let outputURL = await MainActor.run {
                             self.outputDirectory.appendingPathComponent(fileName)
                         }
@@ -435,9 +542,10 @@ class CaptureManager: ObservableObject {
         let configuration = SCStreamConfiguration()
         configuration.width = Int(screenSize.width)
         configuration.height = Int(screenSize.height)
-        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30) // 30 FPS
+        let frameRate = max(15, Int(UserDefaults.standard.double(forKey: "recordingFrameRate")))
+        configuration.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(frameRate))
         configuration.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange // 使用 YUV 格式，更适合 H.264
-        configuration.showsCursor = true
+        configuration.showsCursor = UserDefaults.standard.bool(forKey: "showCursor")
         configuration.queueDepth = 5
         configuration.colorSpaceName = CGColorSpace.sRGB // 使用标准 sRGB 色彩空间
         
@@ -454,13 +562,14 @@ class CaptureManager: ObservableObject {
         
         print("音频录制设置 - 系统音频: \(includeSystemAudio), 麦克风: \(includeMicrophone)")
         
-        print("录制配置: \(Int(screenSize.width))x\(Int(screenSize.height)) @ 30fps")
+        print("录制配置: \(Int(screenSize.width))x\(Int(screenSize.height)) @ \(frameRate)fps")
         
         recordingURL = outputURL
         print("录制文件路径: \(recordingURL!.path)")
         
         // 创建流输出
-        streamOutput = CaptureStreamOutput(outputURL: recordingURL!)
+        let fileType: AVFileType = (UserDefaults.standard.string(forKey: "recordingFileFormat") == "MP4") ? .mp4 : .mov
+        streamOutput = CaptureStreamOutput(outputURL: recordingURL!, fileType: fileType)
         
         // 创建并启动流
         stream = SCStream(filter: filter, configuration: configuration, delegate: streamOutput)
@@ -652,9 +761,24 @@ class CaptureManager: ObservableObject {
             UserDefaults.standard.set(true, forKey: "showCursor")
             UserDefaults.standard.set(60.0, forKey: "recordingFrameRate")
             UserDefaults.standard.set("高", forKey: "recordingQuality")
+            UserDefaults.standard.set(0, forKey: "recordingStartDelaySeconds")
+            UserDefaults.standard.set("MOV", forKey: "recordingFileFormat")
             UserDefaults.standard.set(true, forKey: "hasSetupDefaultRecordingSettings")
             
             print("已设置默认录制设置 - 麦克风录制已启用")
+        }
+        
+        if !UserDefaults.standard.bool(forKey: "hasSetupDefaultAdvancedCaptureSettings") {
+            UserDefaults.standard.set(5, forKey: "delayedScreenshotSeconds")
+            UserDefaults.standard.set(5, forKey: "scrollingCaptureSlices")
+            UserDefaults.standard.set(0.8, forKey: "scrollingCaptureDelay")
+            UserDefaults.standard.set(12, forKey: "scrollingCaptureLines")
+            UserDefaults.standard.set("#HEX", forKey: "colorCodeFormat")
+            UserDefaults.standard.set(false, forKey: "screenshotRoundedCorners")
+            UserDefaults.standard.set(false, forKey: "screenshotDropShadow")
+            UserDefaults.standard.set(18.0, forKey: "screenshotCornerRadius")
+            UserDefaults.standard.set(24.0, forKey: "screenshotShadowRadius")
+            UserDefaults.standard.set(true, forKey: "hasSetupDefaultAdvancedCaptureSettings")
         }
     }
     
@@ -778,18 +902,19 @@ class CaptureManager: ObservableObject {
                     if process.terminationStatus == 0 {
                         // 截图成功，读取图片
                         if let image = NSImage(contentsOf: tempURL) {
-                            // 保存到正式目录
+                            let finalImage = self.applyOutputStyle(to: image)
+                            
                             do {
-                                try await self.saveScreenshot(image)
-                                self.lastCapturedImage = image
+                                try await self.saveScreenshot(finalImage)
+                                self.lastCapturedImage = finalImage
                                 
                                 // 显示编辑窗口
-                                WindowManager.shared.showEditingWindow(for: image)
+                                WindowManager.shared.showEditingWindow(for: finalImage)
                                 
                                 // 清理临时文件
                                 try? FileManager.default.removeItem(at: tempURL)
                                 
-                                continuation.resume(returning: image)
+                                continuation.resume(returning: finalImage)
                             } catch {
                                 continuation.resume(throwing: error)
                             }
@@ -905,6 +1030,272 @@ class CaptureManager: ObservableObject {
         
         return nsImage
     }
+    
+    /// 捕获当前显示器画面但不保存，供长截图、带壳截图等高级功能复用。
+    private func captureDisplayImageWithoutSaving() async throws -> NSImage {
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        guard let display = selectedDisplay ?? content.displays.first else {
+            throw CaptureError.noDisplayAvailable
+        }
+        
+        let filter = SCContentFilter(display: display, excludingWindows: [])
+        let configuration = SCStreamConfiguration()
+        configuration.width = Int(display.width)
+        configuration.height = Int(display.height)
+        configuration.pixelFormat = kCVPixelFormatType_32BGRA
+        configuration.showsCursor = true
+        
+        let cgImage = try await SCScreenshotManager.captureImage(
+            contentFilter: filter,
+            configuration: configuration
+        )
+        
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+    }
+    
+    /// 使用系统 screencapture 交互选择并保存结果。
+    @MainActor
+    private func captureInteractiveScreenshot(arguments: [String], showEditor: Bool) async throws -> NSImage {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("interactive_capture_\(UUID().uuidString).png")
+        process.arguments = arguments + [tempURL.path]
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            process.terminationHandler = { process in
+                Task { @MainActor in
+                    if process.terminationStatus == 0, let image = NSImage(contentsOf: tempURL) {
+                        do {
+                            let finalImage = try await self.finalizeCapturedImage(image, showEditor: showEditor)
+                            try? FileManager.default.removeItem(at: tempURL)
+                            continuation.resume(returning: finalImage)
+                        } catch {
+                            continuation.resume(throwing: error)
+                        }
+                    } else {
+                        try? FileManager.default.removeItem(at: tempURL)
+                        continuation.resume(throwing: CaptureError.regionSelectionCancelled)
+                    }
+                }
+            }
+            
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: CaptureError.failedToCapture)
+            }
+        }
+    }
+    
+    @discardableResult
+    private func finalizeCapturedImage(_ image: NSImage, forceStyle: Bool = true, showEditor: Bool) async throws -> NSImage {
+        let finalImage = forceStyle ? applyOutputStyle(to: image) : image
+        try await saveScreenshot(finalImage)
+        
+        await MainActor.run {
+            lastCapturedImage = finalImage
+            if showEditor {
+                WindowManager.shared.showEditingWindow(for: finalImage)
+            }
+        }
+        
+        return finalImage
+    }
+    
+    private func applyOutputStyle(to image: NSImage) -> NSImage {
+        var currentImage = image
+        
+        if UserDefaults.standard.bool(forKey: "screenshotRoundedCorners") {
+            let radius = CGFloat(UserDefaults.standard.double(forKey: "screenshotCornerRadius"))
+            currentImage = renderRoundedImage(currentImage, radius: radius)
+        }
+        
+        if UserDefaults.standard.bool(forKey: "screenshotDropShadow") {
+            let radius = CGFloat(UserDefaults.standard.double(forKey: "screenshotShadowRadius"))
+            currentImage = renderShadowedImage(currentImage, shadowRadius: radius)
+        }
+        
+        return currentImage
+    }
+    
+    private func renderRoundedImage(_ image: NSImage, radius: CGFloat) -> NSImage {
+        let output = NSImage(size: image.size)
+        output.lockFocus()
+        
+        let rect = NSRect(origin: .zero, size: image.size)
+        let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+        path.addClip()
+        image.draw(in: rect)
+        
+        output.unlockFocus()
+        return output
+    }
+    
+    private func renderShadowedImage(_ image: NSImage, shadowRadius: CGFloat) -> NSImage {
+        let padding = max(24, shadowRadius * 2)
+        let outputSize = NSSize(width: image.size.width + padding * 2, height: image.size.height + padding * 2)
+        let output = NSImage(size: outputSize)
+        
+        output.lockFocus()
+        NSColor.clear.setFill()
+        NSRect(origin: .zero, size: outputSize).fill()
+        
+        let shadow = NSShadow()
+        shadow.shadowBlurRadius = shadowRadius
+        shadow.shadowOffset = NSSize(width: 0, height: -4)
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.28)
+        shadow.set()
+        
+        let imageRect = NSRect(x: padding, y: padding, width: image.size.width, height: image.size.height)
+        NSColor.white.setFill()
+        NSBezierPath(rect: imageRect).fill()
+        image.draw(in: imageRect)
+        
+        output.unlockFocus()
+        return output
+    }
+    
+    private func renderDeviceFrame(around image: NSImage) -> NSImage {
+        let bezel: CGFloat = 42
+        let titleBar: CGFloat = 34
+        let padding: CGFloat = 48
+        let frameSize = NSSize(
+            width: image.size.width + bezel * 2 + padding * 2,
+            height: image.size.height + bezel * 2 + titleBar + padding * 2
+        )
+        let output = NSImage(size: frameSize)
+        
+        output.lockFocus()
+        NSColor.clear.setFill()
+        NSRect(origin: .zero, size: frameSize).fill()
+        
+        let bodyRect = NSRect(
+            x: padding,
+            y: padding,
+            width: image.size.width + bezel * 2,
+            height: image.size.height + bezel * 2 + titleBar
+        )
+        
+        let shadow = NSShadow()
+        shadow.shadowBlurRadius = 28
+        shadow.shadowOffset = NSSize(width: 0, height: -10)
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.32)
+        shadow.set()
+        
+        NSColor(calibratedWhite: 0.08, alpha: 1).setFill()
+        NSBezierPath(roundedRect: bodyRect, xRadius: 26, yRadius: 26).fill()
+        
+        NSGraphicsContext.current?.cgContext.setShadow(offset: .zero, blur: 0, color: nil)
+        let screenRect = NSRect(
+            x: bodyRect.minX + bezel,
+            y: bodyRect.minY + bezel,
+            width: image.size.width,
+            height: image.size.height
+        )
+        image.draw(in: screenRect)
+        
+        let cameraRect = NSRect(x: bodyRect.midX - 5, y: bodyRect.maxY - 22, width: 10, height: 10)
+        NSColor(calibratedWhite: 0.18, alpha: 1).setFill()
+        NSBezierPath(ovalIn: cameraRect).fill()
+        
+        output.unlockFocus()
+        return output
+    }
+    
+    private func stitchImagesVertically(_ images: [NSImage]) -> NSImage {
+        guard let first = images.first else { return NSImage(size: .zero) }
+        let width = images.map { $0.size.width }.min() ?? first.size.width
+        let height = images.reduce(CGFloat(0)) { $0 + ($1.size.height * width / max($1.size.width, 1)) }
+        let output = NSImage(size: NSSize(width: width, height: height))
+        
+        output.lockFocus()
+        var y = height
+        for image in images {
+            let scaledHeight = image.size.height * width / max(image.size.width, 1)
+            y -= scaledHeight
+            image.draw(in: NSRect(x: 0, y: y, width: width, height: scaledHeight))
+        }
+        output.unlockFocus()
+        
+        return output
+    }
+    
+    private func scrollActiveView(lines: Int) {
+        let event = CGEvent(
+            scrollWheelEvent2Source: nil,
+            units: .line,
+            wheelCount: 1,
+            wheel1: -Int32(lines),
+            wheel2: 0,
+            wheel3: 0
+        )
+        event?.post(tap: .cghidEventTap)
+    }
+    
+    private func formattedColorCode(for color: NSColor) -> String {
+        let rgb = color.usingColorSpace(.sRGB) ?? color
+        let red = Int(round(rgb.redComponent * 255))
+        let green = Int(round(rgb.greenComponent * 255))
+        let blue = Int(round(rgb.blueComponent * 255))
+        let hex = String(format: "#%02X%02X%02X", red, green, blue)
+        let format = UserDefaults.standard.string(forKey: "colorCodeFormat") ?? "#HEX"
+        
+        switch format {
+        case "RGB":
+            return "rgb(\(red), \(green), \(blue))"
+        case "SwiftUI":
+            return String(format: "Color(red: %.3f, green: %.3f, blue: %.3f)", rgb.redComponent, rgb.greenComponent, rgb.blueComponent)
+        default:
+            return hex
+        }
+    }
+    
+    private func recognizeText(in image: NSImage) async throws -> String {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            throw CaptureError.failedToRecognizeText
+        }
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let request = VNRecognizeTextRequest { request, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                
+                let observations = request.results as? [VNRecognizedTextObservation] ?? []
+                let text = observations
+                    .compactMap { $0.topCandidates(1).first?.string }
+                    .joined(separator: "\n")
+                
+                continuation.resume(returning: text)
+            }
+            
+            request.recognitionLevel = .accurate
+            request.usesLanguageCorrection = true
+            request.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US", "ja-JP", "ko-KR"]
+            
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try handler.perform([request])
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    @MainActor
+    private func showAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "确定")
+        alert.runModal()
+    }
 }
 
 // MARK: - Capture Mode
@@ -935,6 +1326,9 @@ enum CaptureError: LocalizedError {
     case failedToSaveImage
     case noMicrophoneAvailable
     case microphonePermissionDenied
+    case noImageAvailable
+    case failedToRecognizeText
+    case failedToTranslate
     
     var errorDescription: String? {
         switch self {
@@ -956,6 +1350,12 @@ enum CaptureError: LocalizedError {
             return "没有可用的麦克风设备"
         case .microphonePermissionDenied:
             return "麦克风权限被拒绝"
+        case .noImageAvailable:
+            return "没有可识别的截图，请先截图"
+        case .failedToRecognizeText:
+            return "OCR 识别失败"
+        case .failedToTranslate:
+            return "打开翻译失败"
         }
     }
 }
@@ -965,6 +1365,7 @@ enum CaptureError: LocalizedError {
 @available(macOS 12.3, *)
 class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     private let outputURL: URL
+    private let fileType: AVFileType
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
     private var audioInput: AVAssetWriterInput?
@@ -977,8 +1378,9 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     private var audioFailCount = 0
     private var micFailCount = 0
     
-    init(outputURL: URL) {
+    init(outputURL: URL, fileType: AVFileType = .mov) {
         self.outputURL = outputURL
+        self.fileType = fileType
         super.init()
     }
     
@@ -1003,8 +1405,7 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                 try FileManager.default.removeItem(at: outputURL)
             }
             
-            // 使用 QuickTime 格式以确保最佳兼容性
-            assetWriter = try AVAssetWriter(outputURL: outputURL, fileType: .mov)
+            assetWriter = try AVAssetWriter(outputURL: outputURL, fileType: fileType)
             logMicrophone("✓ AVAssetWriter 创建成功", level: "SUCCESS")
             
             // 从样本缓冲区获取实际的视频尺寸

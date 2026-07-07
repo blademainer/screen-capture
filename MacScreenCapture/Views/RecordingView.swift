@@ -322,6 +322,8 @@ struct RecordingSettingsView: View {
     @State private var includeSystemAudio = true
     @State private var includeMicrophone = true
     @State private var showCursor = true
+    @State private var startDelaySeconds = 0
+    @State private var fileFormat = "MOV"
     
     var body: some View {
         VStack(spacing: 20) {
@@ -345,6 +347,13 @@ struct RecordingSettingsView: View {
                         ForEach(RecordingQuality.allCases, id: \.self) { quality in
                             Text(quality.rawValue).tag(quality)
                         }
+                    }
+                    
+                    Stepper("开录延时: \(startDelaySeconds) 秒", value: $startDelaySeconds, in: 0...30)
+                    
+                    Picker("导出格式", selection: $fileFormat) {
+                        Text("MOV").tag("MOV")
+                        Text("MP4").tag("MP4")
                     }
                     
                     Toggle("显示鼠标指针", isOn: $showCursor)
@@ -391,6 +400,8 @@ struct RecordingSettingsView: View {
                     UserDefaults.standard.set(includeSystemAudio, forKey: "includeSystemAudio")
                     UserDefaults.standard.set(includeMicrophone, forKey: "includeMicrophone")
                     UserDefaults.standard.set(showCursor, forKey: "showCursor")
+                    UserDefaults.standard.set(startDelaySeconds, forKey: "recordingStartDelaySeconds")
+                    UserDefaults.standard.set(fileFormat, forKey: "recordingFileFormat")
                     
                     dismiss()
                 }
@@ -412,6 +423,8 @@ struct RecordingSettingsView: View {
             includeSystemAudio = UserDefaults.standard.bool(forKey: "includeSystemAudio")
             includeMicrophone = UserDefaults.standard.bool(forKey: "includeMicrophone")
             showCursor = UserDefaults.standard.bool(forKey: "showCursor")
+            startDelaySeconds = UserDefaults.standard.integer(forKey: "recordingStartDelaySeconds")
+            fileFormat = UserDefaults.standard.string(forKey: "recordingFileFormat") ?? "MOV"
         }
     }
 }

@@ -39,6 +39,43 @@ struct MenuBarView: View {
                 ) {
                     quickScreenshot(.region)
                 }
+                
+                MenuButton(title: "延时截图", icon: "timer", shortcut: "5s") {
+                    quickDelayedScreenshot()
+                }
+                
+                MenuButton(title: "长截图", icon: "rectangle.expand.vertical", shortcut: "⌘⌥S") {
+                    quickScrollingScreenshot()
+                }
+                
+                MenuButton(title: "多窗口截图", icon: "rectangle.3.group", shortcut: "Shift") {
+                    quickMultiWindowScreenshot()
+                }
+                
+                MenuButton(title: "全屏带壳截图", icon: "laptopcomputer") {
+                    quickDeviceFramedScreenshot()
+                }
+            }
+            
+            Divider()
+            
+            // 高级工具
+            Group {
+                MenuButton(title: "取色", icon: "eyedropper") {
+                    captureManager.pickScreenColor()
+                }
+                
+                MenuButton(title: "OCR 识别", icon: "text.viewfinder") {
+                    quickOCR()
+                }
+                
+                MenuButton(title: "截图翻译", icon: "character.book.closed") {
+                    quickTranslate()
+                }
+                
+                MenuButton(title: "用指定 App 打开", icon: "arrow.up.forward.app") {
+                    quickOpenInConfiguredApp()
+                }
             }
             
             Divider()
@@ -126,7 +163,7 @@ struct MenuBarView: View {
                 NSApplication.shared.terminate(nil)
             }
         }
-        .frame(width: 200)
+        .frame(width: 230)
     }
     
     private func quickScreenshot(_ mode: CaptureMode) {
@@ -165,6 +202,96 @@ struct MenuBarView: View {
             } catch {
                 showNotification(title: "录制失败", message: error.localizedDescription)
             }
+        }
+    }
+    
+    private func quickDelayedScreenshot() {
+        guard permissionManager.hasScreenRecordingPermission else {
+            permissionManager.requestScreenRecordingPermission()
+            return
+        }
+        
+        Task {
+            do {
+                let seconds = UserDefaults.standard.integer(forKey: "delayedScreenshotSeconds")
+                _ = try await captureManager.captureDelayedScreenshot(seconds: seconds == 0 ? 5 : seconds)
+                showNotification(title: "延时截图成功", message: "截图已保存")
+            } catch {
+                showNotification(title: "延时截图失败", message: error.localizedDescription)
+            }
+        }
+    }
+    
+    private func quickScrollingScreenshot() {
+        guard permissionManager.hasScreenRecordingPermission else {
+            permissionManager.requestScreenRecordingPermission()
+            return
+        }
+        
+        Task {
+            await captureManager.captureScrollingWindow()
+        }
+    }
+    
+    private func quickMultiWindowScreenshot() {
+        guard permissionManager.hasScreenRecordingPermission else {
+            permissionManager.requestScreenRecordingPermission()
+            return
+        }
+        
+        Task {
+            do {
+                _ = try await captureManager.captureMultipleWindowsScreenshot()
+                showNotification(title: "多窗口截图成功", message: "截图已保存")
+            } catch {
+                showNotification(title: "多窗口截图失败", message: error.localizedDescription)
+            }
+        }
+    }
+    
+    private func quickDeviceFramedScreenshot() {
+        guard permissionManager.hasScreenRecordingPermission else {
+            permissionManager.requestScreenRecordingPermission()
+            return
+        }
+        
+        Task {
+            do {
+                _ = try await captureManager.captureDeviceFramedFullScreen()
+                showNotification(title: "带壳截图成功", message: "截图已保存")
+            } catch {
+                showNotification(title: "带壳截图失败", message: error.localizedDescription)
+            }
+        }
+    }
+    
+    private func quickOCR() {
+        Task {
+            do {
+                let text = try await captureManager.recognizeTextFromLastScreenshot()
+                showNotification(title: "OCR 完成", message: text.isEmpty ? "未识别到文本" : "识别文本已复制")
+            } catch {
+                showNotification(title: "OCR 失败", message: error.localizedDescription)
+            }
+        }
+    }
+    
+    private func quickTranslate() {
+        Task {
+            do {
+                try await captureManager.translateLastScreenshot()
+                showNotification(title: "截图翻译", message: "已打开翻译页面")
+            } catch {
+                showNotification(title: "截图翻译失败", message: error.localizedDescription)
+            }
+        }
+    }
+    
+    private func quickOpenInConfiguredApp() {
+        do {
+            try captureManager.openLastScreenshotInConfiguredApp()
+        } catch {
+            showNotification(title: "打开失败", message: error.localizedDescription)
         }
     }
     

@@ -12,12 +12,13 @@ on:
         default: 'v1.0.0'
 
 env:
-  XCODE_VERSION: '15.0'
-  MACOS_VERSION: 'macos-13'
+  XCODE_VERSION: 'latest-stable'
+  MACOS_VERSION: 'macos-15'
+  HAS_CERTIFICATES: ${{ secrets.CERTIFICATES_P12 != '' }}
 
 jobs:
   build-and-release:
-    runs-on: macos-13
+    runs-on: macos-15
     
     steps:
     - name: Checkout code
@@ -53,26 +54,34 @@ jobs:
       with:
         p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
         p12-password: ${{ secrets.CERTIFICATES_P12_PASSWORD }}
-      if: ${{ secrets.CERTIFICATES_P12 }}
+      if: ${{ env.HAS_CERTIFICATES == 'true' }}
         
     - name: Build for Release
       run: |
-        # 清理之前的构建
         xcodebuild clean -project MacScreenCapture.xcodeproj -scheme MacScreenCapture
         
-        # 构建 Release 版本
-        xcodebuild archive \
-          -project MacScreenCapture.xcodeproj \
-          -scheme MacScreenCapture \
-          -configuration Release \
-          -archivePath ./build/MacScreenCapture.xcarchive \
-          CODE_SIGN_IDENTITY="${{ secrets.CODE_SIGN_IDENTITY || '-' }}" \
-          DEVELOPMENT_TEAM="${{ secrets.DEVELOPMENT_TEAM || '' }}" \
-          CODE_SIGN_STYLE=Manual
+        if [ "${HAS_CERTIFICATES}" = "true" ]; then
+          xcodebuild archive \
+            -project MacScreenCapture.xcodeproj \
+            -scheme MacScreenCapture \
+            -configuration Release \
+            -archivePath ./build/MacScreenCapture.xcarchive \
+            CODE_SIGN_IDENTITY="${{ secrets.CODE_SIGN_IDENTITY }}" \
+            DEVELOPMENT_TEAM="${{ secrets.DEVELOPMENT_TEAM }}" \
+            CODE_SIGN_STYLE=Manual
+        else
+          xcodebuild archive \
+            -project MacScreenCapture.xcodeproj \
+            -scheme MacScreenCapture \
+            -configuration Release \
+            -archivePath ./build/MacScreenCapture.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY=""
+        fi
           
-    - name: Export App
+    - name: Export Signed App
+      if: ${{ env.HAS_CERTIFICATES == 'true' }}
       run: |
-        # 创建导出选项 plist
         cat > ./ExportOptions.plist << EOF
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -81,9 +90,7 @@ jobs:
             <key>method</key>
             <string>developer-id</string>
             <key>teamID</key>
-            <string>${{ secrets.DEVELOPMENT_TEAM || '' }}</string>
-            <key>uploadBitcode</key>
-            <false/>
+            <string>${{ secrets.DEVELOPMENT_TEAM }}</string>
             <key>uploadSymbols</key>
             <true/>
             <key>compileBitcode</key>
@@ -97,6 +104,14 @@ jobs:
           -archivePath ./build/MacScreenCapture.xcarchive \
           -exportPath ./build/export \
           -exportOptionsPlist ./ExportOptions.plist
+          
+    - name: Package Unsigned App
+      if: ${{ env.HAS_CERTIFICATES != 'true' }}
+      run: |
+        mkdir -p ./build/export
+        cp -R ./build/MacScreenCapture.xcarchive/Products/Applications/MacScreenCapture.app ./build/export/
+        ditto -c -k --keepParent ./build/export/MacScreenCapture.app ./build/MacScreenCapture.zip
+        hdiutil create -volname "MacScreenCapture" -srcfolder ./build/export/MacScreenCapture.app -ov -format UDZO ./build/MacScreenCapture.dmg
           
     - name: Notarize App (if certificates available)
       run: |
@@ -122,17 +137,14 @@ jobs:
           # 创建未公证的 DMG
           hdiutil create -volname "MacScreenCapture" -srcfolder ./build/export -ov -format UDZO ./build/MacScreenCapture.dmg
         fi
-      if: ${{ secrets.CERTIFICATES_P12 }}
+      if: ${{ env.HAS_CERTIFICATES == 'true' }}
       
-    - name: Create ZIP for unsigned build
+    - name: Create ZIP for signed build
       run: |
-        if [ ! -f "./build/MacScreenCapture.dmg" ]; then
-          echo "Creating ZIP package for unsigned build..."
-          cd ./build/export
-          zip -r ../MacScreenCapture.zip .
-          cd ../..
+        if [ -d "./build/export/MacScreenCapture.app" ]; then
+          ditto -c -k --keepParent ./build/export/MacScreenCapture.app ./build/MacScreenCapture.zip
         fi
-      if: ${{ !secrets.CERTIFICATES_P12 }}
+      if: ${{ env.HAS_CERTIFICATES == 'true' }}
       
     - name: Generate Release Notes
       id: release_notes
@@ -175,7 +187,7 @@ jobs:
         echo "EOF" >> $GITHUB_OUTPUT
         
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ steps.version.outputs.VERSION }}
         name: MacScreenCapture ${{ steps.version.outputs.VERSION }}
@@ -189,7 +201,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
     - name: Upload Build Artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: MacScreenCapture-${{ steps.version.outputs.VERSION }}
         path: |

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @EnvironmentObject var permissionManager: PermissionManager
@@ -17,6 +18,23 @@ struct SettingsView: View {
     @AppStorage("defaultSaveLocation") private var defaultSaveLocation = ""
     @AppStorage("autoHideWindowDuringCapture") private var autoHideWindowDuringCapture = true
     @AppStorage("autoShowWindowAfterCapture") private var autoShowWindowAfterCapture = false
+    @AppStorage("delayedScreenshotSeconds") private var delayedScreenshotSeconds = 5
+    @AppStorage("scrollingCaptureSlices") private var scrollingCaptureSlices = 5
+    @AppStorage("scrollingCaptureDelay") private var scrollingCaptureDelay = 0.8
+    @AppStorage("scrollingCaptureLines") private var scrollingCaptureLines = 12
+    @AppStorage("screenshotRoundedCorners") private var screenshotRoundedCorners = false
+    @AppStorage("screenshotDropShadow") private var screenshotDropShadow = false
+    @AppStorage("screenshotCornerRadius") private var screenshotCornerRadius = 18.0
+    @AppStorage("screenshotShadowRadius") private var screenshotShadowRadius = 24.0
+    @AppStorage("colorCodeFormat") private var colorCodeFormat = "#HEX"
+    @AppStorage("openAfterCaptureAppPath") private var openAfterCaptureAppPath = ""
+    @AppStorage("recordingFrameRate") private var recordingFrameRate = 60.0
+    @AppStorage("recordingQuality") private var recordingQuality = "高"
+    @AppStorage("includeSystemAudio") private var includeSystemAudio = true
+    @AppStorage("includeMicrophone") private var includeMicrophone = true
+    @AppStorage("showCursor") private var showCursor = true
+    @AppStorage("recordingStartDelaySeconds") private var recordingStartDelaySeconds = 0
+    @AppStorage("recordingFileFormat") private var recordingFileFormat = "MOV"
     
     var body: some View {
         ScrollView {
@@ -126,6 +144,86 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.bordered)
                 }
+                
+                Stepper("延时截图: \(delayedScreenshotSeconds) 秒", value: $delayedScreenshotSeconds, in: 1...30)
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("长截图")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    Stepper("截取屏数: \(scrollingCaptureSlices)", value: $scrollingCaptureSlices, in: 2...20)
+                    
+                    HStack {
+                        Text("滚动间隔:")
+                        Slider(value: $scrollingCaptureDelay, in: 0.2...2.0, step: 0.1)
+                            .frame(width: 140)
+                        Text(String(format: "%.1fs", scrollingCaptureDelay))
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Stepper("每次滚动: \(scrollingCaptureLines) 行", value: $scrollingCaptureLines, in: 3...40)
+                }
+                .padding(.top, 4)
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("截图美化")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    Toggle("截图带圆角", isOn: $screenshotRoundedCorners)
+                    
+                    if screenshotRoundedCorners {
+                        HStack {
+                            Text("圆角半径:")
+                            Slider(value: $screenshotCornerRadius, in: 4...64, step: 1)
+                                .frame(width: 140)
+                            Text("\(Int(screenshotCornerRadius))")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    Toggle("截图带阴影", isOn: $screenshotDropShadow)
+                    
+                    if screenshotDropShadow {
+                        HStack {
+                            Text("阴影大小:")
+                            Slider(value: $screenshotShadowRadius, in: 8...80, step: 1)
+                                .frame(width: 140)
+                            Text("\(Int(screenshotShadowRadius))")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding(.top, 4)
+                
+                HStack {
+                    Text("取色格式:")
+                    Spacer()
+                    Picker("取色格式", selection: $colorCodeFormat) {
+                        Text("#HEX").tag("#HEX")
+                        Text("RGB").tag("RGB")
+                        Text("SwiftUI").tag("SwiftUI")
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 120)
+                }
+                
+                HStack {
+                    Text("指定 App 打开:")
+                    Spacer()
+                    Button(openAfterCaptureAppPath.isEmpty ? "选择 App" : URL(fileURLWithPath: openAfterCaptureAppPath).deletingPathExtension().lastPathComponent) {
+                        selectOpenAfterCaptureApp()
+                    }
+                    .buttonStyle(.bordered)
+                    
+                    if !openAfterCaptureAppPath.isEmpty {
+                        Button("清除") {
+                            openAfterCaptureAppPath = ""
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
             }
         }
     }
@@ -140,9 +238,10 @@ struct SettingsView: View {
                 HStack {
                     Text("默认帧率:")
                     Spacer()
-                    Picker("帧率", selection: .constant(60)) {
-                        Text("30 FPS").tag(30)
-                        Text("60 FPS").tag(60)
+                    Picker("帧率", selection: $recordingFrameRate) {
+                        Text("15 FPS").tag(15.0)
+                        Text("30 FPS").tag(30.0)
+                        Text("60 FPS").tag(60.0)
                     }
                     .pickerStyle(.menu)
                     .frame(width: 100)
@@ -151,7 +250,7 @@ struct SettingsView: View {
                 HStack {
                     Text("默认质量:")
                     Spacer()
-                    Picker("质量", selection: .constant("高")) {
+                    Picker("质量", selection: $recordingQuality) {
                         Text("低").tag("低")
                         Text("中").tag("中")
                         Text("高").tag("高")
@@ -161,8 +260,21 @@ struct SettingsView: View {
                     .frame(width: 100)
                 }
                 
-                Toggle("默认录制音频", isOn: .constant(true))
-                Toggle("显示鼠标指针", isOn: .constant(true))
+                HStack {
+                    Text("导出格式:")
+                    Spacer()
+                    Picker("导出格式", selection: $recordingFileFormat) {
+                        Text("MOV").tag("MOV")
+                        Text("MP4").tag("MP4")
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 100)
+                }
+                
+                Stepper("开录延时: \(recordingStartDelaySeconds) 秒", value: $recordingStartDelaySeconds, in: 0...30)
+                Toggle("录制系统音频", isOn: $includeSystemAudio)
+                Toggle("录制麦克风", isOn: $includeMicrophone)
+                Toggle("显示鼠标指针", isOn: $showCursor)
             }
         }
     }
@@ -350,6 +462,21 @@ struct SettingsView: View {
                 // 停止访问安全作用域资源（书签已创建）
                 url.stopAccessingSecurityScopedResource()
             }
+        }
+    }
+    
+    private func selectOpenAfterCaptureApp() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.message = "选择用于打开截图的应用"
+        panel.prompt = "选择"
+        
+        if panel.runModal() == .OK, let url = panel.url {
+            openAfterCaptureAppPath = url.path
         }
     }
     

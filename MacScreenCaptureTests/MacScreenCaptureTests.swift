@@ -110,6 +110,43 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertFalse(defaults.bool(forKey: "includeSystemAudio"))
         XCTAssertEqual(defaults.string(forKey: "recordingFileFormat"), "MP4")
     }
+
+    func testColorFormatterSupportsHexRgbAndSwiftUIFormats() throws {
+        let color = NSColor(srgbRed: 100.0 / 255.0, green: 149.0 / 255.0, blue: 237.0 / 255.0, alpha: 1)
+
+        XCTAssertEqual(ColorCodeFormatter.formattedColorCode(for: color, format: "#HEX"), "#6495ED")
+        XCTAssertEqual(ColorCodeFormatter.formattedColorCode(for: color, format: "RGB"), "rgb(100, 149, 237)")
+        XCTAssertEqual(
+            ColorCodeFormatter.formattedColorCode(for: color, format: "SwiftUI"),
+            "Color(red: 0.392, green: 0.584, blue: 0.929)"
+        )
+    }
+
+    func testColorFormatterSupportsCustomTemplatesAndNames() throws {
+        let color = NSColor(srgbRed: 100.0 / 255.0, green: 149.0 / 255.0, blue: 237.0 / 255.0, alpha: 1)
+
+        let formatted = ColorCodeFormatter.formattedColorCode(
+            for: color,
+            format: "Custom",
+            customTemplate: "hex={hex}; rgb={rgb}; channels={r255}/{g255}/{b255}; unit={r},{g},{b}"
+        )
+
+        XCTAssertEqual(
+            formatted,
+            "hex=#6495ED; rgb=rgb(100, 149, 237); channels=100/149/237; unit=0.392,0.584,0.929"
+        )
+        XCTAssertEqual(ColorCodeFormatter.approximateColorName(for: color), "矢车菊蓝")
+    }
+
+    func testColorFormatterParsesHexForScreenshotStyling() throws {
+        let color = try XCTUnwrap(ColorCodeFormatter.colorFromHex(" #141414 "))
+        let srgb = try XCTUnwrap(color.usingColorSpace(.sRGB))
+
+        XCTAssertEqual(Int(round(srgb.redComponent * 255)), 20)
+        XCTAssertEqual(Int(round(srgb.greenComponent * 255)), 20)
+        XCTAssertEqual(Int(round(srgb.blueComponent * 255)), 20)
+        XCTAssertNil(ColorCodeFormatter.colorFromHex("#12345"))
+    }
     
     func testNotificationManagerInitialization() throws {
         throw XCTSkip("NotificationManager requires a real app bundle host for UNUserNotificationCenter.")

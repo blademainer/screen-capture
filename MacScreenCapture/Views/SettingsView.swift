@@ -413,7 +413,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         TextField("自定义色码模板", text: $customColorCodeTemplate)
                             .textFieldStyle(.roundedBorder)
-                        Text("可用占位符：{hex} {r255} {g255} {b255} {r} {g} {b}")
+                        Text("可用占位符：{hex} {rgb} {r255} {g255} {b255} {r} {g} {b}")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }

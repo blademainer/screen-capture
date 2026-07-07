@@ -463,7 +463,7 @@ class CaptureManager: ObservableObject {
             Task { @MainActor in
                 guard let self = self, let color = color else { return }
                 let code = self.formattedColorCode(for: color)
-                let name = self.approximateColorName(for: color)
+                let name = ColorCodeFormatter.approximateColorName(for: color)
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(code, forType: .string)
                 self.showAlert(title: "取色完成", message: "颜色：\(name)\n已复制颜色值：\(code)")
@@ -2145,7 +2145,7 @@ class CaptureManager: ObservableObject {
 
         if UserDefaults.standard.bool(forKey: "screenshotDropShadow") {
             let radius = CGFloat(UserDefaults.standard.double(forKey: "screenshotShadowRadius"))
-            let shadowColor = colorFromHex(UserDefaults.standard.string(forKey: "screenshotShadowColorHex") ?? "#000000") ?? .black
+            let shadowColor = ColorCodeFormatter.colorFromHex(UserDefaults.standard.string(forKey: "screenshotShadowColorHex") ?? "#000000") ?? .black
             currentImage = renderShadowedImage(
                 currentImage,
                 shadowRadius: radius,
@@ -2211,8 +2211,8 @@ class CaptureManager: ObservableObject {
         let padding = clampedCGFloat(UserDefaults.standard.double(forKey: "deviceFramePadding"), min: 16, max: 120, fallback: 48)
         let cornerRadius = clampedCGFloat(UserDefaults.standard.double(forKey: "deviceFrameCornerRadius"), min: 8, max: 64, fallback: 26)
         let shadowRadius = clampedCGFloat(UserDefaults.standard.double(forKey: "deviceFrameShadowRadius"), min: 0, max: 80, fallback: 28)
-        let bodyColor = colorFromHex(UserDefaults.standard.string(forKey: "deviceFrameBodyColorHex") ?? "#141414") ?? NSColor(calibratedWhite: 0.08, alpha: 1)
-        let shadowColor = colorFromHex(UserDefaults.standard.string(forKey: "deviceFrameShadowColorHex") ?? "#000000") ?? .black
+        let bodyColor = ColorCodeFormatter.colorFromHex(UserDefaults.standard.string(forKey: "deviceFrameBodyColorHex") ?? "#141414") ?? NSColor(calibratedWhite: 0.08, alpha: 1)
+        let shadowColor = ColorCodeFormatter.colorFromHex(UserDefaults.standard.string(forKey: "deviceFrameShadowColorHex") ?? "#000000") ?? .black
         let frameSize = NSSize(
             width: image.size.width + bezel * 2 + padding * 2,
             height: image.size.height + bezel * 2 + titleBar + padding * 2
@@ -2451,67 +2451,12 @@ class CaptureManager: ObservableObject {
     }
 
     private func formattedColorCode(for color: NSColor) -> String {
-        let rgb = color.usingColorSpace(.sRGB) ?? color
-        let red = Int(round(rgb.redComponent * 255))
-        let green = Int(round(rgb.greenComponent * 255))
-        let blue = Int(round(rgb.blueComponent * 255))
-        let hex = String(format: "#%02X%02X%02X", red, green, blue)
         let format = UserDefaults.standard.string(forKey: "colorCodeFormat") ?? "#HEX"
-
-        switch format {
-        case "RGB":
-            return "rgb(\(red), \(green), \(blue))"
-        case "SwiftUI":
-            return String(format: "Color(red: %.3f, green: %.3f, blue: %.3f)", rgb.redComponent, rgb.greenComponent, rgb.blueComponent)
-        case "Custom":
-            let template = UserDefaults.standard.string(forKey: "customColorCodeTemplate") ?? "{hex}"
-            return template
-                .replacingOccurrences(of: "{hex}", with: hex)
-                .replacingOccurrences(of: "{r255}", with: "\(red)")
-                .replacingOccurrences(of: "{g255}", with: "\(green)")
-                .replacingOccurrences(of: "{b255}", with: "\(blue)")
-                .replacingOccurrences(of: "{r}", with: String(format: "%.3f", rgb.redComponent))
-                .replacingOccurrences(of: "{g}", with: String(format: "%.3f", rgb.greenComponent))
-                .replacingOccurrences(of: "{b}", with: String(format: "%.3f", rgb.blueComponent))
-        default:
-            return hex
-        }
-    }
-
-    private func approximateColorName(for color: NSColor) -> String {
-        let rgb = color.usingColorSpace(.sRGB) ?? color
-        let red = Int(round(rgb.redComponent * 255))
-        let green = Int(round(rgb.greenComponent * 255))
-        let blue = Int(round(rgb.blueComponent * 255))
-
-        let palette: [(name: String, r: Int, g: Int, b: Int)] = [
-            ("黑色", 0, 0, 0), ("白色", 255, 255, 255), ("灰色", 128, 128, 128),
-            ("红色", 220, 38, 38), ("橙色", 249, 115, 22), ("黄色", 234, 179, 8),
-            ("绿色", 34, 197, 94), ("青色", 6, 182, 212), ("蓝色", 59, 130, 246),
-            ("矢车菊蓝", 100, 149, 237), ("紫色", 147, 51, 234), ("粉色", 236, 72, 153),
-            ("棕色", 120, 72, 35), ("米色", 245, 245, 220), ("深蓝", 30, 64, 175)
-        ]
-
-        return palette.min { lhs, rhs in
-            colorDistanceSquared(red, green, blue, lhs) < colorDistanceSquared(red, green, blue, rhs)
-        }?.name ?? "未知颜色"
-    }
-
-    private func colorDistanceSquared(_ red: Int, _ green: Int, _ blue: Int, _ candidate: (name: String, r: Int, g: Int, b: Int)) -> Int {
-        let dr = red - candidate.r
-        let dg = green - candidate.g
-        let db = blue - candidate.b
-        return dr * dr + dg * dg + db * db
-    }
-
-    private func colorFromHex(_ hex: String) -> NSColor? {
-        let cleaned = hex.trimmingCharacters(in: CharacterSet(charactersIn: "# ").union(.whitespacesAndNewlines))
-        guard cleaned.count == 6, let value = Int(cleaned, radix: 16) else { return nil }
-        return NSColor(
-            red: CGFloat((value >> 16) & 0xFF) / 255,
-            green: CGFloat((value >> 8) & 0xFF) / 255,
-            blue: CGFloat(value & 0xFF) / 255,
-            alpha: 1
+        let template = UserDefaults.standard.string(forKey: "customColorCodeTemplate") ?? "{hex}"
+        return ColorCodeFormatter.formattedColorCode(
+            for: color,
+            format: format,
+            customTemplate: template
         )
     }
 

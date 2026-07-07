@@ -61,7 +61,7 @@ struct MenuBarView: View {
 
             // 高级工具
             Group {
-                MenuButton(title: "取色", icon: "eyedropper") {
+                MenuButton(title: "取色", icon: "eyedropper", shortcut: "⌘⇧C") {
                     captureManager.pickScreenColor()
                 }
 

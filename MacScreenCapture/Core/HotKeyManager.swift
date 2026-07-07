@@ -108,6 +108,7 @@ enum HotKeyAction: String, CaseIterable, Codable {
     case startAudioRecording = "start_audio_recording"
     case stopRecording = "stop_recording"
     case scrollScreenshot = "scroll_screenshot"
+    case pickColor = "pick_color"
     
     var defaultConfig: HotKeyConfig {
         switch self {
@@ -127,6 +128,8 @@ enum HotKeyAction: String, CaseIterable, Codable {
             return HotKeyConfig(keyCode: 15, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "停止录制")
         case .scrollScreenshot:
             return HotKeyConfig(keyCode: 1, modifiers: UInt32(cmdKey | optionKey), isEnabled: true, description: "滚动截图")
+        case .pickColor:
+            return HotKeyConfig(keyCode: 8, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "取色")
         }
     }
     
@@ -140,6 +143,7 @@ enum HotKeyAction: String, CaseIterable, Codable {
         case .startAudioRecording: return "开始录音"
         case .stopRecording: return "停止录制"
         case .scrollScreenshot: return "滚动截图"
+        case .pickColor: return "取色"
         }
     }
 }
@@ -402,6 +406,8 @@ class HotKeyManager: ObservableObject {
                 }
             case .scrollScreenshot:
                 await captureManager.captureScrollingWindow()
+            case .pickColor:
+                captureManager.pickScreenColor()
             }
         }
     }

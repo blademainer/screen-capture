@@ -245,6 +245,7 @@ struct HotKeyRow: View {
         case .startAudioRecording: return "waveform.circle"
         case .stopRecording: return "stop.circle"
         case .scrollScreenshot: return "scroll"
+        case .pickColor: return "eyedropper"
         }
     }
     

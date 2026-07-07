@@ -307,7 +307,7 @@ class ImageEditingSession: ObservableObject {
         guard let text = operation.text, let drawRect = operation.rect else { return }
 
         var attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 16),
+            .font: NSFont.systemFont(ofSize: max(14, operation.lineWidth * 8)),
             .foregroundColor: operation.color.nsColor
         ]
         if operation.textOutlined {

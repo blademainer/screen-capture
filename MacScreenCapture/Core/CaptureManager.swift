@@ -552,7 +552,7 @@ class CaptureManager: ObservableObject {
         captureMode = .region
         defer { captureMode = originalMode }
 
-        let image = try await captureScreenshot(autoOpenAfterCapture: false)
+        let image = try await captureScreenshot(autoOpenAfterCapture: false, forceSave: true)
         try openLastScreenshotInConfiguredApp()
         return image
     }
@@ -605,7 +605,7 @@ class CaptureManager: ObservableObject {
     }
 
     /// 截图
-    func captureScreenshot(autoOpenAfterCapture: Bool = true) async throws -> NSImage {
+    func captureScreenshot(autoOpenAfterCapture: Bool = true, forceSave: Bool = false) async throws -> NSImage {
         // 通知WindowManager开始截图
         await MainActor.run {
             WindowManager.shared.updateCaptureState(.screenshotting)
@@ -639,7 +639,7 @@ class CaptureManager: ObservableObject {
 
         case .region:
             // 区域截图需要先选择区域
-            return try await captureRegionScreenshot(autoOpenAfterCapture: autoOpenAfterCapture)
+            return try await captureRegionScreenshot(autoOpenAfterCapture: autoOpenAfterCapture, forceSave: forceSave)
         }
 
         let configuration = SCStreamConfiguration()
@@ -662,7 +662,7 @@ class CaptureManager: ObservableObject {
             configuration: configuration
         )
         let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-        return try await finalizeCapturedImage(nsImage, showEditor: false, autoOpenAfterCapture: autoOpenAfterCapture)
+        return try await finalizeCapturedImage(nsImage, showEditor: false, autoOpenAfterCapture: autoOpenAfterCapture, forceSave: forceSave)
     }
 
     /// 开始录制
@@ -1388,7 +1388,7 @@ class CaptureManager: ObservableObject {
     }
 
     /// 区域截图 - 使用系统截图工具
-    private func captureRegionScreenshot(autoOpenAfterCapture: Bool = true) async throws -> NSImage {
+    private func captureRegionScreenshot(autoOpenAfterCapture: Bool = true, forceSave: Bool = false) async throws -> NSImage {
         // 通知WindowManager开始截图
         await MainActor.run {
             WindowManager.shared.updateCaptureState(.screenshotting)
@@ -1418,27 +1418,14 @@ class CaptureManager: ObservableObject {
                     if process.terminationStatus == 0 {
                         // 截图成功，读取图片
                         if let image = NSImage(contentsOf: tempURL) {
-                            let finalImage = self.applyOutputStyle(to: image)
-
                             do {
-                                try await self.saveScreenshot(finalImage)
-                                self.lastCapturedImage = finalImage
-
-                                // 显示编辑窗口
-                                WindowManager.shared.showEditingWindow(for: finalImage)
-
-                                if autoOpenAfterCapture,
-                                   UserDefaults.standard.object(forKey: "autoOpenAfterCaptureInConfiguredApp") as? Bool ?? false {
-                                    do {
-                                        try self.openLastScreenshotInConfiguredApp()
-                                    } catch {
-                                        print("自动打开截图失败: \(error)")
-                                    }
-                                }
-
-                                // 清理临时文件
+                                let finalImage = try await self.finalizeCapturedImage(
+                                    image,
+                                    showEditor: true,
+                                    autoOpenAfterCapture: autoOpenAfterCapture,
+                                    forceSave: forceSave
+                                )
                                 try? FileManager.default.removeItem(at: tempURL)
-
                                 continuation.resume(returning: finalImage)
                             } catch {
                                 continuation.resume(throwing: error)
@@ -1523,10 +1510,7 @@ class CaptureManager: ObservableObject {
 
         let nsImage = NSImage(cgImage: croppedImage, size: rect.size)
 
-        try await saveScreenshot(nsImage)
-        lastCapturedImage = nsImage
-
-        return nsImage
+        return try await finalizeCapturedImage(nsImage, showEditor: false)
     }
 
     /// 旧系统截图方法
@@ -1550,10 +1534,7 @@ class CaptureManager: ObservableObject {
 
         let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
 
-        try await saveScreenshot(nsImage)
-        lastCapturedImage = nsImage
-
-        return nsImage
+        return try await finalizeCapturedImage(nsImage, showEditor: false)
     }
 
     /// 捕获当前显示器画面但不保存，供长截图、带壳截图等高级功能复用。
@@ -2113,18 +2094,33 @@ class CaptureManager: ObservableObject {
     }
 
     @discardableResult
-    private func finalizeCapturedImage(_ image: NSImage, forceStyle: Bool = true, showEditor: Bool, autoOpenAfterCapture: Bool = true) async throws -> NSImage {
+    private func finalizeCapturedImage(
+        _ image: NSImage,
+        forceStyle: Bool = true,
+        showEditor: Bool,
+        autoOpenAfterCapture: Bool = true,
+        forceSave: Bool = false
+    ) async throws -> NSImage {
         let finalImage = forceStyle ? applyOutputStyle(to: image) : image
-        try await saveScreenshot(finalImage)
+        let shouldAutoOpen = autoOpenAfterCapture &&
+            (UserDefaults.standard.object(forKey: "autoOpenAfterCaptureInConfiguredApp") as? Bool ?? false)
+        let shouldSave = forceSave || UserDefaults.standard.bool(forKey: "autoSaveScreenshots") || shouldAutoOpen
+
+        if shouldSave {
+            try await saveScreenshot(finalImage)
+        }
 
         await MainActor.run {
             lastCapturedImage = finalImage
+            if !shouldSave {
+                lastSavedImageURL = nil
+            }
+
             if showEditor {
                 WindowManager.shared.showEditingWindow(for: finalImage)
             }
 
-            if autoOpenAfterCapture,
-               UserDefaults.standard.object(forKey: "autoOpenAfterCaptureInConfiguredApp") as? Bool ?? false {
+            if shouldAutoOpen {
                 do {
                     try openLastScreenshotInConfiguredApp()
                 } catch {

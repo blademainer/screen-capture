@@ -18,6 +18,7 @@ struct MacScreenCaptureApp: App {
     init() {
         // 初始化UserDefaults默认值
         UserDefaults.standard.register(defaults: [
+            "autoSaveScreenshots": true,
             "floatingWindowAlwaysOnTop": true,
             "floatingWindowAutoHide": false,
             "floatingWindowAutoHideDelay": 3.0,
@@ -122,7 +123,11 @@ struct MacScreenCaptureApp: App {
         if defaults.object(forKey: "autoShowWindowAfterCapture") == nil {
             defaults.set(false, forKey: "autoShowWindowAfterCapture")
         }
-        
+
+        if defaults.object(forKey: "autoSaveScreenshots") == nil {
+            defaults.set(true, forKey: "autoSaveScreenshots")
+        }
+
         if defaults.object(forKey: "screenshotFormat") == nil {
             defaults.set("PNG", forKey: "screenshotFormat")
         }

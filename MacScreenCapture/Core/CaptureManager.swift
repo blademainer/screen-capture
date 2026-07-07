@@ -2134,16 +2134,23 @@ class CaptureManager: ObservableObject {
 
     private func applyOutputStyle(to image: NSImage) -> NSImage {
         var currentImage = image
+        var appliedCornerRadius: CGFloat?
 
         if UserDefaults.standard.bool(forKey: "screenshotRoundedCorners") {
             let radius = CGFloat(UserDefaults.standard.double(forKey: "screenshotCornerRadius"))
             currentImage = renderRoundedImage(currentImage, radius: radius)
+            appliedCornerRadius = radius
         }
 
         if UserDefaults.standard.bool(forKey: "screenshotDropShadow") {
             let radius = CGFloat(UserDefaults.standard.double(forKey: "screenshotShadowRadius"))
             let shadowColor = colorFromHex(UserDefaults.standard.string(forKey: "screenshotShadowColorHex") ?? "#000000") ?? .black
-            currentImage = renderShadowedImage(currentImage, shadowRadius: radius, shadowColor: shadowColor)
+            currentImage = renderShadowedImage(
+                currentImage,
+                shadowRadius: radius,
+                shadowColor: shadowColor,
+                cornerRadius: appliedCornerRadius
+            )
         }
 
         return currentImage
@@ -2162,7 +2169,7 @@ class CaptureManager: ObservableObject {
         return output
     }
 
-    private func renderShadowedImage(_ image: NSImage, shadowRadius: CGFloat, shadowColor: NSColor) -> NSImage {
+    private func renderShadowedImage(_ image: NSImage, shadowRadius: CGFloat, shadowColor: NSColor, cornerRadius: CGFloat? = nil) -> NSImage {
         let padding = max(24, shadowRadius * 2)
         let outputSize = NSSize(width: image.size.width + padding * 2, height: image.size.height + padding * 2)
         let output = NSImage(size: outputSize)
@@ -2178,8 +2185,19 @@ class CaptureManager: ObservableObject {
         shadow.set()
 
         let imageRect = NSRect(x: padding, y: padding, width: image.size.width, height: image.size.height)
+        let backgroundPath: NSBezierPath
+        if let cornerRadius, cornerRadius > 0 {
+            backgroundPath = NSBezierPath(
+                roundedRect: imageRect,
+                xRadius: cornerRadius,
+                yRadius: cornerRadius
+            )
+        } else {
+            backgroundPath = NSBezierPath(rect: imageRect)
+        }
+
         NSColor.white.setFill()
-        NSBezierPath(rect: imageRect).fill()
+        backgroundPath.fill()
         image.draw(in: imageRect)
 
         output.unlockFocus()

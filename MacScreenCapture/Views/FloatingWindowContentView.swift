@@ -336,6 +336,11 @@ class FloatingEditingCanvasView: NSView {
         guard let location = imagePoint(fromViewPoint: convert(event.locationInWindow, from: nil)) else { return }
 
         if selectedTool == .none, let operation = hitTestMovableOperation(at: location) {
+            if event.clickCount >= 2 {
+                editTextOperation(operation)
+                return
+            }
+
             movingOperationID = operation.id
             movingStartPoint = location
             originalMovingOperation = operation
@@ -425,7 +430,7 @@ class FloatingEditingCanvasView: NSView {
         case .arrow:
             return EditingOperation(type: selectedTool, points: [firstPoint, lastPoint], color: selectedColor, lineWidth: lineWidth)
         case .text:
-            guard let text = requestTextInput(at: firstPoint) else { return nil }
+            guard let text = requestTextInput(title: "添加文字", message: "输入要标注的文字") else { return nil }
             let draggedRect = normalizedRect(from: firstPoint, to: lastPoint)
             let textRect = draggedRect.width >= 24 && draggedRect.height >= 18
                 ? draggedRect
@@ -503,19 +508,37 @@ class FloatingEditingCanvasView: NSView {
         )
     }
 
-    private func requestTextInput(at point: CGPoint) -> String? {
+    private func requestTextInput(title: String, message: String, initialValue: String = "") -> String? {
         let alert = NSAlert()
-        alert.messageText = "添加文字"
-        alert.informativeText = "输入要标注的文字"
-        alert.addButton(withTitle: "添加")
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "确定")
         alert.addButton(withTitle: "取消")
 
         let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        textField.stringValue = initialValue
         alert.accessoryView = textField
 
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
         let value = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value
+    }
+
+    private func editTextOperation(_ operation: EditingOperation) {
+        guard operation.type == .text || operation.type == .numbered else { return }
+
+        let title = operation.type == .numbered ? "设置序号" : "编辑文字"
+        let message = operation.type == .numbered ? "输入要显示的序号" : "输入要标注的文字"
+        guard let newText = requestTextInput(
+            title: title,
+            message: message,
+            initialValue: operation.text ?? ""
+        ) else {
+            return
+        }
+
+        editingSession?.updateOperation(operation.replacingText(with: newText))
+        needsDisplay = true
     }
 
     private func drawPreviewArrow(_ operation: EditingOperation) {

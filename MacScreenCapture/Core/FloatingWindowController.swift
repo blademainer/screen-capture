@@ -94,6 +94,20 @@ struct EditingOperation: Identifiable, Codable {
             timestamp: timestamp
         )
     }
+
+    func replacingText(with newText: String) -> EditingOperation {
+        EditingOperation(
+            id: id,
+            type: type,
+            points: points,
+            color: color.nsColor,
+            lineWidth: lineWidth,
+            text: newText,
+            rect: rect,
+            textOutlined: textOutlined,
+            timestamp: timestamp
+        )
+    }
 }
 
 // MARK: - Codable Color

@@ -194,6 +194,40 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(editingWindowSource.contains("EditingToolbar("))
         XCTAssertTrue(editingWindowSource.contains("showingColorPicker: $showingColorPicker"))
     }
+
+    func testRecordingPreflightExposesIShotAudioAndExportControls() throws {
+        let captureManagerSource = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+        let recordingViewSource = try repositoryFileContents("MacScreenCapture/Views/RecordingView.swift")
+        let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")
+
+        XCTAssertTrue(captureManagerSource.contains("RecordingPreflightSettingsView(audioOnly: audioOnly)"))
+        XCTAssertTrue(captureManagerSource.contains("NSButton(checkboxWithTitle: \"录制系统音频\""))
+        XCTAssertTrue(captureManagerSource.contains("NSButton(checkboxWithTitle: \"录制麦克风\""))
+        XCTAssertTrue(captureManagerSource.contains("NSButton(checkboxWithTitle: \"显示鼠标指针\""))
+        XCTAssertTrue(captureManagerSource.contains("frameRatePopup.addItems(withTitles: [\"15 FPS\", \"30 FPS\", \"60 FPS\"])"))
+        XCTAssertTrue(captureManagerSource.contains("qualityPopup.addItems(withTitles: [\"低\", \"中\", \"高\", \"超高\"])"))
+        XCTAssertTrue(captureManagerSource.contains("formatPopup.addItems(withTitles: [\"MOV\", \"MP4\"])"))
+        XCTAssertTrue(captureManagerSource.contains("delayStepper.maxValue = 30"))
+        XCTAssertTrue(captureManagerSource.contains("UserDefaults.standard.set(systemAudioCheckbox.state == .on, forKey: \"includeSystemAudio\")"))
+        XCTAssertTrue(captureManagerSource.contains("UserDefaults.standard.set(microphoneCheckbox.state == .on, forKey: \"includeMicrophone\")"))
+        XCTAssertTrue(captureManagerSource.contains("UserDefaults.standard.set(formatPopup.titleOfSelectedItem ?? \"MOV\", forKey: \"recordingFileFormat\")"))
+        XCTAssertTrue(captureManagerSource.contains("waitForRecordingStartDelayIfNeeded(subtitle:"))
+        XCTAssertTrue(captureManagerSource.contains("ScreenshotCountdownOverlayController(subtitle: subtitle)"))
+
+        XCTAssertTrue(recordingViewSource.contains("Toggle(\"录制系统音频\""))
+        XCTAssertTrue(recordingViewSource.contains("Toggle(\"录制麦克风\""))
+        XCTAssertTrue(recordingViewSource.contains("Stepper(\"开录延时:"))
+        XCTAssertTrue(recordingViewSource.contains("Picker(\"导出格式\""))
+        XCTAssertTrue(recordingViewSource.contains("Text(\"MOV\").tag(\"MOV\")"))
+        XCTAssertTrue(recordingViewSource.contains("Text(\"MP4\").tag(\"MP4\")"))
+        XCTAssertTrue(recordingViewSource.contains("startRecordingWithPreflight()"))
+        XCTAssertTrue(recordingViewSource.contains("startAudioRecordingWithPreflight()"))
+
+        XCTAssertTrue(settingsSource.contains("Picker(\"质量\", selection: $recordingQuality)"))
+        XCTAssertTrue(settingsSource.contains("Toggle(\"录制系统音频\", isOn: $includeSystemAudio)"))
+        XCTAssertTrue(settingsSource.contains("Toggle(\"录制麦克风\", isOn: $includeMicrophone)"))
+        XCTAssertTrue(settingsSource.contains("Stepper(\"开录延时:"))
+    }
     
     func testFileManagerExtensions() throws {
         let screenshotDir = FileManager.defaultScreenshotDirectory

@@ -289,7 +289,19 @@ class CaptureManager: ObservableObject {
     @MainActor
     func captureDelayedScreenshot(seconds: Int? = nil) async throws -> NSImage {
         let delay = seconds ?? max(1, UserDefaults.standard.integer(forKey: "delayedScreenshotSeconds"))
-        try await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
+        let countdownOverlay = ScreenshotCountdownOverlayController()
+
+        defer {
+            countdownOverlay.close()
+        }
+
+        for remaining in stride(from: delay, through: 1, by: -1) {
+            countdownOverlay.show(remaining: remaining)
+            try await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+
+        countdownOverlay.close()
+        try await Task.sleep(nanoseconds: 160_000_000)
         return try await captureScreenshot()
     }
 
@@ -2781,6 +2793,122 @@ final class MultiWindowSelectionView: NSView {
         NSColor.black.withAlphaComponent(0.58).setFill()
         NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
         text.draw(at: CGPoint(x: rect.minX + 14, y: rect.minY + 7), withAttributes: attributes)
+    }
+}
+
+// MARK: - Delayed Screenshot Countdown
+
+@available(macOS 12.3, *)
+@MainActor
+private final class ScreenshotCountdownOverlayController {
+    private var window: NSWindow?
+    private let label = NSTextField(labelWithString: "")
+
+    func show(remaining: Int) {
+        if window == nil {
+            createWindow()
+        }
+
+        label.stringValue = "\(remaining)"
+        window?.orderFrontRegardless()
+    }
+
+    func close() {
+        window?.orderOut(nil)
+        window?.close()
+        window = nil
+    }
+
+    private func createWindow() {
+        let size = NSSize(width: 156, height: 112)
+        let screen = screenUnderMouse() ?? NSScreen.main ?? NSScreen.screens.first
+        let screenFrame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let origin = NSPoint(
+            x: screenFrame.midX - size.width / 2,
+            y: screenFrame.maxY - size.height - 42
+        )
+
+        let window = NSWindow(
+            contentRect: NSRect(origin: origin, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.level = .screenSaver
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = false
+        window.ignoresMouseEvents = true
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+
+        let contentView = CountdownOverlayView(label: label)
+        window.contentView = contentView
+        self.window = window
+    }
+
+    private func screenUnderMouse() -> NSScreen? {
+        guard let mouseLocation = CGEvent(source: nil)?.location else {
+            return nil
+        }
+
+        return NSScreen.screens.first { screen in
+            screen.frame.contains(mouseLocation)
+        }
+    }
+}
+
+@available(macOS 12.3, *)
+private final class CountdownOverlayView: NSView {
+    private let label: NSTextField
+    private let subtitle = NSTextField(labelWithString: "准备截图")
+
+    init(label: NSTextField) {
+        self.label = label
+        super.init(frame: NSRect(x: 0, y: 0, width: 156, height: 112))
+        wantsLayer = true
+        setupViews()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        NSColor.black.withAlphaComponent(0.72).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: 18, yRadius: 18).fill()
+
+        NSColor.white.withAlphaComponent(0.18).setStroke()
+        let border = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 18, yRadius: 18)
+        border.lineWidth = 1
+        border.stroke()
+    }
+
+    private func setupViews() {
+        label.alignment = .center
+        label.font = NSFont.monospacedDigitSystemFont(ofSize: 50, weight: .bold)
+        label.textColor = .white
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        subtitle.alignment = .center
+        subtitle.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        subtitle.textColor = NSColor.white.withAlphaComponent(0.82)
+        subtitle.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(label)
+        addSubview(subtitle)
+
+        NSLayoutConstraint.activate([
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 14),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            label.heightAnchor.constraint(equalToConstant: 58),
+
+            subtitle.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 4),
+            subtitle.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            subtitle.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12)
+        ])
     }
 }
 

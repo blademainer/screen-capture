@@ -890,7 +890,7 @@ final class MacScreenCaptureTests: XCTestCase {
             systemAudioFrameCount: 240,
             microphoneFrameCount: 180,
             videoTrackCount: 1,
-            audioTrackCount: 1,
+            audioTrackCount: 2,
             fileSize: 4_096,
             assetWriterSucceeded: true,
             audioOnly: false
@@ -898,6 +898,25 @@ final class MacScreenCaptureTests: XCTestCase {
 
         XCTAssertFalse(diagnostics.hasOutputIssue)
         XCTAssertFalse(diagnostics.hasAudioIssue)
+        XCTAssertEqual(diagnostics.summaryText, "系统音频 240 帧，麦克风 180 帧，音轨 2/2")
+    }
+
+    func testRecordingDiagnosticsFlagsMissingAudioTrackWhenBothSourcesWereRequested() throws {
+        let diagnostics = makeRecordingDiagnostics(
+            requestedSystemAudio: true,
+            requestedMicrophone: true,
+            videoFrameCount: 120,
+            systemAudioFrameCount: 240,
+            microphoneFrameCount: 180,
+            videoTrackCount: 1,
+            audioTrackCount: 1,
+            fileSize: 4_096,
+            assetWriterSucceeded: true,
+            audioOnly: false
+        )
+
+        XCTAssertFalse(diagnostics.hasOutputIssue)
+        XCTAssertTrue(diagnostics.hasAudioIssue)
         XCTAssertEqual(diagnostics.summaryText, "系统音频 240 帧，麦克风 180 帧，音轨 1/2")
     }
 

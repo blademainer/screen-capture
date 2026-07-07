@@ -47,6 +47,7 @@ struct RecordingAudioDiagnostics: Sendable {
     var hasAudioIssue: Bool {
         guard requestedAnyAudio else { return false }
         if !assetWriterSucceeded || audioTrackCount == 0 { return true }
+        if audioTrackCount < requestedAudioSourceCount { return true }
         if requestedSystemAudio && systemAudioFrameCount == 0 { return true }
         if requestedMicrophone && microphoneFrameCount == 0 { return true }
         return false

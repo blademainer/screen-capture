@@ -13,6 +13,47 @@ import CoreGraphics
 import AppKit
 @preconcurrency import Vision
 
+struct RecordingAudioDiagnostics: Sendable {
+    let outputURL: URL
+    let requestedSystemAudio: Bool
+    let requestedMicrophone: Bool
+    let videoFrameCount: Int
+    let systemAudioFrameCount: Int
+    let microphoneFrameCount: Int
+    let systemAudioFailCount: Int
+    let microphoneFailCount: Int
+    let videoTrackCount: Int
+    let audioTrackCount: Int
+    let fileSize: Int64
+    let assetWriterSucceeded: Bool
+
+    var requestedAnyAudio: Bool {
+        requestedSystemAudio || requestedMicrophone
+    }
+
+    var hasAudioIssue: Bool {
+        guard requestedAnyAudio else { return false }
+        if !assetWriterSucceeded || audioTrackCount == 0 { return true }
+        if requestedSystemAudio && systemAudioFrameCount == 0 { return true }
+        if requestedMicrophone && microphoneFrameCount == 0 { return true }
+        return false
+    }
+
+    var summaryText: String {
+        var parts: [String] = []
+        if requestedSystemAudio {
+            parts.append("系统音频 \(systemAudioFrameCount) 帧")
+        }
+        if requestedMicrophone {
+            parts.append("麦克风 \(microphoneFrameCount) 帧")
+        }
+        if parts.isEmpty {
+            return "静音录制"
+        }
+        return parts.joined(separator: "，")
+    }
+}
+
 /// 捕获管理器 - 负责截图和录制功能的核心逻辑
 @available(macOS 12.3, *)
 class CaptureManager: ObservableObject {
@@ -32,6 +73,7 @@ class CaptureManager: ObservableObject {
     @Published var lastCapturedImage: NSImage?
     @Published var lastSavedImageURL: URL?
     @Published var recordingURL: URL?
+    @Published var lastRecordingAudioDiagnostics: RecordingAudioDiagnostics?
 
     // MARK: - Private Properties
     private var stream: SCStream?
@@ -393,12 +435,22 @@ class CaptureManager: ObservableObject {
                 if let stream = currentStream {
                     stream.stopCapture { _ in
                         // 完成视频写入
-                        currentOutput?.finishWriting()
-                        continuation.resume()
+                        if let currentOutput {
+                            currentOutput.finishWriting { _ in
+                                continuation.resume()
+                            }
+                        } else {
+                            continuation.resume()
+                        }
                     }
                 } else {
-                    currentOutput?.finishWriting()
-                    continuation.resume()
+                    if let currentOutput {
+                        currentOutput.finishWriting { _ in
+                            continuation.resume()
+                        }
+                    } else {
+                        continuation.resume()
+                    }
                 }
             }
         }
@@ -659,7 +711,12 @@ class CaptureManager: ObservableObject {
 
         // 创建流输出
         let fileType: AVFileType = (UserDefaults.standard.string(forKey: "recordingFileFormat") == "MP4") ? .mp4 : .mov
-        streamOutput = CaptureStreamOutput(outputURL: recordingURL!, fileType: fileType)
+        streamOutput = CaptureStreamOutput(
+            outputURL: recordingURL!,
+            fileType: fileType,
+            includeSystemAudio: includeSystemAudio,
+            includeMicrophone: includeMicrophone
+        )
 
         // 创建并启动流
         stream = SCStream(filter: filter, configuration: configuration, delegate: streamOutput)
@@ -721,18 +778,29 @@ class CaptureManager: ObservableObject {
         let currentOutput = streamOutput
         let currentURL = recordingURL
 
-        await withCheckedContinuation { continuation in
+        let completedDuration = recordingDuration
+        let diagnostics: RecordingAudioDiagnostics? = await withCheckedContinuation { continuation in
             captureQueue.async {
                 // 停止捕获流
                 if let stream = currentStream {
                     stream.stopCapture { _ in
                         // 完成视频写入
-                        currentOutput?.finishWriting()
-                        continuation.resume()
+                        if let currentOutput {
+                            currentOutput.finishWriting { diagnostics in
+                                continuation.resume(returning: diagnostics)
+                            }
+                        } else {
+                            continuation.resume(returning: nil)
+                        }
                     }
                 } else {
-                    currentOutput?.finishWriting()
-                    continuation.resume()
+                    if let currentOutput {
+                        currentOutput.finishWriting { diagnostics in
+                            continuation.resume(returning: diagnostics)
+                        }
+                    } else {
+                        continuation.resume(returning: nil)
+                    }
                 }
             }
         }
@@ -750,10 +818,19 @@ class CaptureManager: ObservableObject {
         stream = nil
         streamOutput = nil
 
+        if let diagnostics {
+            lastRecordingAudioDiagnostics = diagnostics
+            showRecordingCompletionNotification(diagnostics: diagnostics, duration: completedDuration)
+        }
+
         print("录制已停止")
 
         // 发送通知
-        NotificationCenter.default.post(name: .recordingDidStop, object: currentURL)
+        NotificationCenter.default.post(
+            name: .recordingDidStop,
+            object: currentURL,
+            userInfo: diagnostics.map { ["audioDiagnostics": $0] }
+        )
     }
 
     /// 暂停/恢复录制
@@ -889,6 +966,28 @@ class CaptureManager: ObservableObject {
                 guard let self = self, let startTime = self.recordingStartTime else { return }
                 self.recordingDuration = Date().timeIntervalSince(startTime)
             }
+        }
+    }
+
+    @MainActor
+    private func showRecordingCompletionNotification(diagnostics: RecordingAudioDiagnostics, duration: TimeInterval) {
+        if diagnostics.hasAudioIssue {
+            let missingAudioMessage: String
+            if diagnostics.audioTrackCount == 0 {
+                missingAudioMessage = "未检测到音频轨道"
+            } else {
+                missingAudioMessage = diagnostics.summaryText
+            }
+            NotificationManager.shared.showErrorNotification(
+                title: "录制完成，音频需检查",
+                message: "\(diagnostics.outputURL.lastPathComponent)：\(missingAudioMessage)"
+            )
+        } else {
+            NotificationManager.shared.showRecordingCompleteNotification(
+                filePath: diagnostics.outputURL,
+                duration: duration,
+                audioDiagnostics: diagnostics
+            )
         }
     }
 
@@ -2105,6 +2204,8 @@ final class RecordingRegionSelectionView: NSView {
 class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     private let outputURL: URL
     private let fileType: AVFileType
+    private let requestedSystemAudio: Bool
+    private let requestedMicrophone: Bool
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
     private var audioInput: AVAssetWriterInput?
@@ -2116,10 +2217,15 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     private var micFrameCount = 0
     private var audioFailCount = 0
     private var micFailCount = 0
+    private var isFinishing = false
+    private var lastDiagnostics: RecordingAudioDiagnostics?
+    private var finishCompletions: [(RecordingAudioDiagnostics) -> Void] = []
 
-    init(outputURL: URL, fileType: AVFileType = .mov) {
+    init(outputURL: URL, fileType: AVFileType = .mov, includeSystemAudio: Bool, includeMicrophone: Bool) {
         self.outputURL = outputURL
         self.fileType = fileType
+        self.requestedSystemAudio = includeSystemAudio
+        self.requestedMicrophone = includeMicrophone
         super.init()
     }
 
@@ -2205,19 +2311,15 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                 }
             }
 
-            // 检查是否需要音频输入
-            let includeSystemAudio = UserDefaults.standard.bool(forKey: "includeSystemAudio")
-            let includeMicrophone = UserDefaults.standard.bool(forKey: "includeMicrophone")
-
             logMicrophone("AVAssetWriter 音频配置:")
-            logMicrophone("  - includeSystemAudio: \(includeSystemAudio)")
-            logMicrophone("  - includeMicrophone: \(includeMicrophone)")
+            logMicrophone("  - includeSystemAudio: \(requestedSystemAudio)")
+            logMicrophone("  - includeMicrophone: \(requestedMicrophone)")
 
-            print("🎵 音频配置 - 系统音频: \(includeSystemAudio), 麦克风: \(includeMicrophone)")
+            print("🎵 音频配置 - 系统音频: \(requestedSystemAudio), 麦克风: \(requestedMicrophone)")
 
             // 新策略：创建两个独立的音频输入，分别用于系统音频和麦克风
             // 使用标准的 AAC 编码以确保 QuickTime 兼容性
-            if includeSystemAudio || includeMicrophone {
+            if requestedSystemAudio || requestedMicrophone {
                 // 标准 AAC 音频设置 - QuickTime 兼容
                 let audioSettings: [String: Any] = [
                     AVFormatIDKey: kAudioFormatMPEG4AAC,
@@ -2226,7 +2328,7 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                     AVEncoderBitRateKey: 128000
                 ]
 
-                if includeSystemAudio {
+                if requestedSystemAudio {
                     // 系统音频输入
                     audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
                     audioInput?.expectsMediaDataInRealTime = true
@@ -2240,7 +2342,7 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                     }
                 }
 
-                if includeMicrophone {
+                if requestedMicrophone {
                     // 麦克风音频输入 - 使用相同的设置以确保兼容性
                     microphoneInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
                     microphoneInput?.expectsMediaDataInRealTime = true
@@ -2255,8 +2357,8 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                 }
 
                 logMicrophone("音频配置完成:")
-                logMicrophone("  - 系统音频: \(includeSystemAudio ? "启用" : "禁用")")
-                logMicrophone("  - 麦克风: \(includeMicrophone ? "启用" : "禁用")")
+                logMicrophone("  - 系统音频: \(requestedSystemAudio ? "启用" : "禁用")")
+                logMicrophone("  - 麦克风: \(requestedMicrophone ? "启用" : "禁用")")
                 logMicrophone("  - 编码格式: AAC 48kHz 立体声")
             } else {
                 print("⚠️ 未启用任何音频录制")
@@ -2449,10 +2551,23 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
         }
     }
 
-    func finishWriting() {
+    func finishWriting(completion: ((RecordingAudioDiagnostics) -> Void)? = nil) {
+        if let lastDiagnostics {
+            completion?(lastDiagnostics)
+            return
+        }
+
+        if let completion {
+            finishCompletions.append(completion)
+        }
+
+        guard !isFinishing else { return }
+        isFinishing = true
+
         guard let assetWriter = assetWriter else {
             print("资产写入器为空，无法完成写入")
             logMicrophone("资产写入器为空，无法完成写入", level: "ERROR")
+            completeFinish(makeDiagnostics(assetWriterSucceeded: false, fileSize: 0, videoTrackCount: 0, audioTrackCount: 0))
             return
         }
 
@@ -2499,6 +2614,11 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
             DispatchQueue.main.async {
                 logMicrophone("AVAssetWriter.status 在 finishWriting 后: \(assetWriter.status.rawValue)")
 
+                var fileSize: Int64 = 0
+                var videoTrackCount = 0
+                var audioTrackCount = 0
+                var assetWriterSucceeded = false
+
                 if let error = assetWriter.error {
                     print("✗ 录制完成时出错: \(error.localizedDescription)")
                     logMicrophone("✗ AVAssetWriter 完成时出错: \(error.localizedDescription)", level: "ERROR")
@@ -2516,15 +2636,18 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                     if fileExists {
                         do {
                             let attributes = try FileManager.default.attributesOfItem(atPath: finalOutputURL.path)
-                            let fileSize = attributes[.size] as? Int64 ?? 0
+                            fileSize = attributes[.size] as? Int64 ?? 0
                             print("录制文件大小: \(fileSize) 字节")
                             logMicrophone("录制文件大小: \(fileSize) 字节")
 
                             if fileSize > 0 {
                                 print("录制文件有效")
+                                assetWriterSucceeded = true
 
                                 // 使用 AVAsset 检查音频轨道
-                                self.inspectVideoFile(url: finalOutputURL)
+                                let inspection = self.inspectVideoFile(url: finalOutputURL)
+                                videoTrackCount = inspection.videoTrackCount
+                                audioTrackCount = inspection.audioTrackCount
                             } else {
                                 print("警告: 录制文件大小为0")
                                 logMicrophone("警告: 录制文件大小为0", level: "WARN")
@@ -2556,12 +2679,19 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                         }
                     }
                 }
+
+                self.completeFinish(self.makeDiagnostics(
+                    assetWriterSucceeded: assetWriterSucceeded,
+                    fileSize: fileSize,
+                    videoTrackCount: videoTrackCount,
+                    audioTrackCount: audioTrackCount
+                ))
             }
         }
     }
 
     /// 检查视频文件的音频轨道
-    private func inspectVideoFile(url: URL) {
+    private func inspectVideoFile(url: URL) -> (videoTrackCount: Int, audioTrackCount: Int) {
         let asset = AVAsset(url: url)
 
         logMicrophone("========== 视频文件轨道检查 ==========")
@@ -2589,6 +2719,38 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
         }
 
         logMicrophone("========================================")
+        return (videoTracks.count, audioTracks.count)
+    }
+
+    private func makeDiagnostics(assetWriterSucceeded: Bool, fileSize: Int64, videoTrackCount: Int, audioTrackCount: Int) -> RecordingAudioDiagnostics {
+        RecordingAudioDiagnostics(
+            outputURL: outputURL,
+            requestedSystemAudio: requestedSystemAudio,
+            requestedMicrophone: requestedMicrophone,
+            videoFrameCount: frameCount,
+            systemAudioFrameCount: audioFrameCount,
+            microphoneFrameCount: micFrameCount,
+            systemAudioFailCount: audioFailCount,
+            microphoneFailCount: micFailCount,
+            videoTrackCount: videoTrackCount,
+            audioTrackCount: audioTrackCount,
+            fileSize: fileSize,
+            assetWriterSucceeded: assetWriterSucceeded
+        )
+    }
+
+    private func completeFinish(_ diagnostics: RecordingAudioDiagnostics) {
+        lastDiagnostics = diagnostics
+        let completions = finishCompletions
+        finishCompletions.removeAll()
+
+        logMicrophone("========== 录制音频验收 ==========")
+        logMicrophone("请求系统音频: \(diagnostics.requestedSystemAudio)")
+        logMicrophone("请求麦克风: \(diagnostics.requestedMicrophone)")
+        logMicrophone("文件音频轨道数量: \(diagnostics.audioTrackCount)", level: diagnostics.hasAudioIssue ? "ERROR" : "SUCCESS")
+        logMicrophone("音频摘要: \(diagnostics.summaryText)")
+
+        completions.forEach { $0(diagnostics) }
     }
 }
 

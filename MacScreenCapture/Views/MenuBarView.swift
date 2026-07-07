@@ -88,7 +88,7 @@ struct MenuBarView: View {
             Group {
                 if captureManager.isRecording {
                     MenuButton(
-                        title: captureManager.isPaused ? "恢复录制" : "暂停录制",
+                        title: captureManager.isPaused ? (captureManager.isAudioOnlyRecording ? "恢复录音" : "恢复录制") : (captureManager.isAudioOnlyRecording ? "暂停录音" : "暂停录制"),
                         icon: captureManager.isPaused ? "play.fill" : "pause.fill",
                         shortcut: "⌘Space"
                     ) {
@@ -96,7 +96,7 @@ struct MenuBarView: View {
                     }
 
                     MenuButton(
-                        title: "停止录制",
+                        title: captureManager.isAudioOnlyRecording ? "停止录音" : "停止录制",
                         icon: "stop.fill",
                         shortcut: "⌘⇧R"
                     ) {
@@ -127,6 +127,14 @@ struct MenuBarView: View {
                         shortcut: "⌘⇧R"
                     ) {
                         quickRecording()
+                    }
+
+                    MenuButton(
+                        title: "开始录音",
+                        icon: "waveform.circle",
+                        shortcut: "⌘⇧M"
+                    ) {
+                        quickAudioRecording()
                     }
                 }
             }
@@ -205,6 +213,22 @@ struct MenuBarView: View {
                 showNotification(title: "录制开始", message: "屏幕录制已开始")
             } catch {
                 showNotification(title: "录制失败", message: error.localizedDescription)
+            }
+        }
+    }
+
+    private func quickAudioRecording() {
+        guard permissionManager.hasScreenRecordingPermission else {
+            permissionManager.requestScreenRecordingPermission()
+            return
+        }
+
+        Task {
+            do {
+                try await captureManager.startAudioRecording()
+                showNotification(title: "录音开始", message: "音频录制已开始")
+            } catch {
+                showNotification(title: "录音失败", message: error.localizedDescription)
             }
         }
     }

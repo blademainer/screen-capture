@@ -172,6 +172,21 @@ struct RecordingView: View {
                 .disabled(!permissionManager.hasScreenRecordingPermission)
                 .keyboardShortcut(.init("r"), modifiers: [.command, .shift])
 
+                if !captureManager.isRecording {
+                    Button(action: {
+                        startAudioRecording()
+                    }) {
+                        HStack {
+                            Image(systemName: "waveform.circle")
+                            Text("开始录音")
+                        }
+                        .frame(minWidth: 110)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!permissionManager.hasScreenRecordingPermission)
+                    .keyboardShortcut(.init("m"), modifiers: [.command, .shift])
+                }
+
                 // 暂停/恢复按钮
                 if captureManager.isRecording {
                     Button(action: {
@@ -212,7 +227,7 @@ struct RecordingView: View {
                     .scaleEffect(captureManager.isPaused ? 1.0 : 1.2)
                     .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: captureManager.isPaused)
 
-                Text(captureManager.isPaused ? "录制已暂停" : "正在录制")
+                Text(statusTitle)
                     .font(.headline)
                     .foregroundColor(captureManager.isPaused ? .orange : .red)
             }
@@ -230,7 +245,7 @@ struct RecordingView: View {
                         .foregroundColor(.secondary)
                 }
 
-                Text("模式: \(captureManager.captureMode.rawValue)")
+                Text("模式: \(captureManager.isAudioOnlyRecording ? "仅录音" : captureManager.captureMode.rawValue)")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
@@ -294,6 +309,27 @@ struct RecordingView: View {
                 }
             }
         }
+    }
+
+    private func startAudioRecording() {
+        errorMessage = nil
+
+        Task {
+            do {
+                try await captureManager.startAudioRecording()
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private var statusTitle: String {
+        if captureManager.isPaused {
+            return captureManager.isAudioOnlyRecording ? "录音已暂停" : "录制已暂停"
+        }
+        return captureManager.isAudioOnlyRecording ? "正在录音" : "正在录制"
     }
 
     private func formatDuration(_ duration: TimeInterval) -> String {

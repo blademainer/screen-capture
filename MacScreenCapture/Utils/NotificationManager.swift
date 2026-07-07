@@ -113,15 +113,16 @@ class NotificationManager: NSObject, ObservableObject {
     }
     
     /// 显示录制完成通知
-    func showRecordingCompleteNotification(filePath: URL, duration: TimeInterval, audioDiagnostics: RecordingAudioDiagnostics? = nil) {
+    func showRecordingCompleteNotification(filePath: URL, duration: TimeInterval, audioDiagnostics: RecordingAudioDiagnostics? = nil, audioOnly: Bool = false) {
         guard notificationsEnabled && hasNotificationPermission else { return }
         
         let content = UNMutableNotificationContent()
-        content.title = "录制完成"
+        content.title = audioOnly ? "录音完成" : "录制完成"
+        let durationLabel = audioOnly ? "录音时长" : "录制时长"
         if let audioDiagnostics, audioDiagnostics.requestedAnyAudio {
-            content.body = "录制时长 \(formatDuration(duration))，\(audioDiagnostics.summaryText)，已保存到 \(filePath.lastPathComponent)"
+            content.body = "\(durationLabel) \(formatDuration(duration))，\(audioDiagnostics.summaryText)，已保存到 \(filePath.lastPathComponent)"
         } else {
-            content.body = "录制时长 \(formatDuration(duration))，已保存到 \(filePath.lastPathComponent)"
+            content.body = "\(durationLabel) \(formatDuration(duration))，已保存到 \(filePath.lastPathComponent)"
         }
         content.sound = .default
         content.userInfo = ["filePath": filePath.path, "type": "recording"]

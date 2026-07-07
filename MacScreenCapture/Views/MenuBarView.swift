@@ -48,7 +48,7 @@ struct MenuBarView: View {
                     quickScrollingScreenshot()
                 }
 
-                MenuButton(title: "多窗口截图", icon: "rectangle.3.group", shortcut: "Shift") {
+                MenuButton(title: "多窗口截图", icon: "rectangle.3.group", shortcut: "⌘⌥W") {
                     quickMultiWindowScreenshot()
                 }
 

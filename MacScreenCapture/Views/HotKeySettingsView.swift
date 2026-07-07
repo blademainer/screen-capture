@@ -240,6 +240,7 @@ struct HotKeyRow: View {
         case .fullScreenshot: return "rectangle.dashed"
         case .regionScreenshot: return "rectangle.dashed.badge.record"
         case .windowScreenshot: return "macwindow"
+        case .multiWindowScreenshot: return "rectangle.3.group"
         case .startRecording: return "record.circle"
         case .startAudioRecording: return "waveform.circle"
         case .stopRecording: return "stop.circle"

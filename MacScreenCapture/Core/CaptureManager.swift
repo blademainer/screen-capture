@@ -623,6 +623,7 @@ class CaptureManager: ObservableObject {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
 
         let filter: SCContentFilter
+        let captureSize: CGSize
 
         switch captureMode {
         case .fullScreen:
@@ -630,12 +631,14 @@ class CaptureManager: ObservableObject {
                 throw CaptureError.noDisplayAvailable
             }
             filter = SCContentFilter(display: display, excludingWindows: [])
+            captureSize = CGSize(width: display.width, height: display.height)
 
         case .window:
             guard let window = selectedWindow else {
                 throw CaptureError.noWindowSelected
             }
             filter = SCContentFilter(desktopIndependentWindow: window)
+            captureSize = window.frame.size
 
         case .region:
             // 区域截图需要先选择区域
@@ -643,17 +646,8 @@ class CaptureManager: ObservableObject {
         }
 
         let configuration = SCStreamConfiguration()
-
-        // 获取显示器尺寸
-        let displaySize: CGSize
-        if let display = selectedDisplay {
-            displaySize = CGSize(width: display.width, height: display.height)
-        } else {
-            displaySize = CGSize(width: 1920, height: 1080) // 默认尺寸
-        }
-
-        configuration.width = Int(displaySize.width)
-        configuration.height = Int(displaySize.height)
+        configuration.width = max(1, Int(captureSize.width))
+        configuration.height = max(1, Int(captureSize.height))
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.showsCursor = UserDefaults.standard.bool(forKey: "showCursor")
 

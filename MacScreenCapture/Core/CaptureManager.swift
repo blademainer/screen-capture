@@ -466,11 +466,18 @@ class CaptureManager: ObservableObject {
             try await Task.sleep(nanoseconds: UInt64(startDelay) * 1_000_000_000)
         }
 
+        let selectedRecordingRegion: CGRect?
+        if captureMode == .region {
+            selectedRecordingRegion = try await selectRecordingRegion()
+        } else {
+            selectedRecordingRegion = nil
+        }
+
         // 通知WindowManager开始录制
         WindowManager.shared.updateCaptureState(.recording(startTime: Date()))
 
         // 在后台队列中执行耗时操作
-        let (filter, screenSize, outputURL): (SCContentFilter, CGSize, URL) = try await withCheckedThrowingContinuation { continuation in
+        let (filter, screenSize, outputURL, sourceRect): (SCContentFilter, CGSize, URL, CGRect?) = try await withCheckedThrowingContinuation { continuation in
             captureQueue.async {
                 Task {
                     do {
@@ -497,8 +504,12 @@ class CaptureManager: ObservableObject {
                                 filter = SCContentFilter(desktopIndependentWindow: window)
 
                             case .region:
-                                captureError = CaptureError.regionRecordingNotSupported
-                                return
+                                guard let region = selectedRecordingRegion,
+                                      let display = content.displays.first(where: { $0.frame.intersects(region) }) ?? content.displays.first else {
+                                    captureError = CaptureError.noDisplayAvailable
+                                    return
+                                }
+                                filter = SCContentFilter(display: display, excludingWindows: [])
                             }
                         }
 
@@ -515,7 +526,9 @@ class CaptureManager: ObservableObject {
 
                         // 获取实际屏幕分辨率
                         let screenSize: CGSize = await MainActor.run {
-                            if case .fullScreen = self.captureMode, let display = self.selectedDisplay ?? content.displays.first {
+                            if case .region = self.captureMode, let region = selectedRecordingRegion {
+                                return region.size
+                            } else if case .fullScreen = self.captureMode, let display = self.selectedDisplay ?? content.displays.first {
                                 return CGSize(width: display.width, height: display.height)
                             } else {
                                 // 默认使用主屏幕分辨率
@@ -532,7 +545,7 @@ class CaptureManager: ObservableObject {
                             self.outputDirectory.appendingPathComponent(fileName)
                         }
 
-                        continuation.resume(returning: (finalFilter, screenSize, outputURL))
+                        continuation.resume(returning: (finalFilter, screenSize, outputURL, selectedRecordingRegion))
                     } catch {
                         continuation.resume(throwing: error)
                     }
@@ -549,6 +562,9 @@ class CaptureManager: ObservableObject {
         configuration.showsCursor = UserDefaults.standard.bool(forKey: "showCursor")
         configuration.queueDepth = 5
         configuration.colorSpaceName = CGColorSpace.sRGB // 使用标准 sRGB 色彩空间
+        if let sourceRect = sourceRect {
+            configuration.sourceRect = sourceRect
+        }
 
         // 根据用户设置决定是否录制音频
         let includeSystemAudio = UserDefaults.standard.bool(forKey: "includeSystemAudio")
@@ -1055,6 +1071,48 @@ class CaptureManager: ObservableObject {
         return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 
+    @MainActor
+    private func selectRecordingRegion() async throws -> CGRect {
+        guard let screen = NSScreen.main else {
+            throw CaptureError.noDisplayAvailable
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            var didResume = false
+            let selectionWindow = NSWindow(
+                contentRect: screen.frame,
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+
+            selectionWindow.level = .screenSaver
+            selectionWindow.backgroundColor = .clear
+            selectionWindow.isOpaque = false
+            selectionWindow.hasShadow = false
+            selectionWindow.ignoresMouseEvents = false
+            selectionWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+            let overlayView = RecordingRegionSelectionView(screenFrame: screen.frame) { result in
+                guard !didResume else { return }
+                didResume = true
+                selectionWindow.contentView = nil
+                selectionWindow.close()
+
+                switch result {
+                case .success(let rect):
+                    continuation.resume(returning: rect)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+
+            selectionWindow.contentView = overlayView
+            selectionWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
     /// 使用系统 screencapture 交互选择并保存结果。
     @MainActor
     private func captureInteractiveScreenshot(arguments: [String], showEditor: Bool) async throws -> NSImage {
@@ -1477,6 +1535,142 @@ enum CaptureError: LocalizedError {
         case .failedToTranslate:
             return "打开翻译失败"
         }
+    }
+}
+
+// MARK: - Recording Region Selection
+
+@available(macOS 12.3, *)
+final class RecordingRegionSelectionView: NSView {
+    private let screenFrame: CGRect
+    private let completion: (Result<CGRect, Error>) -> Void
+    private var startPoint: CGPoint?
+    private var currentPoint: CGPoint?
+
+    init(screenFrame: CGRect, completion: @escaping (Result<CGRect, Error>) -> Void) {
+        self.screenFrame = screenFrame
+        self.completion = completion
+        super.init(frame: NSRect(origin: .zero, size: screenFrame.size))
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.makeFirstResponder(self)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        NSColor.black.withAlphaComponent(0.34).setFill()
+        bounds.fill()
+
+        guard let rect = selectionRect else {
+            drawInstruction()
+            return
+        }
+
+        NSColor.clear.setFill()
+        rect.fill(using: .clear)
+
+        let path = NSBezierPath(rect: rect)
+        path.lineWidth = 2
+        NSColor.systemBlue.setStroke()
+        path.stroke()
+
+        NSColor.systemBlue.withAlphaComponent(0.18).setFill()
+        rect.fill()
+
+        drawSizeLabel(for: rect)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        startPoint = convert(event.locationInWindow, from: nil)
+        currentPoint = startPoint
+        needsDisplay = true
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        currentPoint = convert(event.locationInWindow, from: nil)
+        needsDisplay = true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        currentPoint = convert(event.locationInWindow, from: nil)
+
+        guard let rect = selectionRect, rect.width >= 16, rect.height >= 16 else {
+            completion(.failure(CaptureError.regionSelectionCancelled))
+            return
+        }
+
+        completion(.success(CGRect(
+            x: screenFrame.origin.x + rect.origin.x,
+            y: screenFrame.origin.y + rect.origin.y,
+            width: rect.width,
+            height: rect.height
+        )))
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            completion(.failure(CaptureError.regionSelectionCancelled))
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+
+    private var selectionRect: CGRect? {
+        guard let startPoint = startPoint, let currentPoint = currentPoint else { return nil }
+        return CGRect(
+            x: min(startPoint.x, currentPoint.x),
+            y: min(startPoint.y, currentPoint.y),
+            width: abs(currentPoint.x - startPoint.x),
+            height: abs(currentPoint.y - startPoint.y)
+        )
+    }
+
+    private func drawInstruction() {
+        let text = "拖拽选择录制区域，按 Esc 取消"
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 18, weight: .medium),
+            .foregroundColor: NSColor.white,
+            .backgroundColor: NSColor.black.withAlphaComponent(0.45)
+        ]
+        let size = text.size(withAttributes: attributes)
+        let rect = NSRect(
+            x: bounds.midX - size.width / 2 - 12,
+            y: bounds.midY - size.height / 2 - 8,
+            width: size.width + 24,
+            height: size.height + 16
+        )
+        NSColor.black.withAlphaComponent(0.45).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
+        text.draw(at: CGPoint(x: rect.minX + 12, y: rect.minY + 8), withAttributes: attributes)
+    }
+
+    private func drawSizeLabel(for rect: CGRect) {
+        let text = "\(Int(rect.width)) x \(Int(rect.height))"
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold),
+            .foregroundColor: NSColor.white
+        ]
+        let size = text.size(withAttributes: attributes)
+        let labelRect = NSRect(
+            x: rect.minX,
+            y: max(8, rect.minY - size.height - 12),
+            width: size.width + 16,
+            height: size.height + 8
+        )
+        NSColor.systemBlue.setFill()
+        NSBezierPath(roundedRect: labelRect, xRadius: 5, yRadius: 5).fill()
+        text.draw(at: CGPoint(x: labelRect.minX + 8, y: labelRect.minY + 4), withAttributes: attributes)
     }
 }
 

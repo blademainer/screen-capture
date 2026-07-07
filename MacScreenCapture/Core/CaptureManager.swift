@@ -12,6 +12,7 @@ import AVFoundation
 import CoreGraphics
 import AppKit
 @preconcurrency import Vision
+import NaturalLanguage
 
 struct RecordingAudioDiagnostics: Sendable {
     let outputURL: URL
@@ -411,13 +412,14 @@ class CaptureManager: ObservableObject {
         let targetLanguage = UserDefaults.standard.string(forKey: "translationTargetLanguage") ?? "zh-CN"
         let result: ScreenshotTranslationResult
         do {
-            let translatedText = try await translateText(trimmedText, targetLanguage: targetLanguage)
+            let translation = try await translateText(trimmedText, targetLanguage: targetLanguage)
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(translatedText, forType: .string)
+            NSPasteboard.general.setString(translation.text, forType: .string)
             result = ScreenshotTranslationResult(
                 sourceText: trimmedText,
-                translatedText: translatedText,
+                translatedText: translation.text,
                 targetLanguage: targetLanguage,
+                providerName: translation.providerName,
                 usedWebFallback: false
             )
         } catch {
@@ -428,6 +430,7 @@ class CaptureManager: ObservableObject {
                 sourceText: trimmedText,
                 translatedText: "在线翻译服务暂不可用，已打开网页翻译页面。原文已复制到剪贴板，可直接粘贴使用。",
                 targetLanguage: targetLanguage,
+                providerName: "网页翻译",
                 usedWebFallback: true
             )
         }
@@ -2130,7 +2133,17 @@ class CaptureManager: ObservableObject {
         }
     }
 
-    private func translateText(_ text: String, targetLanguage: String) async throws -> String {
+    private func translateText(_ text: String, targetLanguage: String) async throws -> TranslationProviderResult {
+        do {
+            let translated = try await translateWithGoogle(text, targetLanguage: targetLanguage)
+            return TranslationProviderResult(text: translated, providerName: "Google")
+        } catch {
+            let translated = try await translateWithMyMemory(text, targetLanguage: targetLanguage)
+            return TranslationProviderResult(text: translated, providerName: "MyMemory")
+        }
+    }
+
+    private func translateWithGoogle(_ text: String, targetLanguage: String) async throws -> String {
         var components = URLComponents(string: "https://translate.googleapis.com/translate_a/single")
         components?.queryItems = [
             URLQueryItem(name: "client", value: "gtx"),
@@ -2166,6 +2179,74 @@ class CaptureManager: ObservableObject {
         }
 
         return translatedText
+    }
+
+    private func translateWithMyMemory(_ text: String, targetLanguage: String) async throws -> String {
+        let sourceLanguage = detectedTranslationLanguage(for: text)
+        let mappedTargetLanguage = myMemoryLanguageCode(for: targetLanguage)
+        let queryText = text.truncatedToUTF8ByteCount(480)
+
+        var components = URLComponents(string: "https://api.mymemory.translated.net/get")
+        components?.queryItems = [
+            URLQueryItem(name: "q", value: queryText),
+            URLQueryItem(name: "langpair", value: "\(sourceLanguage)|\(mappedTargetLanguage)")
+        ]
+
+        guard let url = components?.url else {
+            throw CaptureError.failedToTranslate
+        }
+
+        let (data, response) = try await URLSession.shared.data(from: url)
+        if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+            throw CaptureError.failedToTranslate
+        }
+
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let responseData = root["responseData"] as? [String: Any],
+              let translatedText = responseData["translatedText"] as? String else {
+            throw CaptureError.failedToTranslate
+        }
+
+        let trimmed = translatedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw CaptureError.failedToTranslate
+        }
+
+        return trimmed
+    }
+
+    private func detectedTranslationLanguage(for text: String) -> String {
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(text)
+        guard let language = recognizer.dominantLanguage else {
+            return "en"
+        }
+
+        switch language {
+        case .simplifiedChinese:
+            return "zh-CN"
+        case .traditionalChinese:
+            return "zh-TW"
+        case .english:
+            return "en"
+        case .japanese:
+            return "ja"
+        case .korean:
+            return "ko"
+        default:
+            return language.rawValue
+        }
+    }
+
+    private func myMemoryLanguageCode(for targetLanguage: String) -> String {
+        switch targetLanguage {
+        case "zh-CN":
+            return "zh-CN"
+        case "zh-TW":
+            return "zh-TW"
+        default:
+            return targetLanguage
+        }
     }
 
     @MainActor
@@ -2278,7 +2359,32 @@ struct ScreenshotTranslationResult {
     let sourceText: String
     let translatedText: String
     let targetLanguage: String
+    let providerName: String
     let usedWebFallback: Bool
+}
+
+private struct TranslationProviderResult {
+    let text: String
+    let providerName: String
+}
+
+private extension String {
+    func truncatedToUTF8ByteCount(_ maxByteCount: Int) -> String {
+        guard maxByteCount > 0 else { return "" }
+        var result = ""
+        var byteCount = 0
+
+        for character in self {
+            let characterByteCount = String(character).utf8.count
+            guard byteCount + characterByteCount <= maxByteCount else {
+                break
+            }
+            result.append(character)
+            byteCount += characterByteCount
+        }
+
+        return result
+    }
 }
 
 final class ScreenshotTranslationWindowController: NSWindowController {
@@ -2315,7 +2421,7 @@ final class ScreenshotTranslationWindowController: NSWindowController {
         titleLabel.font = NSFont.systemFont(ofSize: 20, weight: .semibold)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        let targetText = result.usedWebFallback ? "目标语言：\(result.targetLanguage) · 已打开网页翻译兜底" : "目标语言：\(result.targetLanguage)"
+        let targetText = result.usedWebFallback ? "目标语言：\(result.targetLanguage) · 已打开网页翻译兜底" : "目标语言：\(result.targetLanguage) · \(result.providerName)"
         let targetLabel = NSTextField(labelWithString: targetText)
         targetLabel.textColor = .secondaryLabelColor
         targetLabel.translatesAutoresizingMaskIntoConstraints = false

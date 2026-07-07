@@ -452,7 +452,7 @@ class CaptureManager: ObservableObject {
     /// 贴图 - 交互选择区域后打开置顶浮窗，可重复创建多个贴图。
     @MainActor
     func capturePinnedRegion() async throws -> NSImage {
-        let image = try await captureInteractiveScreenshot(arguments: ["-i", "-r"], showEditor: false, autoOpenAfterCapture: false)
+        let image = try await captureInteractiveScreenshot(arguments: ["-i", "-r"], forceStyle: false, showEditor: false, autoOpenAfterCapture: false)
         FloatingWindowManager.shared.showFloatingPreview(for: image)
         return image
     }

@@ -73,6 +73,10 @@ struct MenuBarView: View {
                     quickTranslate()
                 }
 
+                MenuButton(title: "贴图", icon: "pin") {
+                    quickPinnedScreenshot()
+                }
+
                 MenuButton(title: "用指定 App 打开", icon: "arrow.up.forward.app") {
                     quickOpenInConfiguredApp()
                 }
@@ -261,6 +265,22 @@ struct MenuBarView: View {
                 showNotification(title: "带壳截图成功", message: "截图已保存")
             } catch {
                 showNotification(title: "带壳截图失败", message: error.localizedDescription)
+            }
+        }
+    }
+
+    private func quickPinnedScreenshot() {
+        guard permissionManager.hasScreenRecordingPermission else {
+            permissionManager.requestScreenRecordingPermission()
+            return
+        }
+
+        Task {
+            do {
+                _ = try await captureManager.capturePinnedRegion()
+                showNotification(title: "贴图成功", message: "已创建置顶贴图窗口")
+            } catch {
+                showNotification(title: "贴图失败", message: error.localizedDescription)
             }
         }
     }

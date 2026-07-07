@@ -535,6 +535,45 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(huge, 60_000_000)
     }
 
+    func testRecordingAudioSourceSelectionDisablesUnavailableMicrophoneForThisRun() throws {
+        let selection = RecordingAudioSourceSelection.resolved(
+            includeSystemAudio: true,
+            includeMicrophonePreference: true,
+            microphoneDeviceAvailable: false,
+            microphonePermissionGranted: false
+        )
+
+        XCTAssertTrue(selection.includeSystemAudio)
+        XCTAssertFalse(selection.includeMicrophone)
+        XCTAssertTrue(selection.hasAnySource)
+    }
+
+    func testRecordingAudioSourceSelectionRequiresUsableMicrophoneWhenItIsOnlySource() throws {
+        let missingDevice = RecordingAudioSourceSelection.resolved(
+            includeSystemAudio: false,
+            includeMicrophonePreference: true,
+            microphoneDeviceAvailable: false,
+            microphonePermissionGranted: false
+        )
+        let deniedPermission = RecordingAudioSourceSelection.resolved(
+            includeSystemAudio: false,
+            includeMicrophonePreference: true,
+            microphoneDeviceAvailable: true,
+            microphonePermissionGranted: false
+        )
+        let usableMicrophone = RecordingAudioSourceSelection.resolved(
+            includeSystemAudio: false,
+            includeMicrophonePreference: true,
+            microphoneDeviceAvailable: true,
+            microphonePermissionGranted: true
+        )
+
+        XCTAssertFalse(missingDevice.hasAnySource)
+        XCTAssertFalse(deniedPermission.hasAnySource)
+        XCTAssertTrue(usableMicrophone.includeMicrophone)
+        XCTAssertTrue(usableMicrophone.hasAnySource)
+    }
+
     func testIShotInteractionTimingNormalizesDelayAndDoubleOptionWindows() throws {
         XCTAssertEqual(IShotInteractionTiming.delayedScreenshotSeconds(0), 5)
         XCTAssertEqual(IShotInteractionTiming.delayedScreenshotSeconds(-3), 1)

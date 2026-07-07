@@ -696,24 +696,29 @@ class CaptureManager: ObservableObject {
 
         logMicrophone("========== 开始录制流程 ==========")
 
+        let includeSystemAudioPreference = UserDefaults.standard.bool(forKey: "includeSystemAudio")
+
         // 检查麦克风权限（如果用户启用了麦克风录制）
         let includeMicrophonePreference = UserDefaults.standard.bool(forKey: "includeMicrophone")
+        var microphoneDeviceAvailable = !includeMicrophonePreference
+        var microphonePermissionGranted = !includeMicrophonePreference
         logMicrophone("用户设置 - includeMicrophone: \(includeMicrophonePreference)")
 
         if includeMicrophonePreference {
             let permissionManager = PermissionManager()
+            let recordingFallbackDescription = includeSystemAudioPreference ? "屏幕和系统音频" : "屏幕"
 
             // 检查麦克风设备是否可用
-            let deviceAvailable = permissionManager.checkMicrophoneDeviceAvailable()
-            logMicrophone("麦克风设备可用性: \(deviceAvailable)", level: deviceAvailable ? "SUCCESS" : "ERROR")
+            microphoneDeviceAvailable = permissionManager.checkMicrophoneDeviceAvailable()
+            logMicrophone("麦克风设备可用性: \(microphoneDeviceAvailable)", level: microphoneDeviceAvailable ? "SUCCESS" : "ERROR")
 
-            if !deviceAvailable {
+            if !microphoneDeviceAvailable {
                 print("⚠️ 警告：未检测到可用的麦克风设备")
                 // 显示警告但继续录制
                 let shouldContinue = await MainActor.run {
                     let alert = NSAlert()
                     alert.messageText = "未检测到麦克风"
-                    alert.informativeText = "系统未检测到可用的麦克风设备，将仅录制屏幕和系统音频。"
+                    alert.informativeText = "系统未检测到可用的麦克风设备，将仅录制\(recordingFallbackDescription)。"
                     alert.alertStyle = .warning
                     alert.addButton(withTitle: "继续")
                     alert.addButton(withTitle: "取消")
@@ -724,19 +729,22 @@ class CaptureManager: ObservableObject {
                 if !shouldContinue {
                     throw CaptureError.noMicrophoneAvailable
                 }
+                logMicrophone("用户选择无麦克风继续，本次录制禁用麦克风流", level: "WARN")
             }
 
             // 异步请求麦克风权限并等待结果
-            let hasPermission = await permissionManager.requestMicrophonePermissionAsync()
-            logMicrophone("麦克风权限状态: \(hasPermission)", level: hasPermission ? "SUCCESS" : "ERROR")
+            if microphoneDeviceAvailable {
+                microphonePermissionGranted = await permissionManager.requestMicrophonePermissionAsync()
+            }
+            logMicrophone("麦克风权限状态: \(microphonePermissionGranted)", level: microphonePermissionGranted ? "SUCCESS" : "ERROR")
 
-            if !hasPermission {
+            if microphoneDeviceAvailable && !microphonePermissionGranted {
                 print("⚠️ 警告：麦克风权限未授予")
                 // 显示警告但继续录制
                 let shouldContinue = await MainActor.run {
                     let alert = NSAlert()
                     alert.messageText = "麦克风权限未授予"
-                    alert.informativeText = "无法录制麦克风音频，将仅录制屏幕和系统音频。是否继续？"
+                    alert.informativeText = "无法录制麦克风音频，将仅录制\(recordingFallbackDescription)。是否继续？"
                     alert.alertStyle = .warning
                     alert.addButton(withTitle: "继续")
                     alert.addButton(withTitle: "取消")
@@ -749,10 +757,16 @@ class CaptureManager: ObservableObject {
                 }
                 // 禁用麦克风录制
                 UserDefaults.standard.set(false, forKey: "includeMicrophone")
-            } else {
+            } else if microphoneDeviceAvailable {
                 print("✓ 麦克风权限已授予")
             }
         }
+        let audioSources = RecordingAudioSourceSelection.resolved(
+            includeSystemAudio: includeSystemAudioPreference,
+            includeMicrophonePreference: includeMicrophonePreference,
+            microphoneDeviceAvailable: microphoneDeviceAvailable,
+            microphonePermissionGranted: microphonePermissionGranted
+        )
 
         let selectedRecordingRegion: CGRect?
         if captureMode == .region {
@@ -830,9 +844,8 @@ class CaptureManager: ObservableObject {
             configuration.sourceRect = sourceRect
         }
 
-        // 根据用户设置决定是否录制音频
-        let includeSystemAudio = UserDefaults.standard.bool(forKey: "includeSystemAudio")
-        let includeMicrophone = UserDefaults.standard.bool(forKey: "includeMicrophone")
+        let includeSystemAudio = audioSources.includeSystemAudio
+        let includeMicrophone = audioSources.includeMicrophone
 
         configuration.capturesAudio = includeSystemAudio
         configuration.captureMicrophone = includeMicrophone
@@ -910,6 +923,8 @@ class CaptureManager: ObservableObject {
 
         let includeSystemAudio = UserDefaults.standard.bool(forKey: "includeSystemAudio")
         let includeMicrophonePreference = UserDefaults.standard.bool(forKey: "includeMicrophone")
+        var microphoneDeviceAvailable = !includeMicrophonePreference
+        var microphonePermissionGranted = !includeMicrophonePreference
 
         guard includeSystemAudio || includeMicrophonePreference else {
             throw CaptureError.recordingFailed("请至少开启系统音频或麦克风录音")
@@ -917,9 +932,13 @@ class CaptureManager: ObservableObject {
 
         if includeMicrophonePreference {
             let permissionManager = PermissionManager()
-            let deviceAvailable = permissionManager.checkMicrophoneDeviceAvailable()
+            microphoneDeviceAvailable = permissionManager.checkMicrophoneDeviceAvailable()
 
-            if !deviceAvailable {
+            if !microphoneDeviceAvailable {
+                guard includeSystemAudio else {
+                    throw CaptureError.noMicrophoneAvailable
+                }
+
                 let shouldContinue = await MainActor.run {
                     let alert = NSAlert()
                     alert.messageText = "未检测到麦克风"
@@ -935,8 +954,14 @@ class CaptureManager: ObservableObject {
                 }
             }
 
-            let hasPermission = await permissionManager.requestMicrophonePermissionAsync()
-            if !hasPermission {
+            if microphoneDeviceAvailable {
+                microphonePermissionGranted = await permissionManager.requestMicrophonePermissionAsync()
+            }
+            if microphoneDeviceAvailable && !microphonePermissionGranted {
+                guard includeSystemAudio else {
+                    throw CaptureError.microphonePermissionDenied
+                }
+
                 let shouldContinue = await MainActor.run {
                     let alert = NSAlert()
                     alert.messageText = "麦克风权限未授予"
@@ -954,8 +979,13 @@ class CaptureManager: ObservableObject {
             }
         }
 
-        let includeMicrophone = UserDefaults.standard.bool(forKey: "includeMicrophone")
-        guard includeSystemAudio || includeMicrophone else {
+        let audioSources = RecordingAudioSourceSelection.resolved(
+            includeSystemAudio: includeSystemAudio,
+            includeMicrophonePreference: includeMicrophonePreference,
+            microphoneDeviceAvailable: microphoneDeviceAvailable,
+            microphonePermissionGranted: microphonePermissionGranted
+        )
+        guard audioSources.hasAnySource else {
             throw CaptureError.recordingFailed("没有可用的录音来源")
         }
 
@@ -988,16 +1018,16 @@ class CaptureManager: ObservableObject {
         configuration.width = 2
         configuration.height = 2
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: 1)
-        configuration.capturesAudio = includeSystemAudio
-        configuration.captureMicrophone = includeMicrophone
+        configuration.capturesAudio = audioSources.includeSystemAudio
+        configuration.captureMicrophone = audioSources.includeMicrophone
         configuration.queueDepth = 3
 
         recordingURL = outputURL
         streamOutput = CaptureStreamOutput(
             outputURL: outputURL,
             fileType: .m4a,
-            includeSystemAudio: includeSystemAudio,
-            includeMicrophone: includeMicrophone,
+            includeSystemAudio: audioSources.includeSystemAudio,
+            includeMicrophone: audioSources.includeMicrophone,
             frameRate: 1,
             quality: "音频",
             audioOnly: true
@@ -1005,12 +1035,12 @@ class CaptureManager: ObservableObject {
 
         stream = SCStream(filter: filter, configuration: configuration, delegate: streamOutput)
 
-        if includeSystemAudio {
+        if audioSources.includeSystemAudio {
             try stream?.addStreamOutput(streamOutput!, type: .audio, sampleHandlerQueue: captureQueue)
             logMicrophone("✓ 已添加独立录音系统音频流输出", level: "SUCCESS")
         }
 
-        if includeMicrophone {
+        if audioSources.includeMicrophone {
             try stream?.addStreamOutput(streamOutput!, type: .microphone, sampleHandlerQueue: captureQueue)
             logMicrophone("✓ 已添加独立录音麦克风流输出", level: "SUCCESS")
         }

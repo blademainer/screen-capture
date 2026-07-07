@@ -1282,7 +1282,7 @@ class CaptureManager: ObservableObject {
         alert.messageText = audioOnly ? "开始录音前确认" : "开始录屏前确认"
         alert.informativeText = audioOnly
             ? "确认系统音频、麦克风和开录延时。"
-            : "确认清晰度、帧数、开录延时、麦克风和导出格式。"
+            : "确认清晰度、帧数、开录延时、系统音频、麦克风和导出格式。"
         alert.alertStyle = .informational
         alert.accessoryView = settingsView
         alert.addButton(withTitle: audioOnly ? "开始录音" : "开始录制")

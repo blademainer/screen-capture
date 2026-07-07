@@ -17,6 +17,8 @@ struct EditingWindowContentView: View {
     @State private var showingColorPicker = false
     @State private var isToolbarVisible = true
     @State private var isActionBarVisible = true
+    @AppStorage("annotationDefaultColorHex") private var annotationDefaultColorHex = AnnotationStylePreset.professional.colorHex
+    @AppStorage("annotationDefaultLineWidth") private var annotationDefaultLineWidth = AnnotationStylePreset.professional.lineWidth
     @AppStorage("annotationTextOutlined") private var textOutlined = false
     
     var body: some View {
@@ -53,6 +55,10 @@ struct EditingWindowContentView: View {
             }
         }
         .background(Color(NSColor.windowBackgroundColor))
+        .onAppear {
+            selectedColor = .annotationDefault(hex: annotationDefaultColorHex)
+            lineWidth = CGFloat(annotationDefaultLineWidth)
+        }
     }
     
     // MARK: - Editing Toolbar

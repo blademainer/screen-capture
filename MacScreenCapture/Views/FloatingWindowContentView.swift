@@ -17,6 +17,8 @@ struct FloatingWindowContentView: View {
     @State private var showingColorPicker = false
     @State private var isToolbarVisible = true
     @State private var isActionBarVisible = true
+    @AppStorage("annotationDefaultColorHex") private var annotationDefaultColorHex = AnnotationStylePreset.professional.colorHex
+    @AppStorage("annotationDefaultLineWidth") private var annotationDefaultLineWidth = AnnotationStylePreset.professional.lineWidth
     @AppStorage("annotationTextOutlined") private var textOutlined = false
 
     var body: some View {
@@ -42,6 +44,10 @@ struct FloatingWindowContentView: View {
         )
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+        .onAppear {
+            selectedColor = .annotationDefault(hex: annotationDefaultColorHex)
+            lineWidth = CGFloat(annotationDefaultLineWidth)
+        }
     }
 
     // MARK: - Title Bar

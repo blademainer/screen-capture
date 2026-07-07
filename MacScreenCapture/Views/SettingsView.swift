@@ -38,6 +38,9 @@ struct SettingsView: View {
     @AppStorage("deviceFrameBodyColorHex") private var deviceFrameBodyColorHex = "#141414"
     @AppStorage("deviceFrameShadowColorHex") private var deviceFrameShadowColorHex = "#000000"
     @AppStorage("numberedAnnotationStart") private var numberedAnnotationStart = 1
+    @AppStorage("annotationStylePreset") private var annotationStylePreset = AnnotationStylePreset.professional.rawValue
+    @AppStorage("annotationDefaultColorHex") private var annotationDefaultColorHex = AnnotationStylePreset.professional.colorHex
+    @AppStorage("annotationDefaultLineWidth") private var annotationDefaultLineWidth = AnnotationStylePreset.professional.lineWidth
     @AppStorage("annotationTextOutlined") private var annotationTextOutlined = false
     @AppStorage("colorCodeFormat") private var colorCodeFormat = "#HEX"
     @AppStorage("customColorCodeTemplate") private var customColorCodeTemplate = "{hex}"
@@ -291,7 +294,36 @@ struct SettingsView: View {
                         .font(.subheadline)
                         .fontWeight(.medium)
 
+                    HStack {
+                        Text("样式模板:")
+                        Spacer()
+                        Picker("样式模板", selection: $annotationStylePreset) {
+                            ForEach(AnnotationStylePreset.allCases, id: \.rawValue) { preset in
+                                Text(preset.displayName).tag(preset.rawValue)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(width: 120)
+                        .onChange(of: annotationStylePreset) { presetValue in
+                            applyAnnotationPreset(presetValue)
+                        }
+                    }
+
                     Stepper("数字序号起始值: \(numberedAnnotationStart)", value: $numberedAnnotationStart, in: 1...999)
+                    HStack {
+                        Text("默认颜色:")
+                        Spacer()
+                        TextField("#FF3B30", text: $annotationDefaultColorHex)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 110)
+                    }
+                    HStack {
+                        Text("默认粗细:")
+                        Slider(value: $annotationDefaultLineWidth, in: 1...10, step: 1)
+                            .frame(width: 140)
+                        Text("\(Int(annotationDefaultLineWidth))")
+                            .foregroundColor(.secondary)
+                    }
                     Toggle("文字和序号启用描边", isOn: $annotationTextOutlined)
                 }
                 .padding(.top, 4)
@@ -629,6 +661,13 @@ struct SettingsView: View {
         if panel.runModal() == .OK, let url = panel.url {
             openAfterCaptureAppPath = url.path
         }
+    }
+
+    private func applyAnnotationPreset(_ presetValue: String) {
+        guard let preset = AnnotationStylePreset(rawValue: presetValue) else { return }
+        annotationDefaultColorHex = preset.colorHex
+        annotationDefaultLineWidth = preset.lineWidth
+        annotationTextOutlined = preset.textOutlined
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

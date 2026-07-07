@@ -17,6 +17,14 @@ struct MenuBarView: View {
             // 快速截图选项
             Group {
                 MenuButton(
+                    title: "iShot 标准截图",
+                    icon: "camera.viewfinder",
+                    shortcut: "⌃⌘A"
+                ) {
+                    quickScreenshot(.region)
+                }
+
+                MenuButton(
                     title: "全屏截图",
                     icon: "display",
                     shortcut: "⌘⇧S"

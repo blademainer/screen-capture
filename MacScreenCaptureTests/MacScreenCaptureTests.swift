@@ -55,6 +55,7 @@ final class MacScreenCaptureTests: XCTestCase {
 
     func testIShotStyleDefaultHotKeysAreAvailableAtLaunch() throws {
         let expectedHotKeys: [HotKeyAction: (keyCode: UInt32, modifiers: UInt32, display: String)] = [
+            .standardScreenshot: (UInt32(kVK_ANSI_A), UInt32(cmdKey | controlKey), "⌃⌘A"),
             .fullScreenshot: (UInt32(kVK_ANSI_S), UInt32(cmdKey | shiftKey), "⌘⇧S"),
             .regionScreenshot: (UInt32(kVK_ANSI_A), UInt32(cmdKey | shiftKey), "⌘⇧A"),
             .windowScreenshot: (UInt32(kVK_ANSI_W), UInt32(cmdKey | shiftKey), "⌘⇧W"),
@@ -142,6 +143,7 @@ final class MacScreenCaptureTests: XCTestCase {
     func testMenuBarExposesIShotAndProActions() throws {
         let source = try repositoryFileContents("MacScreenCapture/Views/MenuBarView.swift")
         let expectedEntries = [
+            ("iShot 标准截图", "⌃⌘A", "quickScreenshot(.region)"),
             ("全屏截图", "⌘⇧S", "quickScreenshot(.fullScreen)"),
             ("窗口截图", "⌘⇧W", "quickScreenshot(.window)"),
             ("区域截图", "⌘⇧A", "quickScreenshot(.region)"),

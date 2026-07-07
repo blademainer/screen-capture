@@ -19,10 +19,10 @@ struct HotKeyConfig: Codable, Equatable {
         var result = ""
         
         // 修饰键
+        if modifiers & UInt32(controlKey) != 0 { result += "⌃" }
         if modifiers & UInt32(cmdKey) != 0 { result += "⌘" }
         if modifiers & UInt32(shiftKey) != 0 { result += "⇧" }
         if modifiers & UInt32(optionKey) != 0 { result += "⌥" }
-        if modifiers & UInt32(controlKey) != 0 { result += "⌃" }
         
         // 主键
         result += keyCodeToString(keyCode)
@@ -100,6 +100,7 @@ struct HotKeyConfig: Codable, Equatable {
 
 // MARK: - HotKey Actions
 enum HotKeyAction: String, CaseIterable, Codable {
+    case standardScreenshot = "standard_screenshot"
     case fullScreenshot = "full_screenshot"
     case regionScreenshot = "region_screenshot"
     case windowScreenshot = "window_screenshot"
@@ -118,6 +119,8 @@ enum HotKeyAction: String, CaseIterable, Codable {
     
     var defaultConfig: HotKeyConfig {
         switch self {
+        case .standardScreenshot:
+            return HotKeyConfig(keyCode: 0, modifiers: UInt32(cmdKey | controlKey), isEnabled: true, description: "iShot 标准截图")
         case .fullScreenshot:
             return HotKeyConfig(keyCode: 1, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "全屏截图")
         case .regionScreenshot:
@@ -153,6 +156,7 @@ enum HotKeyAction: String, CaseIterable, Codable {
     
     var localizedDescription: String {
         switch self {
+        case .standardScreenshot: return "iShot 标准截图"
         case .fullScreenshot: return "全屏截图"
         case .regionScreenshot: return "区域截图"
         case .windowScreenshot: return "窗口截图"
@@ -419,6 +423,8 @@ class HotKeyManager: ObservableObject {
             let captureManager = CaptureManager.shared
             
             switch action {
+            case .standardScreenshot:
+                await captureManager.captureRegion()
             case .fullScreenshot:
                 await captureManager.captureFullScreen()
             case .regionScreenshot:

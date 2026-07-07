@@ -237,6 +237,7 @@ struct HotKeyRow: View {
     
     private func iconForAction(_ action: HotKeyAction) -> String {
         switch action {
+        case .standardScreenshot: return "camera.viewfinder"
         case .fullScreenshot: return "rectangle.dashed"
         case .regionScreenshot: return "rectangle.dashed.badge.record"
         case .windowScreenshot: return "macwindow"

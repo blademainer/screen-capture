@@ -118,7 +118,7 @@ enum HotKeyAction: String, CaseIterable, Codable {
         case .startRecording:
             return HotKeyConfig(keyCode: 13, modifiers: UInt32(optionKey), isEnabled: true, description: "开始录制")
         case .stopRecording:
-            return HotKeyConfig(keyCode: 17, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "停止录制")
+            return HotKeyConfig(keyCode: 15, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "停止录制")
         case .scrollScreenshot:
             return HotKeyConfig(keyCode: 1, modifiers: UInt32(cmdKey | optionKey), isEnabled: true, description: "滚动截图")
         }
@@ -209,6 +209,17 @@ class HotKeyManager: ObservableObject {
 
         if hotKeys[.startRecording] == oldDefault {
             hotKeys[.startRecording] = HotKeyAction.startRecording.defaultConfig
+        }
+
+        let oldStopDefault = HotKeyConfig(
+            keyCode: 17,
+            modifiers: UInt32(cmdKey | shiftKey),
+            isEnabled: true,
+            description: "停止录制"
+        )
+
+        if hotKeys[.stopRecording] == oldStopDefault {
+            hotKeys[.stopRecording] = HotKeyAction.stopRecording.defaultConfig
         }
     }
     

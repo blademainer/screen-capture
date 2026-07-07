@@ -11,6 +11,7 @@ import SwiftUI
 import AVFoundation
 import CoreGraphics
 import AppKit
+import ApplicationServices
 @preconcurrency import Vision
 import NaturalLanguage
 
@@ -88,6 +89,12 @@ class CaptureManager: ObservableObject {
     private struct ScrollingCaptureTarget {
         let display: SCDisplay
         let cropRect: CGRect
+        let source: ScrollingCaptureTargetSource
+    }
+
+    private enum ScrollingCaptureTargetSource {
+        case accessibilityContentArea
+        case window
     }
 
     // 线程安全的队列
@@ -1201,6 +1208,7 @@ class CaptureManager: ObservableObject {
             UserDefaults.standard.set(0.8, forKey: "scrollingCaptureDelay")
             UserDefaults.standard.set(12, forKey: "scrollingCaptureLines")
             UserDefaults.standard.set(true, forKey: "scrollingCaptureTrimOverlap")
+            UserDefaults.standard.set(true, forKey: "scrollingCaptureDetectContentArea")
             UserDefaults.standard.set(true, forKey: "scrollingCaptureStopWhenUnchanged")
             UserDefaults.standard.set("#HEX", forKey: "colorCodeFormat")
             UserDefaults.standard.set(false, forKey: "screenshotRoundedCorners")
@@ -1731,12 +1739,181 @@ class CaptureManager: ObservableObject {
             }
 
             let displayBounds = CGDisplayBounds(display.displayID)
-            let cropRect = windowBounds.intersection(displayBounds)
-            guard cropRect.width > 80, cropRect.height > 80 else { continue }
-            return ScrollingCaptureTarget(display: display, cropRect: cropRect)
+            let windowCropRect = windowBounds.intersection(displayBounds)
+            guard windowCropRect.width > 80, windowCropRect.height > 80 else { continue }
+
+            if let contentCropRect = scrollingContentAreaUnderMouse(
+                ownerPID: ownerPID,
+                mouseLocation: mouseLocation,
+                windowBounds: windowBounds,
+                displayBounds: displayBounds
+            ) {
+                return ScrollingCaptureTarget(
+                    display: display,
+                    cropRect: contentCropRect,
+                    source: .accessibilityContentArea
+                )
+            }
+
+            return ScrollingCaptureTarget(
+                display: display,
+                cropRect: windowCropRect,
+                source: .window
+            )
         }
 
         return nil
+    }
+
+    private func scrollingContentAreaUnderMouse(
+        ownerPID: Int,
+        mouseLocation: CGPoint,
+        windowBounds: CGRect,
+        displayBounds: CGRect
+    ) -> CGRect? {
+        guard UserDefaults.standard.object(forKey: "scrollingCaptureDetectContentArea") as? Bool ?? true,
+              AXIsProcessTrusted() else {
+            return nil
+        }
+
+        let appElement = AXUIElementCreateApplication(pid_t(ownerPID))
+        var element: AXUIElement?
+        let hitTestResult = AXUIElementCopyElementAtPosition(
+            appElement,
+            Float(mouseLocation.x),
+            Float(mouseLocation.y),
+            &element
+        )
+
+        guard hitTestResult == .success, let element else {
+            return nil
+        }
+
+        let candidates = accessibilityAncestors(startingAt: element, limit: 14)
+        let rolePriority = [
+            kAXScrollAreaRole as String: 0,
+            "AXWebArea": 1,
+            kAXTableRole as String: 2,
+            kAXOutlineRole as String: 2,
+            kAXListRole as String: 3,
+            kAXTextAreaRole as String: 4
+        ]
+
+        let rankedFrames: [(priority: Int, area: CGFloat, frame: CGRect)] = candidates.compactMap { candidate in
+            guard let role = accessibilityStringAttribute(kAXRoleAttribute, from: candidate),
+                  let priority = rolePriority[role],
+                  let frame = accessibilityFrame(of: candidate) else {
+                return nil
+            }
+
+            let clippedFrame = frame
+                .intersection(windowBounds)
+                .intersection(displayBounds)
+
+            guard clippedFrame.width >= 160,
+                  clippedFrame.height >= 120,
+                  clippedFrame.contains(mouseLocation) else {
+                return nil
+            }
+
+            return (priority, clippedFrame.width * clippedFrame.height, clippedFrame)
+        }
+
+        return rankedFrames
+            .sorted { left, right in
+                if left.priority != right.priority {
+                    return left.priority < right.priority
+                }
+                return left.area < right.area
+            }
+            .first?
+            .frame
+    }
+
+    private func accessibilityAncestors(startingAt element: AXUIElement, limit: Int) -> [AXUIElement] {
+        var elements: [AXUIElement] = []
+        var current: AXUIElement? = element
+
+        for _ in 0..<limit {
+            guard let element = current else { break }
+            elements.append(element)
+            current = accessibilityElementAttribute(kAXParentAttribute, from: element)
+        }
+
+        return elements
+    }
+
+    private func accessibilityFrame(of element: AXUIElement) -> CGRect? {
+        guard let position = accessibilityCGPointAttribute(kAXPositionAttribute, from: element),
+              let size = accessibilityCGSizeAttribute(kAXSizeAttribute, from: element) else {
+            return nil
+        }
+
+        return CGRect(origin: position, size: size)
+    }
+
+    private func accessibilityElementAttribute(_ attribute: String, from element: AXUIElement) -> AXUIElement? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let value,
+              CFGetTypeID(value) == AXUIElementGetTypeID() else {
+            return nil
+        }
+
+        return (value as! AXUIElement)
+    }
+
+    private func accessibilityStringAttribute(_ attribute: String, from element: AXUIElement) -> String? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else {
+            return nil
+        }
+
+        return value as? String
+    }
+
+    private func accessibilityCGPointAttribute(_ attribute: String, from element: AXUIElement) -> CGPoint? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let value,
+              CFGetTypeID(value) == AXValueGetTypeID() else {
+            return nil
+        }
+
+        let axValue = value as! AXValue
+        guard
+              AXValueGetType(axValue) == .cgPoint else {
+            return nil
+        }
+
+        var point = CGPoint.zero
+        guard AXValueGetValue(axValue, .cgPoint, &point) else {
+            return nil
+        }
+
+        return point
+    }
+
+    private func accessibilityCGSizeAttribute(_ attribute: String, from element: AXUIElement) -> CGSize? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let value,
+              CFGetTypeID(value) == AXValueGetTypeID() else {
+            return nil
+        }
+
+        let axValue = value as! AXValue
+        guard
+              AXValueGetType(axValue) == .cgSize else {
+            return nil
+        }
+
+        var size = CGSize.zero
+        guard AXValueGetValue(axValue, .cgSize, &size) else {
+            return nil
+        }
+
+        return size
     }
 
     private func cropDisplayImage(_ image: NSImage, to quartzRect: CGRect, in display: SCDisplay) -> NSImage {

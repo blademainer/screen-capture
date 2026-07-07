@@ -35,6 +35,7 @@ struct MacScreenCaptureApp: App {
             "multiWindowDesktopBackdrop": true,
             "scrollingCaptureSlices": 30,
             "scrollingCaptureCropToWindow": true,
+            "scrollingCaptureDetectContentArea": true,
             "scrollingCaptureStopWhenUnchanged": true,
             "deviceFrameBezelWidth": 42.0,
             "deviceFramePadding": 48.0,

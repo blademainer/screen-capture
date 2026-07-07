@@ -54,6 +54,18 @@ final class MacScreenCaptureTests: XCTestCase {
     }
 
     func testIShotStyleDefaultHotKeysAreAvailableAtLaunch() throws {
+        XCTAssertEqual(HotKeyAction.fullScreenshot.defaultConfig.keyCode, UInt32(kVK_ANSI_S))
+        XCTAssertEqual(HotKeyAction.fullScreenshot.defaultConfig.modifiers, UInt32(cmdKey | shiftKey))
+        XCTAssertEqual(HotKeyAction.fullScreenshot.defaultConfig.displayString, "⌘⇧S")
+
+        XCTAssertEqual(HotKeyAction.windowScreenshot.defaultConfig.keyCode, UInt32(kVK_ANSI_W))
+        XCTAssertEqual(HotKeyAction.windowScreenshot.defaultConfig.modifiers, UInt32(cmdKey | shiftKey))
+        XCTAssertEqual(HotKeyAction.windowScreenshot.defaultConfig.displayString, "⌘⇧W")
+
+        XCTAssertEqual(HotKeyAction.regionScreenshot.defaultConfig.keyCode, UInt32(kVK_ANSI_A))
+        XCTAssertEqual(HotKeyAction.regionScreenshot.defaultConfig.modifiers, UInt32(cmdKey | shiftKey))
+        XCTAssertEqual(HotKeyAction.regionScreenshot.defaultConfig.displayString, "⌘⇧A")
+
         XCTAssertEqual(HotKeyAction.startRecording.defaultConfig.keyCode, UInt32(kVK_ANSI_W))
         XCTAssertEqual(HotKeyAction.startRecording.defaultConfig.modifiers, UInt32(optionKey))
         XCTAssertTrue(HotKeyAction.startRecording.defaultConfig.isEnabled)

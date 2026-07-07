@@ -121,9 +121,9 @@ enum HotKeyAction: String, CaseIterable, Codable {
         case .fullScreenshot:
             return HotKeyConfig(keyCode: 1, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "全屏截图")
         case .regionScreenshot:
-            return HotKeyConfig(keyCode: 2, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "区域截图")
+            return HotKeyConfig(keyCode: 0, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "区域截图")
         case .windowScreenshot:
-            return HotKeyConfig(keyCode: 3, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "窗口截图")
+            return HotKeyConfig(keyCode: 13, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "窗口截图")
         case .delayedScreenshot:
             return HotKeyConfig(keyCode: 37, modifiers: UInt32(cmdKey | optionKey), isEnabled: true, description: "延时截图")
         case .multiWindowScreenshot:
@@ -236,6 +236,7 @@ class HotKeyManager: ObservableObject {
             }
         }
         migrateIShotRecordingHotKeyIfNeeded()
+        migrateIShotScreenshotHotKeysIfNeeded()
         saveConfiguration()
     }
 
@@ -260,6 +261,30 @@ class HotKeyManager: ObservableObject {
 
         if hotKeys[.stopRecording] == oldStopDefault {
             hotKeys[.stopRecording] = HotKeyAction.stopRecording.defaultConfig
+        }
+    }
+
+    private func migrateIShotScreenshotHotKeysIfNeeded() {
+        let oldRegionDefault = HotKeyConfig(
+            keyCode: 2,
+            modifiers: UInt32(cmdKey | shiftKey),
+            isEnabled: true,
+            description: "区域截图"
+        )
+
+        if hotKeys[.regionScreenshot] == oldRegionDefault {
+            hotKeys[.regionScreenshot] = HotKeyAction.regionScreenshot.defaultConfig
+        }
+
+        let oldWindowDefault = HotKeyConfig(
+            keyCode: 3,
+            modifiers: UInt32(cmdKey | shiftKey),
+            isEnabled: true,
+            description: "窗口截图"
+        )
+
+        if hotKeys[.windowScreenshot] == oldWindowDefault {
+            hotKeys[.windowScreenshot] = HotKeyAction.windowScreenshot.defaultConfig
         }
     }
     
@@ -471,7 +496,7 @@ class HotKeyManager: ObservableObject {
     // MARK: - HotKey Registration
     func registerHotKey(_ action: HotKeyAction, config: HotKeyConfig) -> Bool {
         // 检查配置是否有效
-        guard let keyCode = config.keyCode, keyCode > 0 else {
+        guard let keyCode = config.keyCode else {
             print("Invalid or missing keyCode for action \(action)")
             // 保存配置但不注册快捷键
             hotKeys[action] = config

@@ -29,6 +29,7 @@ struct RecordingAudioDiagnostics: Sendable {
     let audioTrackCount: Int
     let fileSize: Int64
     let assetWriterSucceeded: Bool
+    let audioOnly: Bool
 
     var requestedAnyAudio: Bool {
         requestedSystemAudio || requestedMicrophone
@@ -36,6 +37,12 @@ struct RecordingAudioDiagnostics: Sendable {
 
     var requestedAudioSourceCount: Int {
         (requestedSystemAudio ? 1 : 0) + (requestedMicrophone ? 1 : 0)
+    }
+
+    var hasOutputIssue: Bool {
+        if !assetWriterSucceeded || fileSize <= 0 { return true }
+        if !audioOnly && (videoFrameCount == 0 || videoTrackCount == 0) { return true }
+        return false
     }
 
     var hasAudioIssue: Bool {
@@ -61,6 +68,22 @@ struct RecordingAudioDiagnostics: Sendable {
             return "静音录制"
         }
         return parts.joined(separator: "，")
+    }
+
+    var outputIssueText: String {
+        if !assetWriterSucceeded {
+            return "文件写入未成功"
+        }
+        if fileSize <= 0 {
+            return "输出文件为空"
+        }
+        if !audioOnly && videoTrackCount == 0 {
+            return "未检测到视频轨道"
+        }
+        if !audioOnly && videoFrameCount == 0 {
+            return "未写入视频帧"
+        }
+        return "输出文件需检查"
     }
 }
 
@@ -1227,7 +1250,12 @@ class CaptureManager: ObservableObject {
 
     @MainActor
     private func showRecordingCompletionNotification(diagnostics: RecordingAudioDiagnostics, duration: TimeInterval, audioOnly: Bool) {
-        if diagnostics.hasAudioIssue {
+        if diagnostics.hasOutputIssue {
+            NotificationManager.shared.showErrorNotification(
+                title: audioOnly ? "录音完成，文件需检查" : "录制完成，文件需检查",
+                message: "\(diagnostics.outputURL.lastPathComponent)：\(diagnostics.outputIssueText)"
+            )
+        } else if diagnostics.hasAudioIssue {
             let missingAudioMessage: String
             if diagnostics.audioTrackCount < diagnostics.requestedAudioSourceCount {
                 missingAudioMessage = "音频轨道不完整：\(diagnostics.audioTrackCount)/\(diagnostics.requestedAudioSourceCount)"
@@ -4332,7 +4360,8 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
             videoTrackCount: videoTrackCount,
             audioTrackCount: audioTrackCount,
             fileSize: fileSize,
-            assetWriterSucceeded: assetWriterSucceeded
+            assetWriterSucceeded: assetWriterSucceeded,
+            audioOnly: audioOnly
         )
     }
 
@@ -4424,6 +4453,7 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
         finishCompletions.removeAll()
 
         logMicrophone("========== 录制音频验收 ==========")
+        logMicrophone("输出文件状态: \(diagnostics.hasOutputIssue ? diagnostics.outputIssueText : "正常")", level: diagnostics.hasOutputIssue ? "ERROR" : "SUCCESS")
         logMicrophone("请求系统音频: \(diagnostics.requestedSystemAudio)")
         logMicrophone("请求麦克风: \(diagnostics.requestedMicrophone)")
         logMicrophone("文件音频轨道数量: \(diagnostics.audioTrackCount)/\(diagnostics.requestedAudioSourceCount)", level: diagnostics.hasAudioIssue ? "ERROR" : "SUCCESS")

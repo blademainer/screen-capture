@@ -2667,12 +2667,36 @@ class CaptureManager: ObservableObject {
     private func translateWithMyMemory(_ text: String, targetLanguage: String) async throws -> String {
         let sourceLanguage = detectedTranslationLanguage(for: text)
         let mappedTargetLanguage = myMemoryLanguageCode(for: targetLanguage)
-        let queryText = text.truncatedToUTF8ByteCount(480)
+        let chunks = text.utf8Chunks(maxByteCount: 480)
+        guard !chunks.isEmpty else {
+            throw CaptureError.failedToTranslate
+        }
 
+        var translatedChunks: [String] = []
+        for chunk in chunks {
+            translatedChunks.append(try await translateMyMemoryChunk(
+                chunk,
+                sourceLanguage: sourceLanguage,
+                targetLanguage: mappedTargetLanguage
+            ))
+        }
+
+        let translated = translatedChunks
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !translated.isEmpty else {
+            throw CaptureError.failedToTranslate
+        }
+
+        return translated
+    }
+
+    private func translateMyMemoryChunk(_ text: String, sourceLanguage: String, targetLanguage: String) async throws -> String {
         var components = URLComponents(string: "https://api.mymemory.translated.net/get")
         components?.queryItems = [
-            URLQueryItem(name: "q", value: queryText),
-            URLQueryItem(name: "langpair", value: "\(sourceLanguage)|\(mappedTargetLanguage)")
+            URLQueryItem(name: "q", value: text),
+            URLQueryItem(name: "langpair", value: "\(sourceLanguage)|\(targetLanguage)")
         ]
 
         guard let url = components?.url else {
@@ -3006,21 +3030,40 @@ private final class RecordingPreflightSettingsView: NSView {
 }
 
 private extension String {
-    func truncatedToUTF8ByteCount(_ maxByteCount: Int) -> String {
-        guard maxByteCount > 0 else { return "" }
-        var result = ""
-        var byteCount = 0
+    func utf8Chunks(maxByteCount: Int) -> [String] {
+        guard maxByteCount > 0 else { return [] }
+
+        var chunks: [String] = []
+        var current = ""
+        var currentByteCount = 0
 
         for character in self {
-            let characterByteCount = String(character).utf8.count
-            guard byteCount + characterByteCount <= maxByteCount else {
-                break
+            let fragment = String(character)
+            let fragmentByteCount = fragment.utf8.count
+
+            if currentByteCount + fragmentByteCount > maxByteCount, !current.isEmpty {
+                chunks.append(current.trimmingCharacters(in: .whitespacesAndNewlines))
+                current = ""
+                currentByteCount = 0
             }
-            result.append(character)
-            byteCount += characterByteCount
+
+            current.append(character)
+            currentByteCount += fragmentByteCount
+
+            if character.isNewline || character.isWhitespace,
+               currentByteCount >= maxByteCount * 3 / 4 {
+                chunks.append(current.trimmingCharacters(in: .whitespacesAndNewlines))
+                current = ""
+                currentByteCount = 0
+            }
         }
 
-        return result
+        let tail = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !tail.isEmpty {
+            chunks.append(tail)
+        }
+
+        return chunks.filter { !$0.isEmpty }
     }
 }
 

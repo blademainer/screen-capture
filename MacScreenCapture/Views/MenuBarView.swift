@@ -65,15 +65,15 @@ struct MenuBarView: View {
                     captureManager.pickScreenColor()
                 }
 
-                MenuButton(title: "OCR 识别", icon: "text.viewfinder") {
+                MenuButton(title: "OCR 识别", icon: "text.viewfinder", shortcut: "⌘⌥O") {
                     quickOCR()
                 }
 
-                MenuButton(title: "截图翻译", icon: "character.book.closed") {
+                MenuButton(title: "截图翻译", icon: "character.book.closed", shortcut: "⌘⌥T") {
                     quickTranslate()
                 }
 
-                MenuButton(title: "贴图", icon: "pin") {
+                MenuButton(title: "贴图", icon: "pin", shortcut: "⌘⌥P") {
                     quickPinnedScreenshot()
                 }
 

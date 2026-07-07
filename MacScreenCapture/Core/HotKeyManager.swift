@@ -109,6 +109,9 @@ enum HotKeyAction: String, CaseIterable, Codable {
     case stopRecording = "stop_recording"
     case scrollScreenshot = "scroll_screenshot"
     case pickColor = "pick_color"
+    case pinnedScreenshot = "pinned_screenshot"
+    case ocrScreenshot = "ocr_screenshot"
+    case translateScreenshot = "translate_screenshot"
     
     var defaultConfig: HotKeyConfig {
         switch self {
@@ -130,6 +133,12 @@ enum HotKeyAction: String, CaseIterable, Codable {
             return HotKeyConfig(keyCode: 1, modifiers: UInt32(cmdKey | optionKey), isEnabled: true, description: "滚动截图")
         case .pickColor:
             return HotKeyConfig(keyCode: 8, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "取色")
+        case .pinnedScreenshot:
+            return HotKeyConfig(keyCode: 35, modifiers: UInt32(cmdKey | optionKey), isEnabled: true, description: "贴图")
+        case .ocrScreenshot:
+            return HotKeyConfig(keyCode: 31, modifiers: UInt32(cmdKey | optionKey), isEnabled: true, description: "OCR 识别")
+        case .translateScreenshot:
+            return HotKeyConfig(keyCode: 17, modifiers: UInt32(cmdKey | optionKey), isEnabled: true, description: "截图翻译")
         }
     }
     
@@ -144,6 +153,9 @@ enum HotKeyAction: String, CaseIterable, Codable {
         case .stopRecording: return "停止录制"
         case .scrollScreenshot: return "滚动截图"
         case .pickColor: return "取色"
+        case .pinnedScreenshot: return "贴图"
+        case .ocrScreenshot: return "OCR 识别"
+        case .translateScreenshot: return "截图翻译"
         }
     }
 }
@@ -408,6 +420,24 @@ class HotKeyManager: ObservableObject {
                 await captureManager.captureScrollingWindow()
             case .pickColor:
                 captureManager.pickScreenColor()
+            case .pinnedScreenshot:
+                do {
+                    _ = try await captureManager.capturePinnedRegion()
+                } catch {
+                    print("贴图失败: \(error)")
+                }
+            case .ocrScreenshot:
+                do {
+                    _ = try await captureManager.captureRegionAndRecognizeText()
+                } catch {
+                    print("OCR 失败: \(error)")
+                }
+            case .translateScreenshot:
+                do {
+                    _ = try await captureManager.captureRegionAndTranslate()
+                } catch {
+                    print("截图翻译失败: \(error)")
+                }
             }
         }
     }

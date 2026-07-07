@@ -246,6 +246,9 @@ struct HotKeyRow: View {
         case .stopRecording: return "stop.circle"
         case .scrollScreenshot: return "scroll"
         case .pickColor: return "eyedropper"
+        case .pinnedScreenshot: return "pin"
+        case .ocrScreenshot: return "text.viewfinder"
+        case .translateScreenshot: return "character.book.closed"
         }
     }
     

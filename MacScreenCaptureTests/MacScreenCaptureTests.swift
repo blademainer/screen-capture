@@ -320,6 +320,37 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(Int(trimmed.size.height), 128)
     }
 
+    func testScrollingImageStitcherPreservesPixelsWithoutWatermark() throws {
+        let first = makeSolidImage(width: 12, height: 5, color: .systemRed)
+        let second = makeSolidImage(width: 12, height: 4, color: .systemBlue)
+        let stitched = ScrollingImageStitcher.stitchImagesVertically([first, second], trimOverlap: false)
+
+        XCTAssertEqual(Int(stitched.size.width), 12)
+        XCTAssertEqual(Int(stitched.size.height), 9)
+
+        let pixels = try rgbaPixels(in: stitched)
+        var containsRed = false
+        var containsBlue = false
+        for y in 0..<pixels.height {
+            for x in 0..<pixels.width {
+                let offset = (y * pixels.width + x) * 4
+                let pixel = (
+                    red: Int(pixels.buffer[offset]),
+                    green: Int(pixels.buffer[offset + 1]),
+                    blue: Int(pixels.buffer[offset + 2]),
+                    alpha: Int(pixels.buffer[offset + 3])
+                )
+                let isRedSlice = pixel.red > 180 && pixel.green < 120 && pixel.blue < 120 && pixel.alpha > 240
+                let isBlueSlice = pixel.blue > 180 && pixel.red < 120 && pixel.green < 160 && pixel.alpha > 240
+                containsRed = containsRed || isRedSlice
+                containsBlue = containsBlue || isBlueSlice
+                XCTAssertTrue(isRedSlice || isBlueSlice)
+            }
+        }
+        XCTAssertTrue(containsRed)
+        XCTAssertTrue(containsBlue)
+    }
+
     func testScrollingImageStitcherOrdersUpwardCapturesByReadingDirection() throws {
         let top = makeScrollingTestImage(width: 8, rows: Array(0..<40))
         let bottom = makeScrollingTestImage(width: 8, rows: Array(40..<80))

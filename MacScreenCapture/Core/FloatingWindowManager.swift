@@ -43,35 +43,18 @@ class FloatingWindowManager: ObservableObject {
     
     private func positionNewWindow(_ window: NSWindow?) {
         guard let window = window else { return }
-        
-        if activeWindows.isEmpty {
-            // 第一个窗口居中显示
+
+        guard let screen = NSScreen.main else {
             window.center()
-        } else {
-            // 后续窗口错开显示
-            let offset: CGFloat = 30
-            let baseFrame = activeWindows.first?.window?.frame ?? window.frame
-            let newOrigin = CGPoint(
-                x: baseFrame.origin.x + offset * CGFloat(activeWindows.count),
-                y: baseFrame.origin.y - offset * CGFloat(activeWindows.count)
-            )
-            window.setFrameOrigin(newOrigin)
-            
-            // 确保窗口在屏幕范围内
-            if let screen = NSScreen.main {
-                let screenFrame = screen.visibleFrame
-                var frame = window.frame
-                
-                if frame.maxX > screenFrame.maxX {
-                    frame.origin.x = screenFrame.maxX - frame.width
-                }
-                if frame.minY < screenFrame.minY {
-                    frame.origin.y = screenFrame.minY
-                }
-                
-                window.setFrame(frame, display: true)
-            }
+            return
         }
+
+        let origin = FloatingWindowLayout.origin(
+            for: window.frame.size,
+            existingWindowFrames: activeWindows.compactMap { $0.window?.frame },
+            visibleFrame: screen.visibleFrame
+        )
+        window.setFrameOrigin(origin)
     }
     
     private func removeWindow(_ controller: FloatingWindowController) {

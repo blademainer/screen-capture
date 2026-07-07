@@ -116,6 +116,96 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "recordingFileFormat"), "MP4")
     }
 
+    func testFloatingWindowConfigurationReadsDefaultsAndClampsOpacity() throws {
+        let suiteName = "MacScreenCaptureTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        UserDefaults.registerMacScreenCaptureDefaults(in: defaults)
+        var configuration = FloatingWindowConfiguration.fromDefaults(defaults)
+
+        XCTAssertTrue(configuration.alwaysOnTop)
+        XCTAssertEqual(configuration.windowLevel.rawValue, NSWindow.Level.floating.rawValue)
+        XCTAssertTrue(configuration.showShadow)
+        XCTAssertEqual(configuration.opacity, 0.95)
+        XCTAssertFalse(configuration.closeAfterSave)
+
+        defaults.set(false, forKey: "floatingWindowAlwaysOnTop")
+        defaults.set(false, forKey: "floatingWindowShowShadow")
+        defaults.set(5.0, forKey: "floatingWindowOpacity")
+        defaults.set(true, forKey: "floatingWindowCloseAfterSave")
+
+        configuration = FloatingWindowConfiguration.fromDefaults(defaults)
+        XCTAssertFalse(configuration.alwaysOnTop)
+        XCTAssertEqual(configuration.windowLevel.rawValue, NSWindow.Level.normal.rawValue)
+        XCTAssertFalse(configuration.showShadow)
+        XCTAssertEqual(configuration.opacity, 1.0)
+        XCTAssertTrue(configuration.closeAfterSave)
+
+        XCTAssertEqual(FloatingWindowConfiguration.normalizedOpacity(0), 0.95)
+        XCTAssertEqual(FloatingWindowConfiguration.normalizedOpacity(-1), 0.95)
+        XCTAssertEqual(FloatingWindowConfiguration.normalizedOpacity(0.1), 0.3)
+        XCTAssertEqual(FloatingWindowConfiguration.normalizedOpacity(0.7), 0.7)
+    }
+
+    func testFloatingWindowConfigurationSizesPreviewWindows() throws {
+        XCTAssertEqual(
+            FloatingWindowConfiguration.preferredWindowSize(for: CGSize(width: 1600, height: 900)),
+            CGSize(width: 800, height: 570)
+        )
+        XCTAssertEqual(
+            FloatingWindowConfiguration.preferredWindowSize(for: CGSize(width: 300, height: 120)),
+            CGSize(width: 400, height: 300)
+        )
+        XCTAssertEqual(
+            FloatingWindowConfiguration.preferredWindowSize(for: CGSize(width: 4000, height: 4000)),
+            CGSize(width: 600, height: 720)
+        )
+        XCTAssertEqual(
+            FloatingWindowConfiguration.preferredWindowSize(for: CGSize(width: 0, height: 400)),
+            CGSize(width: 400, height: 300)
+        )
+    }
+
+    func testFloatingWindowLayoutCentersFirstPinnedWindowAndCascadesMore() throws {
+        let visibleFrame = CGRect(x: 0, y: 0, width: 1000, height: 700)
+        let windowSize = CGSize(width: 400, height: 300)
+
+        let firstOrigin = FloatingWindowLayout.origin(
+            for: windowSize,
+            existingWindowFrames: [],
+            visibleFrame: visibleFrame
+        )
+        XCTAssertEqual(firstOrigin, CGPoint(x: 300, y: 200))
+
+        let secondOrigin = FloatingWindowLayout.origin(
+            for: windowSize,
+            existingWindowFrames: [CGRect(origin: firstOrigin, size: windowSize)],
+            visibleFrame: visibleFrame
+        )
+        XCTAssertEqual(secondOrigin, CGPoint(x: 330, y: 170))
+    }
+
+    func testFloatingWindowLayoutKeepsPinnedWindowsInsideVisibleFrame() throws {
+        let visibleFrame = CGRect(x: 50, y: 40, width: 500, height: 360)
+        let windowSize = CGSize(width: 220, height: 180)
+        let existingFrames = [
+            CGRect(x: 390, y: 70, width: 220, height: 180),
+            CGRect(x: 420, y: 40, width: 220, height: 180),
+            CGRect(x: 450, y: 10, width: 220, height: 180)
+        ]
+
+        let origin = FloatingWindowLayout.origin(
+            for: windowSize,
+            existingWindowFrames: existingFrames,
+            visibleFrame: visibleFrame
+        )
+
+        XCTAssertEqual(origin, CGPoint(x: 330, y: 40))
+    }
+
     func testColorFormatterSupportsHexRgbAndSwiftUIFormats() throws {
         let color = NSColor(srgbRed: 100.0 / 255.0, green: 149.0 / 255.0, blue: 237.0 / 255.0, alpha: 1)
 

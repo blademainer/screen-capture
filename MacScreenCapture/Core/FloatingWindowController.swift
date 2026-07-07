@@ -462,23 +462,7 @@ class FloatingWindowController: NSWindowController {
         self.screenshot = screenshot
         self.editingSession = ImageEditingSession(originalImage: screenshot)
 
-        // 计算窗口尺寸
-        let imageSize = screenshot.size
-        let maxSize = CGSize(width: 800, height: 600)
-        let aspectRatio = imageSize.width / imageSize.height
-
-        var windowSize = imageSize
-        if windowSize.width > maxSize.width {
-            windowSize.width = maxSize.width
-            windowSize.height = windowSize.width / aspectRatio
-        }
-        if windowSize.height > maxSize.height {
-            windowSize.height = maxSize.height
-            windowSize.width = windowSize.height * aspectRatio
-        }
-
-        // 添加工具栏和操作栏的高度
-        windowSize.height += 120
+        let windowSize = FloatingWindowConfiguration.preferredWindowSize(for: screenshot.size)
 
         // 创建浮窗
         let window = NSWindow(
@@ -500,14 +484,11 @@ class FloatingWindowController: NSWindowController {
 
     private func setupWindow() {
         guard let window = window else { return }
-        let alwaysOnTop = UserDefaults.standard.object(forKey: "floatingWindowAlwaysOnTop") as? Bool ?? true
-        let showShadow = UserDefaults.standard.object(forKey: "floatingWindowShowShadow") as? Bool ?? true
-        let configuredOpacity = UserDefaults.standard.double(forKey: "floatingWindowOpacity")
-        let targetOpacity = configuredOpacity == 0 ? 0.95 : max(0.3, min(1.0, configuredOpacity))
+        let configuration = FloatingWindowConfiguration.fromDefaults()
 
         // 窗口属性设置
         window.title = "截图预览"
-        window.level = alwaysOnTop ? .floating : .normal
+        window.level = configuration.windowLevel
         window.isMovableByWindowBackground = true
         window.backgroundColor = NSColor.windowBackgroundColor
         window.titlebarAppearsTransparent = true
@@ -515,7 +496,7 @@ class FloatingWindowController: NSWindowController {
         window.styleMask.insert(.fullSizeContentView)
 
         // 设置窗口样式为更现代的浮窗样式
-        window.hasShadow = showShadow
+        window.hasShadow = configuration.showShadow
         window.isOpaque = false
         window.backgroundColor = NSColor.clear
 
@@ -539,7 +520,7 @@ class FloatingWindowController: NSWindowController {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.3
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            window.animator().alphaValue = targetOpacity
+            window.animator().alphaValue = configuration.opacity
         }
     }
 
@@ -660,7 +641,7 @@ class FloatingWindowController: NSWindowController {
                 // 回到主线程更新UI
                 DispatchQueue.main.async {
                     self.showNotification("保存成功：\(url.lastPathComponent)")
-                    if UserDefaults.standard.bool(forKey: "floatingWindowCloseAfterSave") {
+                    if FloatingWindowConfiguration.fromDefaults().closeAfterSave {
                         self.close()
                     }
 
@@ -751,15 +732,17 @@ extension FloatingWindowController: NSWindowDelegate {
 
     func windowDidBecomeKey(_ notification: Notification) {
         // 窗口获得焦点时确保置顶
-        if UserDefaults.standard.bool(forKey: "floatingWindowAlwaysOnTop") {
-            window?.level = .floating
+        let configuration = FloatingWindowConfiguration.fromDefaults()
+        if configuration.alwaysOnTop {
+            window?.level = configuration.windowLevel
         }
     }
 
     func windowDidChangeOcclusionState(_ notification: Notification) {
         // 当窗口被遮挡状态改变时，确保置顶设置
-        if UserDefaults.standard.bool(forKey: "floatingWindowAlwaysOnTop") {
-            window?.level = .floating
+        let configuration = FloatingWindowConfiguration.fromDefaults()
+        if configuration.alwaysOnTop {
+            window?.level = configuration.windowLevel
         }
     }
 

@@ -306,7 +306,8 @@ class CaptureManager: ObservableObject {
                 images.append(sliceImage)
             }
 
-            let stitchedImage = stitchImagesVertically(images, trimOverlap: trimOverlap)
+            let orderedImages = scrollDirection == "up" ? Array(images.reversed()) : images
+            let stitchedImage = stitchImagesVertically(orderedImages, trimOverlap: trimOverlap)
             try await finalizeCapturedImage(stitchedImage, showEditor: true)
         } catch {
             showAlert(title: "长截图失败", message: error.localizedDescription)

@@ -799,8 +799,9 @@ class CaptureManager: ObservableObject {
                         }
 
                         // 创建输出文件URL
-                        let recordingFormat = UserDefaults.standard.string(forKey: "recordingFileFormat") ?? "MOV"
-                        let fileExtension = recordingFormat.lowercased()
+                        let fileExtension = RecordingSettings.fileExtension(
+                            for: UserDefaults.standard.string(forKey: "recordingFileFormat")
+                        )
                         let fileName = "Recording_\(DateFormatter.fileNameFormatter.string(from: Date())).\(fileExtension)"
                         let outputURL = await MainActor.run {
                             self.outputDirectory.appendingPathComponent(fileName)
@@ -817,8 +818,8 @@ class CaptureManager: ObservableObject {
         let configuration = SCStreamConfiguration()
         configuration.width = max(1, Int(screenSize.width))
         configuration.height = max(1, Int(screenSize.height))
-        let frameRate = min(60, max(15, Int(UserDefaults.standard.double(forKey: "recordingFrameRate"))))
-        let recordingQuality = UserDefaults.standard.string(forKey: "recordingQuality") ?? "高"
+        let frameRate = RecordingSettings.normalizedFrameRate(UserDefaults.standard.double(forKey: "recordingFrameRate"))
+        let recordingQuality = RecordingSettings.normalizedQuality(UserDefaults.standard.string(forKey: "recordingQuality"))
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(frameRate))
         configuration.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange // 使用 YUV 格式，更适合 H.264
         configuration.showsCursor = UserDefaults.standard.bool(forKey: "showCursor")
@@ -847,7 +848,7 @@ class CaptureManager: ObservableObject {
         print("录制文件路径: \(recordingURL!.path)")
 
         // 创建流输出
-        let fileType: AVFileType = (UserDefaults.standard.string(forKey: "recordingFileFormat") == "MP4") ? .mp4 : .mov
+        let fileType = RecordingSettings.avFileType(for: UserDefaults.standard.string(forKey: "recordingFileFormat"))
         streamOutput = CaptureStreamOutput(
             outputURL: recordingURL!,
             fileType: fileType,
@@ -3352,8 +3353,8 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
         self.fileType = fileType
         self.requestedSystemAudio = includeSystemAudio
         self.requestedMicrophone = includeMicrophone
-        self.frameRate = frameRate
-        self.quality = quality
+        self.frameRate = RecordingSettings.normalizedFrameRate(Double(frameRate))
+        self.quality = RecordingSettings.normalizedQuality(quality)
         self.audioOnly = audioOnly
         super.init()
     }
@@ -3982,22 +3983,7 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     }
 
     private func videoBitRate(width: Int, height: Int) -> Int {
-        let pixelsPerSecond = Double(width * height * frameRate)
-        let bitsPerPixel: Double
-
-        switch quality {
-        case "低":
-            bitsPerPixel = 0.04
-        case "中":
-            bitsPerPixel = 0.07
-        case "超高":
-            bitsPerPixel = 0.16
-        default:
-            bitsPerPixel = 0.11
-        }
-
-        let calculatedBitRate = Int(pixelsPerSecond * bitsPerPixel)
-        return min(max(calculatedBitRate, 2_000_000), 60_000_000)
+        RecordingSettings.videoBitRate(width: width, height: height, frameRate: frameRate, quality: quality)
     }
 
     private func h264ProfileLevel(for quality: String) -> String {

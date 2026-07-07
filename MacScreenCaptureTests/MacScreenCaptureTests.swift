@@ -368,6 +368,34 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(TranslationSupport.myMemoryLanguageCode(for: "ja"), "ja")
         XCTAssertEqual(TranslationSupport.displayName(forAppleLanguageCode: "zh-CN"), "简体中文")
     }
+
+    func testRecordingSettingsNormalizePreflightValues() throws {
+        XCTAssertEqual(RecordingSettings.normalizedFrameRate(0), 60)
+        XCTAssertEqual(RecordingSettings.normalizedFrameRate(12), 15)
+        XCTAssertEqual(RecordingSettings.normalizedFrameRate(120), 60)
+        XCTAssertEqual(RecordingSettings.normalizedFrameRate(29.6), 30)
+
+        XCTAssertEqual(RecordingSettings.normalizedQuality("超高"), "超高")
+        XCTAssertEqual(RecordingSettings.normalizedQuality("invalid"), "高")
+        XCTAssertEqual(RecordingSettings.normalizedFileFormat("mp4"), "MP4")
+        XCTAssertEqual(RecordingSettings.normalizedFileFormat("avi"), "MOV")
+        XCTAssertEqual(RecordingSettings.fileExtension(for: "MP4"), "mp4")
+        XCTAssertEqual(RecordingSettings.avFileType(for: "MP4"), .mp4)
+        XCTAssertEqual(RecordingSettings.avFileType(for: nil), .mov)
+    }
+
+    func testRecordingSettingsScaleBitrateByQualityAndClampBounds() throws {
+        let low = RecordingSettings.videoBitRate(width: 1920, height: 1080, frameRate: 60, quality: "低")
+        let high = RecordingSettings.videoBitRate(width: 1920, height: 1080, frameRate: 60, quality: "高")
+        let ultra = RecordingSettings.videoBitRate(width: 1920, height: 1080, frameRate: 60, quality: "超高")
+        let tiny = RecordingSettings.videoBitRate(width: 1, height: 1, frameRate: 15, quality: "低")
+        let huge = RecordingSettings.videoBitRate(width: 8_000, height: 8_000, frameRate: 120, quality: "超高")
+
+        XCTAssertLessThan(low, high)
+        XCTAssertLessThan(high, ultra)
+        XCTAssertEqual(tiny, 2_000_000)
+        XCTAssertEqual(huge, 60_000_000)
+    }
     
     func testNotificationManagerInitialization() throws {
         throw XCTSkip("NotificationManager requires a real app bundle host for UNUserNotificationCenter.")

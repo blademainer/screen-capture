@@ -13,7 +13,6 @@ import CoreGraphics
 import AppKit
 import ApplicationServices
 @preconcurrency import Vision
-import NaturalLanguage
 import Translation
 
 struct RecordingAudioDiagnostics: Sendable {
@@ -2249,7 +2248,7 @@ class CaptureManager: ObservableObject {
             return "Apple 本地翻译模型准备需要 macOS 26 或更高版本；当前系统会继续使用在线翻译和网页兜底。"
         }
 
-        let target = Locale.Language(identifier: appleLanguageCode(for: targetLanguage))
+        let target = Locale.Language(identifier: TranslationSupport.appleLanguageCode(for: targetLanguage))
         let sourceCodes = ["en", "zh-Hans", "ja", "ko"].filter { sourceCode in
             let source = Locale.Language(identifier: sourceCode)
             return source.languageCode != target.languageCode ||
@@ -2265,7 +2264,7 @@ class CaptureManager: ObservableObject {
 
         for sourceCode in sourceCodes {
             let source = Locale.Language(identifier: sourceCode)
-            let label = "\(displayName(forAppleLanguageCode: sourceCode)) -> \(displayName(forAppleLanguageCode: targetLanguage))"
+            let label = "\(TranslationSupport.displayName(forAppleLanguageCode: sourceCode)) -> \(TranslationSupport.displayName(forAppleLanguageCode: targetLanguage))"
             let status = await availability.status(from: source, to: target)
 
             switch status {
@@ -2318,8 +2317,8 @@ class CaptureManager: ObservableObject {
             throw CaptureError.failedToTranslate
         }
 
-        let sourceLanguage = Locale.Language(identifier: appleLanguageCode(for: detectedTranslationLanguage(for: text)))
-        let target = Locale.Language(identifier: appleLanguageCode(for: targetLanguage))
+        let sourceLanguage = Locale.Language(identifier: TranslationSupport.appleLanguageCode(for: TranslationSupport.detectedLanguage(for: text)))
+        let target = Locale.Language(identifier: TranslationSupport.appleLanguageCode(for: targetLanguage))
 
         if sourceLanguage.languageCode == target.languageCode,
            sourceLanguage.script == target.script,
@@ -2363,28 +2362,12 @@ class CaptureManager: ObservableObject {
             throw CaptureError.failedToTranslate
         }
 
-        guard let root = try JSONSerialization.jsonObject(with: data) as? [Any],
-              let translatedParts = root.first as? [Any] else {
-            throw CaptureError.failedToTranslate
-        }
-
-        let translatedText = translatedParts.compactMap { item -> String? in
-            guard let segment = item as? [Any] else { return nil }
-            return segment.first as? String
-        }
-        .joined()
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !translatedText.isEmpty else {
-            throw CaptureError.failedToTranslate
-        }
-
-        return translatedText
+        return try TranslationSupport.translatedTextFromGoogleResponse(data)
     }
 
     private func translateWithMyMemory(_ text: String, targetLanguage: String) async throws -> String {
-        let sourceLanguage = detectedTranslationLanguage(for: text)
-        let mappedTargetLanguage = myMemoryLanguageCode(for: targetLanguage)
+        let sourceLanguage = TranslationSupport.detectedLanguage(for: text)
+        let mappedTargetLanguage = TranslationSupport.myMemoryLanguageCode(for: targetLanguage)
         let chunks = text.utf8Chunks(maxByteCount: 480)
         guard !chunks.isEmpty else {
             throw CaptureError.failedToTranslate
@@ -2426,97 +2409,16 @@ class CaptureManager: ObservableObject {
             throw CaptureError.failedToTranslate
         }
 
-        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let responseData = root["responseData"] as? [String: Any],
-              let translatedText = responseData["translatedText"] as? String else {
-            throw CaptureError.failedToTranslate
-        }
-
-        let trimmed = translatedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            throw CaptureError.failedToTranslate
-        }
-
-        return trimmed
-    }
-
-    private func detectedTranslationLanguage(for text: String) -> String {
-        let recognizer = NLLanguageRecognizer()
-        recognizer.processString(text)
-        guard let language = recognizer.dominantLanguage else {
-            return "en"
-        }
-
-        switch language {
-        case .simplifiedChinese:
-            return "zh-CN"
-        case .traditionalChinese:
-            return "zh-TW"
-        case .english:
-            return "en"
-        case .japanese:
-            return "ja"
-        case .korean:
-            return "ko"
-        default:
-            return language.rawValue
-        }
-    }
-
-    private func myMemoryLanguageCode(for targetLanguage: String) -> String {
-        switch targetLanguage {
-        case "zh-CN":
-            return "zh-CN"
-        case "zh-TW":
-            return "zh-TW"
-        default:
-            return targetLanguage
-        }
-    }
-
-    private func appleLanguageCode(for language: String) -> String {
-        switch language {
-        case "zh-CN":
-            return "zh-Hans"
-        case "zh-TW":
-            return "zh-Hant"
-        default:
-            return language
-        }
-    }
-
-    private func displayName(forAppleLanguageCode language: String) -> String {
-        switch appleLanguageCode(for: language) {
-        case "zh-Hans":
-            return "简体中文"
-        case "zh-Hant":
-            return "繁体中文"
-        case "en":
-            return "English"
-        case "ja":
-            return "日本語"
-        case "ko":
-            return "한국어"
-        default:
-            return language
-        }
+        return try TranslationSupport.translatedTextFromMyMemoryResponse(data)
     }
 
     @MainActor
     private func openWebTranslation(for text: String, targetLanguage: String) throws {
-        guard let url = webTranslationURL(for: text, targetLanguage: targetLanguage) else {
+        guard let url = TranslationSupport.webTranslationURL(for: text, targetLanguage: targetLanguage) else {
             throw CaptureError.failedToTranslate
         }
 
         NSWorkspace.shared.open(url)
-    }
-
-    private func webTranslationURL(for text: String, targetLanguage: String) -> URL? {
-        guard let encoded = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-            return nil
-        }
-
-        return URL(string: "https://translate.google.com/?sl=auto&tl=\(targetLanguage)&text=\(encoded)&op=translate")
     }
 
     @MainActor

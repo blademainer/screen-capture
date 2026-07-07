@@ -282,6 +282,53 @@ final class MacScreenCaptureTests: XCTestCase {
             ["上方靠右", "下方靠左"]
         )
     }
+
+    func testTranslationSupportParsesGoogleResponseSegments() throws {
+        let data = try XCTUnwrap("""
+        [[["你好，","hello,",null,null,1],["世界"," world",null,null,1]],null,"en"]
+        """.data(using: .utf8))
+
+        XCTAssertEqual(try TranslationSupport.translatedTextFromGoogleResponse(data), "你好，世界")
+    }
+
+    func testTranslationSupportParsesMyMemoryResponse() throws {
+        let data = try XCTUnwrap("""
+        {"responseData":{"translatedText":"  你好，世界  "},"responseStatus":200}
+        """.data(using: .utf8))
+
+        XCTAssertEqual(try TranslationSupport.translatedTextFromMyMemoryResponse(data), "你好，世界")
+    }
+
+    func testTranslationSupportRejectsEmptyProviderResponses() throws {
+        let emptyGoogle = try XCTUnwrap("[[[\"   \",\"hello\"]]]".data(using: .utf8))
+        let emptyMyMemory = try XCTUnwrap("""
+        {"responseData":{"translatedText":"   "}}
+        """.data(using: .utf8))
+
+        XCTAssertThrowsError(try TranslationSupport.translatedTextFromGoogleResponse(emptyGoogle))
+        XCTAssertThrowsError(try TranslationSupport.translatedTextFromMyMemoryResponse(emptyMyMemory))
+    }
+
+    func testTranslationSupportBuildsEncodedWebFallbackURL() throws {
+        let url = try XCTUnwrap(TranslationSupport.webTranslationURL(for: "hello & 世界", targetLanguage: "zh-CN"))
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let queryItems = components.queryItems ?? []
+
+        XCTAssertEqual(url.scheme, "https")
+        XCTAssertEqual(url.host, "translate.google.com")
+        XCTAssertEqual(queryItems.first { $0.name == "sl" }?.value, "auto")
+        XCTAssertEqual(queryItems.first { $0.name == "tl" }?.value, "zh-CN")
+        XCTAssertEqual(queryItems.first { $0.name == "text" }?.value, "hello & 世界")
+        XCTAssertEqual(queryItems.first { $0.name == "op" }?.value, "translate")
+        XCTAssertTrue(url.absoluteString.contains("hello%20%26%20"))
+    }
+
+    func testTranslationSupportMapsLanguageCodesForProviders() throws {
+        XCTAssertEqual(TranslationSupport.appleLanguageCode(for: "zh-CN"), "zh-Hans")
+        XCTAssertEqual(TranslationSupport.appleLanguageCode(for: "zh-TW"), "zh-Hant")
+        XCTAssertEqual(TranslationSupport.myMemoryLanguageCode(for: "ja"), "ja")
+        XCTAssertEqual(TranslationSupport.displayName(forAppleLanguageCode: "zh-CN"), "简体中文")
+    }
     
     func testNotificationManagerInitialization() throws {
         throw XCTSkip("NotificationManager requires a real app bundle host for UNUserNotificationCenter.")

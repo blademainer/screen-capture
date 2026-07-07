@@ -226,6 +226,24 @@ class CaptureManager: ObservableObject {
         }
     }
 
+    @discardableResult
+    @MainActor
+    func startRecordingWithPreflight() async throws -> Bool {
+        guard !isRecording else { return false }
+        guard confirmRecordingPreflight(audioOnly: false) else { return false }
+        try await startRecording()
+        return true
+    }
+
+    @discardableResult
+    @MainActor
+    func startAudioRecordingWithPreflight() async throws -> Bool {
+        guard !isRecording else { return false }
+        guard confirmRecordingPreflight(audioOnly: true) else { return false }
+        try await startAudioRecording()
+        return true
+    }
+
     /// 滚动截图 - 快捷键调用
     @MainActor
     func captureScrollingWindow() async {
@@ -1245,6 +1263,27 @@ class CaptureManager: ObservableObject {
                 audioOnly: audioOnly
             )
         }
+    }
+
+    @MainActor
+    private func confirmRecordingPreflight(audioOnly: Bool) -> Bool {
+        let settingsView = RecordingPreflightSettingsView(audioOnly: audioOnly)
+        let alert = NSAlert()
+        alert.messageText = audioOnly ? "开始录音前确认" : "开始录屏前确认"
+        alert.informativeText = audioOnly
+            ? "确认系统音频、麦克风和开录延时。"
+            : "确认清晰度、帧数、开录延时、麦克风和导出格式。"
+        alert.alertStyle = .informational
+        alert.accessoryView = settingsView
+        alert.addButton(withTitle: audioOnly ? "开始录音" : "开始录制")
+        alert.addButton(withTitle: "取消")
+
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return false
+        }
+
+        settingsView.save()
+        return true
     }
 
     /// 保存截图
@@ -2443,6 +2482,132 @@ struct ScreenshotTranslationResult {
 private struct TranslationProviderResult {
     let text: String
     let providerName: String
+}
+
+@available(macOS 12.3, *)
+@MainActor
+private final class RecordingPreflightSettingsView: NSView {
+    private let audioOnly: Bool
+    private let frameRatePopup = NSPopUpButton()
+    private let qualityPopup = NSPopUpButton()
+    private let formatPopup = NSPopUpButton()
+    private let delayStepper = NSStepper()
+    private let delayLabel = NSTextField(labelWithString: "")
+    private let systemAudioCheckbox = NSButton(checkboxWithTitle: "录制系统音频", target: nil, action: nil)
+    private let microphoneCheckbox = NSButton(checkboxWithTitle: "录制麦克风", target: nil, action: nil)
+    private let cursorCheckbox = NSButton(checkboxWithTitle: "显示鼠标指针", target: nil, action: nil)
+
+    init(audioOnly: Bool) {
+        self.audioOnly = audioOnly
+        super.init(frame: NSRect(x: 0, y: 0, width: 420, height: audioOnly ? 150 : 272))
+        setupControls()
+        loadDefaults()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func save() {
+        if !audioOnly {
+            UserDefaults.standard.set(selectedFrameRate(), forKey: "recordingFrameRate")
+            UserDefaults.standard.set(qualityPopup.titleOfSelectedItem ?? "高", forKey: "recordingQuality")
+            UserDefaults.standard.set(formatPopup.titleOfSelectedItem ?? "MOV", forKey: "recordingFileFormat")
+            UserDefaults.standard.set(cursorCheckbox.state == .on, forKey: "showCursor")
+        }
+
+        UserDefaults.standard.set(Int(delayStepper.integerValue), forKey: "recordingStartDelaySeconds")
+        UserDefaults.standard.set(systemAudioCheckbox.state == .on, forKey: "includeSystemAudio")
+        UserDefaults.standard.set(microphoneCheckbox.state == .on, forKey: "includeMicrophone")
+    }
+
+    private func setupControls() {
+        frameRatePopup.addItems(withTitles: ["15 FPS", "30 FPS", "60 FPS"])
+        qualityPopup.addItems(withTitles: ["低", "中", "高", "超高"])
+        formatPopup.addItems(withTitles: ["MOV", "MP4"])
+
+        delayStepper.minValue = 0
+        delayStepper.maxValue = 30
+        delayStepper.increment = 1
+        delayStepper.target = self
+        delayStepper.action = #selector(updateDelayLabel)
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.spacing = 10
+        stack.alignment = .leading
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        if !audioOnly {
+            stack.addArrangedSubview(row(title: "帧数", control: frameRatePopup))
+            stack.addArrangedSubview(row(title: "清晰度", control: qualityPopup))
+            stack.addArrangedSubview(row(title: "导出格式", control: formatPopup))
+        }
+
+        let delayStack = NSStackView()
+        delayStack.orientation = .horizontal
+        delayStack.spacing = 8
+        delayStack.alignment = .centerY
+        delayStack.addArrangedSubview(delayLabel)
+        delayStack.addArrangedSubview(delayStepper)
+        stack.addArrangedSubview(row(title: "开录延时", control: delayStack))
+
+        stack.addArrangedSubview(systemAudioCheckbox)
+        stack.addArrangedSubview(microphoneCheckbox)
+
+        if !audioOnly {
+            stack.addArrangedSubview(cursorCheckbox)
+        }
+
+        addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor)
+        ])
+    }
+
+    private func loadDefaults() {
+        let storedFrameRate = UserDefaults.standard.double(forKey: "recordingFrameRate")
+        let frameRate = storedFrameRate == 0 ? 60 : Int(storedFrameRate)
+        frameRatePopup.selectItem(withTitle: "\(frameRate) FPS")
+
+        qualityPopup.selectItem(withTitle: UserDefaults.standard.string(forKey: "recordingQuality") ?? "高")
+        formatPopup.selectItem(withTitle: UserDefaults.standard.string(forKey: "recordingFileFormat") ?? "MOV")
+
+        delayStepper.integerValue = UserDefaults.standard.integer(forKey: "recordingStartDelaySeconds")
+        updateDelayLabel()
+
+        systemAudioCheckbox.state = UserDefaults.standard.bool(forKey: "includeSystemAudio") ? .on : .off
+        microphoneCheckbox.state = UserDefaults.standard.bool(forKey: "includeMicrophone") ? .on : .off
+        cursorCheckbox.state = UserDefaults.standard.bool(forKey: "showCursor") ? .on : .off
+    }
+
+    private func row(title: String, control: NSView) -> NSStackView {
+        let label = NSTextField(labelWithString: title)
+        label.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        label.alignment = .right
+        label.widthAnchor.constraint(equalToConstant: 76).isActive = true
+
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.spacing = 12
+        row.alignment = .centerY
+        row.addArrangedSubview(label)
+        row.addArrangedSubview(control)
+        return row
+    }
+
+    private func selectedFrameRate() -> Double {
+        let title = frameRatePopup.titleOfSelectedItem ?? "60 FPS"
+        return Double(title.split(separator: " ").first ?? "60") ?? 60
+    }
+
+    @objc private func updateDelayLabel() {
+        delayLabel.stringValue = "\(delayStepper.integerValue) 秒"
+    }
 }
 
 private extension String {

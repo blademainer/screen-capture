@@ -213,8 +213,9 @@ struct MenuBarView: View {
 
         Task {
             do {
-                try await captureManager.startRecording()
-                showNotification(title: "录制开始", message: "屏幕录制已开始")
+                if try await captureManager.startRecordingWithPreflight() {
+                    showNotification(title: "录制开始", message: "屏幕录制已开始")
+                }
             } catch {
                 showNotification(title: "录制失败", message: error.localizedDescription)
             }
@@ -229,8 +230,9 @@ struct MenuBarView: View {
 
         Task {
             do {
-                try await captureManager.startAudioRecording()
-                showNotification(title: "录音开始", message: "音频录制已开始")
+                if try await captureManager.startAudioRecordingWithPreflight() {
+                    showNotification(title: "录音开始", message: "音频录制已开始")
+                }
             } catch {
                 showNotification(title: "录音失败", message: error.localizedDescription)
             }

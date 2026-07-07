@@ -317,7 +317,7 @@ class WindowManager: ObservableObject {
             switch captureState {
             case .idle, .screenshotting:
                 do {
-                    try await captureManager.startRecording()
+                    _ = try await captureManager.startRecordingWithPreflight()
                 } catch {
                     print("开始录制失败: \(error)")
                 }

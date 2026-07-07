@@ -383,7 +383,7 @@ class HotKeyManager: ObservableObject {
             case .startRecording:
                 if !captureManager.isRecording {
                     do {
-                        try await captureManager.startRecording()
+                        _ = try await captureManager.startRecordingWithPreflight()
                     } catch {
                         print("开始录制失败: \(error)")
                     }
@@ -391,7 +391,7 @@ class HotKeyManager: ObservableObject {
             case .startAudioRecording:
                 if !captureManager.isRecording {
                     do {
-                        try await captureManager.startAudioRecording()
+                        _ = try await captureManager.startAudioRecordingWithPreflight()
                     } catch {
                         print("开始录音失败: \(error)")
                     }

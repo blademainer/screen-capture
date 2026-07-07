@@ -302,7 +302,7 @@ struct RecordingView: View {
 
         Task {
             do {
-                try await captureManager.startRecording()
+                _ = try await captureManager.startRecordingWithPreflight()
             } catch {
                 await MainActor.run {
                     errorMessage = error.localizedDescription
@@ -316,7 +316,7 @@ struct RecordingView: View {
 
         Task {
             do {
-                try await captureManager.startAudioRecording()
+                _ = try await captureManager.startAudioRecordingWithPreflight()
             } catch {
                 await MainActor.run {
                     errorMessage = error.localizedDescription

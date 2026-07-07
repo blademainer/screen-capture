@@ -118,27 +118,42 @@ struct EditingWindowContentView: View {
     
     // MARK: - Canvas Area
     private var canvasArea: some View {
-        GeometryReader { geometry in
+        GeometryReader { _ in
             ZStack {
-                // 背景图片
-                Image(nsImage: editingSession.currentImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                
-                // 与贴图浮窗复用同一套增强编辑画布，保证普通截图编辑能力一致。
-                TraditionalEditingCanvas(
-                    editingSession: editingSession,
-                    selectedTool: selectedTool,
-                    selectedColor: selectedColor,
-                    lineWidth: lineWidth,
-                    fontSize: fontSize,
-                    textOutlined: textOutlined
+                Color(NSColor(calibratedWhite: 0.18, alpha: 1))
+
+                ZStack {
+                    Color(NSColor.textBackgroundColor)
+
+                    // 背景图片
+                    Image(nsImage: editingSession.currentImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    // 与贴图浮窗复用同一套增强编辑画布，保证普通截图编辑能力一致。
+                    TraditionalEditingCanvas(
+                        editingSession: editingSession,
+                        selectedTool: selectedTool,
+                        selectedColor: selectedColor,
+                        lineWidth: lineWidth,
+                        fontSize: fontSize,
+                        textOutlined: textOutlined
+                    )
+                }
+                .padding(18)
+                .background(Color(NSColor.textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .stroke(Color(NSColor.separatorColor), lineWidth: 1)
                 )
+                .shadow(color: Color.black.opacity(0.22), radius: 12, x: 0, y: 6)
+                .padding(28)
             }
         }
         .frame(minWidth: 400, minHeight: 300)
-        .background(Color(NSColor.textBackgroundColor))
+        .background(Color(NSColor(calibratedWhite: 0.18, alpha: 1)))
         .clipped()
     }
     

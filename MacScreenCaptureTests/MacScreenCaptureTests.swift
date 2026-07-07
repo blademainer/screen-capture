@@ -246,6 +246,19 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(managerSource.contains("editingWindow.window?.orderFrontRegardless()"))
     }
 
+    func testEditingWindowUsesFocusedGrayEditingFrame() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Views/EditingWindowContentView.swift")
+
+        XCTAssertTrue(source.contains("Color(NSColor(calibratedWhite: 0.18, alpha: 1))"))
+        XCTAssertTrue(source.contains(".padding(18)"))
+        XCTAssertTrue(source.contains(".padding(28)"))
+        XCTAssertTrue(source.contains(".clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))"))
+        XCTAssertTrue(source.contains(".stroke(Color(NSColor.separatorColor), lineWidth: 1)"))
+        XCTAssertTrue(source.contains(".shadow(color: Color.black.opacity(0.22), radius: 12, x: 0, y: 6)"))
+        XCTAssertTrue(source.contains("Image(nsImage: editingSession.currentImage)"))
+        XCTAssertTrue(source.contains("TraditionalEditingCanvas("))
+    }
+
     func testRecordingPreflightExposesIShotAudioAndExportControls() throws {
         let captureManagerSource = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
         let recordingViewSource = try repositoryFileContents("MacScreenCapture/Views/RecordingView.swift")

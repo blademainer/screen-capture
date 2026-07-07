@@ -318,6 +318,11 @@ struct MenuBarView: View {
     }
 
     private func quickOCR() {
+        guard permissionManager.hasScreenRecordingPermission else {
+            permissionManager.requestScreenRecordingPermission()
+            return
+        }
+
         Task {
             do {
                 let text = try await captureManager.captureRegionAndRecognizeText()
@@ -329,6 +334,11 @@ struct MenuBarView: View {
     }
 
     private func quickTranslate() {
+        guard permissionManager.hasScreenRecordingPermission else {
+            permissionManager.requestScreenRecordingPermission()
+            return
+        }
+
         Task {
             do {
                 let result = try await captureManager.captureRegionAndTranslate()

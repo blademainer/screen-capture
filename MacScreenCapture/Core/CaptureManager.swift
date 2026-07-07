@@ -309,15 +309,29 @@ class CaptureManager: ObservableObject {
         }
 
         let targetLanguage = UserDefaults.standard.string(forKey: "translationTargetLanguage") ?? "zh-CN"
-        let translatedText = try await translateText(trimmedText, targetLanguage: targetLanguage)
-        let result = ScreenshotTranslationResult(
-            sourceText: trimmedText,
-            translatedText: translatedText,
-            targetLanguage: targetLanguage
-        )
+        let result: ScreenshotTranslationResult
+        do {
+            let translatedText = try await translateText(trimmedText, targetLanguage: targetLanguage)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(translatedText, forType: .string)
+            result = ScreenshotTranslationResult(
+                sourceText: trimmedText,
+                translatedText: translatedText,
+                targetLanguage: targetLanguage,
+                usedWebFallback: false
+            )
+        } catch {
+            try openWebTranslation(for: trimmedText, targetLanguage: targetLanguage)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(trimmedText, forType: .string)
+            result = ScreenshotTranslationResult(
+                sourceText: trimmedText,
+                translatedText: "在线翻译服务暂不可用，已打开网页翻译页面。原文已复制到剪贴板，可直接粘贴使用。",
+                targetLanguage: targetLanguage,
+                usedWebFallback: true
+            )
+        }
 
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(translatedText, forType: .string)
         showTranslationWindow(result)
 
         return result
@@ -325,12 +339,8 @@ class CaptureManager: ObservableObject {
 
     @MainActor
     func openWebTranslation(for text: String) throws {
-        guard let encoded = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://translate.google.com/?sl=auto&tl=zh-CN&text=\(encoded)&op=translate") else {
-            throw CaptureError.failedToTranslate
-        }
-
-        NSWorkspace.shared.open(url)
+        let targetLanguage = UserDefaults.standard.string(forKey: "translationTargetLanguage") ?? "zh-CN"
+        try openWebTranslation(for: text, targetLanguage: targetLanguage)
     }
 
     /// 使用用户指定的 App 打开最近一次保存的截图。
@@ -1689,6 +1699,23 @@ class CaptureManager: ObservableObject {
     }
 
     @MainActor
+    private func openWebTranslation(for text: String, targetLanguage: String) throws {
+        guard let url = webTranslationURL(for: text, targetLanguage: targetLanguage) else {
+            throw CaptureError.failedToTranslate
+        }
+
+        NSWorkspace.shared.open(url)
+    }
+
+    private func webTranslationURL(for text: String, targetLanguage: String) -> URL? {
+        guard let encoded = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            return nil
+        }
+
+        return URL(string: "https://translate.google.com/?sl=auto&tl=\(targetLanguage)&text=\(encoded)&op=translate")
+    }
+
+    @MainActor
     private func showTranslationWindow(_ result: ScreenshotTranslationResult) {
         let controller = ScreenshotTranslationWindowController(result: result)
         controller.showWindow(nil)
@@ -1778,6 +1805,7 @@ struct ScreenshotTranslationResult {
     let sourceText: String
     let translatedText: String
     let targetLanguage: String
+    let usedWebFallback: Bool
 }
 
 final class ScreenshotTranslationWindowController: NSWindowController {
@@ -1814,7 +1842,8 @@ final class ScreenshotTranslationWindowController: NSWindowController {
         titleLabel.font = NSFont.systemFont(ofSize: 20, weight: .semibold)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        let targetLabel = NSTextField(labelWithString: "目标语言：\(result.targetLanguage)")
+        let targetText = result.usedWebFallback ? "目标语言：\(result.targetLanguage) · 已打开网页翻译兜底" : "目标语言：\(result.targetLanguage)"
+        let targetLabel = NSTextField(labelWithString: targetText)
         targetLabel.textColor = .secondaryLabelColor
         targetLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -1909,6 +1938,10 @@ final class ScreenshotTranslationWindowController: NSWindowController {
     }
 
     @objc private func copyTranslatedText() {
+        guard !result.usedWebFallback else {
+            copyToPasteboard(result.sourceText)
+            return
+        }
         copyToPasteboard(result.translatedText)
     }
 

@@ -300,7 +300,11 @@ struct MenuBarView: View {
         Task {
             do {
                 let result = try await captureManager.translateLastScreenshot()
-                showNotification(title: "截图翻译完成", message: "译文已显示并复制（\(result.targetLanguage)）")
+                if result.usedWebFallback {
+                    showNotification(title: "截图翻译已打开网页", message: "在线接口不可用，原文已复制（\(result.targetLanguage)）")
+                } else {
+                    showNotification(title: "截图翻译完成", message: "译文已显示并复制（\(result.targetLanguage)）")
+                }
             } catch {
                 showNotification(title: "截图翻译失败", message: error.localizedDescription)
             }

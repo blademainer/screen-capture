@@ -320,6 +320,18 @@ class CaptureManager: ObservableObject {
         }
     }
 
+    /// 区域截图并立即用用户指定的 App 打开，匹配 iShot 的双击 Option 连贯操作。
+    @MainActor
+    func captureRegionAndOpenInConfiguredApp() async throws -> NSImage {
+        let originalMode = captureMode
+        captureMode = .region
+        defer { captureMode = originalMode }
+
+        let image = try await captureScreenshot()
+        try openLastScreenshotInConfiguredApp()
+        return image
+    }
+
     /// 清理资源 - 在应用退出前调用
     @MainActor
     func cleanup() async {

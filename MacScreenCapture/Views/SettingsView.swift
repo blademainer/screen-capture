@@ -31,6 +31,7 @@ struct SettingsView: View {
     @AppStorage("colorCodeFormat") private var colorCodeFormat = "#HEX"
     @AppStorage("customColorCodeTemplate") private var customColorCodeTemplate = "{hex}"
     @AppStorage("openAfterCaptureAppPath") private var openAfterCaptureAppPath = ""
+    @AppStorage("doubleOptionQuickOpenEnabled") private var doubleOptionQuickOpenEnabled = true
     @AppStorage("translationTargetLanguage") private var translationTargetLanguage = "zh-CN"
     @AppStorage("recordingFrameRate") private var recordingFrameRate = 60.0
     @AppStorage("recordingQuality") private var recordingQuality = "高"
@@ -261,6 +262,14 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.bordered)
                     }
+                }
+
+                Toggle("双击 ⌥ 后截图并打开指定 App", isOn: $doubleOptionQuickOpenEnabled)
+
+                if doubleOptionQuickOpenEnabled && openAfterCaptureAppPath.isEmpty {
+                    Text("请先选择指定 App；未选择时会用系统默认 App 打开。")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
         }

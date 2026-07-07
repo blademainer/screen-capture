@@ -149,6 +149,14 @@ class HotKeyManager: ObservableObject {
     
     // 事件处理器
     private var eventHandler: EventHandlerRef?
+
+    private var localFlagsMonitor: Any?
+    private var globalFlagsMonitor: Any?
+    private var isOptionKeyDown = false
+    private var lastOptionPressAt: Date?
+    private var lastOptionActionAt: Date?
+    private let optionDoublePressInterval: TimeInterval = 0.45
+    private let optionActionCooldown: TimeInterval = 1.0
     
     // 配置文件路径
     private let configURL: URL = {
@@ -164,10 +172,17 @@ class HotKeyManager: ObservableObject {
         loadConfiguration()
         setupDefaultHotKeys()
         registerEventHandler()
+        registerModifierKeyMonitors()
     }
     
     deinit {
         unregisterAllHotKeys()
+        if let localFlagsMonitor {
+            NSEvent.removeMonitor(localFlagsMonitor)
+        }
+        if let globalFlagsMonitor {
+            NSEvent.removeMonitor(globalFlagsMonitor)
+        }
         if let handler = eventHandler {
             RemoveEventHandler(handler)
         }
@@ -227,6 +242,51 @@ class HotKeyManager: ObservableObject {
         
         if status != noErr {
             print("Failed to install event handler: \(status)")
+        }
+    }
+
+    private func registerModifierKeyMonitors() {
+        localFlagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            self?.handleModifierFlagsEvent(event)
+            return event
+        }
+
+        globalFlagsMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            self?.handleModifierFlagsEvent(event)
+        }
+    }
+
+    private func handleModifierFlagsEvent(_ event: NSEvent) {
+        guard UserDefaults.standard.object(forKey: "doubleOptionQuickOpenEnabled") as? Bool ?? true else { return }
+        guard event.keyCode == UInt16(kVK_Option) || event.keyCode == UInt16(kVK_RightOption) else { return }
+
+        let optionIsDown = event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.option)
+        defer { isOptionKeyDown = optionIsDown }
+
+        guard optionIsDown, !isOptionKeyDown else { return }
+
+        let now = Date()
+        if let lastOptionActionAt, now.timeIntervalSince(lastOptionActionAt) < optionActionCooldown {
+            lastOptionPressAt = now
+            return
+        }
+
+        if let lastOptionPressAt, now.timeIntervalSince(lastOptionPressAt) <= optionDoublePressInterval {
+            self.lastOptionPressAt = nil
+            self.lastOptionActionAt = now
+            performDoubleOptionQuickOpen()
+        } else {
+            lastOptionPressAt = now
+        }
+    }
+
+    private func performDoubleOptionQuickOpen() {
+        Task { @MainActor in
+            do {
+                _ = try await CaptureManager.shared.captureRegionAndOpenInConfiguredApp()
+            } catch {
+                print("双击 Option 快速打开失败: \(error)")
+            }
         }
     }
     

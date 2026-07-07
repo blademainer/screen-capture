@@ -23,7 +23,8 @@ struct MacScreenCaptureApp: App {
             "floatingWindowAutoHideDelay": 3.0,
             "floatingWindowOpacity": 0.95,
             "floatingWindowShowPreview": true,
-            "floatingWindowPosition": "topRight"
+            "floatingWindowPosition": "topRight",
+            "doubleOptionQuickOpenEnabled": true
         ])
     }
     

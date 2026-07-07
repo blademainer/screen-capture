@@ -374,6 +374,11 @@ struct MenuBarView: View {
     }
 
     private func showNotification(title: String, message: String) {
+        guard Bundle.main.bundleURL.pathExtension == "app" else {
+            print("\(title): \(message)")
+            return
+        }
+
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = message

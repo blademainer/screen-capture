@@ -108,6 +108,18 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertFalse(source.contains("// showPermissionAlert(for: .accessibility)"))
     }
 
+    func testSystemNotificationsAreSkippedOutsideAppBundle() throws {
+        let menuSource = try repositoryFileContents("MacScreenCapture/Views/MenuBarView.swift")
+        let notificationSource = try repositoryFileContents("MacScreenCapture/Utils/NotificationManager.swift")
+
+        XCTAssertTrue(menuSource.contains("Bundle.main.bundleURL.pathExtension == \"app\""))
+        XCTAssertTrue(menuSource.contains("print(\"\\(title): \\(message)\")"))
+        XCTAssertTrue(notificationSource.contains("private let notificationCenter: UNUserNotificationCenter?"))
+        XCTAssertTrue(notificationSource.contains("Bundle.main.bundleURL.pathExtension == \"app\""))
+        XCTAssertTrue(notificationSource.contains("notificationCenter = nil"))
+        XCTAssertTrue(notificationSource.contains("guard let notificationCenter, notificationsEnabled && hasNotificationPermission else"))
+    }
+
     func testMainScreenshotViewExposesIShotAdvancedActions() throws {
         let source = try repositoryFileContents("MacScreenCapture/Views/ScreenshotView.swift")
         let expectedActions = [
@@ -1184,8 +1196,10 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(detector.registerPress(at: start.addingTimeInterval(1.00), interval: 0.45, cooldown: 1.0))
     }
 
+    @MainActor
     func testNotificationManagerInitialization() throws {
-        throw XCTSkip("NotificationManager requires a real app bundle host for UNUserNotificationCenter.")
+        let notificationManager = NotificationManager.shared
+        XCTAssertNotNil(notificationManager)
     }
     
     func testKeyboardShortcutsInitialization() throws {

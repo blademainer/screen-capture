@@ -336,6 +336,18 @@ class CaptureManager: ObservableObject {
             throw CaptureError.noImageAvailable
         }
 
+        return try await recognizeTextAndCopy(from: image)
+    }
+
+    /// 框选截图区域后直接 OCR 并复制文本，覆盖截图工具的 OCR 直达流程。
+    @MainActor
+    func captureRegionAndRecognizeText() async throws -> String {
+        let image = try await captureInteractiveScreenshot(arguments: ["-i", "-r"], forceStyle: false, showEditor: false)
+        return try await recognizeTextAndCopy(from: image)
+    }
+
+    @MainActor
+    private func recognizeTextAndCopy(from image: NSImage) async throws -> String {
         let text = try await recognizeText(in: image)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)

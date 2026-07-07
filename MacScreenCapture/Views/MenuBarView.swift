@@ -312,7 +312,7 @@ struct MenuBarView: View {
     private func quickOCR() {
         Task {
             do {
-                let text = try await captureManager.recognizeTextFromLastScreenshot()
+                let text = try await captureManager.captureRegionAndRecognizeText()
                 showNotification(title: "OCR 完成", message: text.isEmpty ? "未识别到文本" : "识别文本已复制")
             } catch {
                 showNotification(title: "OCR 失败", message: error.localizedDescription)

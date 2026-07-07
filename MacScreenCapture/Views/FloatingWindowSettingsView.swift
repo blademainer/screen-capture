@@ -6,8 +6,8 @@ struct FloatingWindowSettingsView: View {
     @AppStorage("floatingWindowAlwaysOnTop") private var alwaysOnTop = true
     @AppStorage("floatingWindowShowShadow") private var showShadow = true
     @AppStorage("floatingWindowOpacity") private var opacity = 1.0
-    @AppStorage("autoShowFloatingWindow") private var autoShowFloatingWindow = true
     @AppStorage("floatingWindowCloseAfterSave") private var closeAfterSave = false
+    @ObservedObject private var floatingWindowManager = FloatingWindowManager.shared
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -19,9 +19,6 @@ struct FloatingWindowSettingsView: View {
                 // 基础设置
                 GroupBox("基础设置") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Toggle("截图后自动显示浮窗", isOn: $autoShowFloatingWindow)
-                            .help("截图完成后立即显示预览浮窗")
-                        
                         Toggle("自动复制到剪贴板", isOn: $autoCopyToClipboard)
                             .help("截图后自动将图片复制到系统剪贴板")
                         
@@ -57,23 +54,23 @@ struct FloatingWindowSettingsView: View {
                 GroupBox("快捷操作") {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Button("关闭所有编辑窗口") {
-                                EditingWindowManager.shared.closeAllWindows()
+                            Button("关闭所有浮窗") {
+                                floatingWindowManager.closeAllWindows()
                             }
                             .buttonStyle(.bordered)
                             
-                            Button("最小化所有编辑窗口") {
-                                EditingWindowManager.shared.minimizeAllWindows()
+                            Button("最小化所有浮窗") {
+                                floatingWindowManager.minimizeAllWindows()
                             }
                             .buttonStyle(.bordered)
                             
-                            Button("恢复所有编辑窗口") {
-                                EditingWindowManager.shared.restoreAllWindows()
+                            Button("恢复所有浮窗") {
+                                floatingWindowManager.restoreAllWindows()
                             }
                             .buttonStyle(.bordered)
                         }
                         
-                        Text("当前活动编辑窗口: \(EditingWindowManager.shared.activeWindowCount)")
+                        Text("当前活动浮窗: \(floatingWindowManager.activeWindows.count)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }

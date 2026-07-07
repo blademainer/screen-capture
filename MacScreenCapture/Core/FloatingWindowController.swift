@@ -472,10 +472,14 @@ class FloatingWindowController: NSWindowController {
 
     private func setupWindow() {
         guard let window = window else { return }
+        let alwaysOnTop = UserDefaults.standard.object(forKey: "floatingWindowAlwaysOnTop") as? Bool ?? true
+        let showShadow = UserDefaults.standard.object(forKey: "floatingWindowShowShadow") as? Bool ?? true
+        let configuredOpacity = UserDefaults.standard.double(forKey: "floatingWindowOpacity")
+        let targetOpacity = configuredOpacity == 0 ? 0.95 : max(0.3, min(1.0, configuredOpacity))
 
         // 窗口属性设置
         window.title = "截图预览"
-        window.level = .floating  // 置顶显示
+        window.level = alwaysOnTop ? .floating : .normal
         window.isMovableByWindowBackground = true
         window.backgroundColor = NSColor.windowBackgroundColor
         window.titlebarAppearsTransparent = true
@@ -483,7 +487,7 @@ class FloatingWindowController: NSWindowController {
         window.styleMask.insert(.fullSizeContentView)
 
         // 设置窗口样式为更现代的浮窗样式
-        window.hasShadow = true
+        window.hasShadow = showShadow
         window.isOpaque = false
         window.backgroundColor = NSColor.clear
 
@@ -507,7 +511,7 @@ class FloatingWindowController: NSWindowController {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.3
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            window.animator().alphaValue = 1.0
+            window.animator().alphaValue = targetOpacity
         }
     }
 
@@ -628,6 +632,9 @@ class FloatingWindowController: NSWindowController {
                 // 回到主线程更新UI
                 DispatchQueue.main.async {
                     self.showNotification("保存成功：\(url.lastPathComponent)")
+                    if UserDefaults.standard.bool(forKey: "floatingWindowCloseAfterSave") {
+                        self.close()
+                    }
 
                     // 可选：在 Finder 中显示保存的文件
                     if UserDefaults.standard.bool(forKey: "showInFinderAfterSave") {

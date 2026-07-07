@@ -68,6 +68,12 @@ struct SettingsView: View {
     @AppStorage("showCursor") private var showCursor = true
     @AppStorage("recordingStartDelaySeconds") private var recordingStartDelaySeconds = 0
     @AppStorage("recordingFileFormat") private var recordingFileFormat = "MOV"
+    @AppStorage("autoCopyToClipboard") private var autoCopyToClipboard = false
+    @AppStorage("floatingWindowAlwaysOnTop") private var floatingWindowAlwaysOnTop = true
+    @AppStorage("floatingWindowShowShadow") private var floatingWindowShowShadow = true
+    @AppStorage("floatingWindowOpacity") private var floatingWindowOpacity = 0.95
+    @AppStorage("floatingWindowCloseAfterSave") private var floatingWindowCloseAfterSave = false
+    @ObservedObject private var floatingWindowManager = FloatingWindowManager.shared
     @State private var isPreparingTranslationModels = false
     @State private var translationModelStatusMessage = ""
     @State private var annotationTemplateTransferMessage = ""
@@ -584,24 +590,24 @@ struct SettingsView: View {
                 .font(.headline)
 
             VStack(alignment: .leading, spacing: 8) {
-                Toggle("截图后自动显示浮窗", isOn: .constant(true))
-                    .help("截图完成后立即显示预览浮窗")
-
-                Toggle("自动复制到剪贴板", isOn: .constant(false))
+                Toggle("自动复制到剪贴板", isOn: $autoCopyToClipboard)
                     .help("截图后自动将图片复制到系统剪贴板")
 
-                Toggle("始终置顶显示", isOn: .constant(true))
+                Toggle("始终置顶显示", isOn: $floatingWindowAlwaysOnTop)
                     .help("浮窗始终显示在其他窗口之上")
 
-                Toggle("显示窗口阴影", isOn: .constant(true))
+                Toggle("显示窗口阴影", isOn: $floatingWindowShowShadow)
                     .help("为浮窗添加阴影效果")
+
+                Toggle("保存后自动关闭浮窗", isOn: $floatingWindowCloseAfterSave)
+                    .help("保存贴图后自动关闭对应浮窗")
 
                 HStack {
                     Text("窗口透明度:")
                     Spacer()
-                    Slider(value: .constant(1.0), in: 0.3...1.0, step: 0.1)
+                    Slider(value: $floatingWindowOpacity, in: 0.3...1.0, step: 0.05)
                         .frame(width: 120)
-                    Text("100%")
+                    Text("\(Int(floatingWindowOpacity * 100))%")
                         .frame(width: 40, alignment: .trailing)
                         .foregroundColor(.secondary)
                 }
@@ -609,22 +615,20 @@ struct SettingsView: View {
 
                 HStack {
                     Button("关闭所有浮窗") {
-                        // 使用新的EditingWindowManager
-                        EditingWindowManager.shared.closeAllWindows()
+                        floatingWindowManager.closeAllWindows()
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
 
                     Button("最小化所有浮窗") {
-                        // 使用新的EditingWindowManager
-                        EditingWindowManager.shared.minimizeAllWindows()
+                        floatingWindowManager.minimizeAllWindows()
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
 
                     Spacer()
 
-                    Text("活动浮窗: 0") // 暂时显示固定值，等FloatingWindowManager完全集成后再更新
+                    Text("活动浮窗: \(floatingWindowManager.activeWindows.count)")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

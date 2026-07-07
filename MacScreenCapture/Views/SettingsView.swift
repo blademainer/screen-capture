@@ -22,6 +22,7 @@ struct SettingsView: View {
     @AppStorage("scrollingCaptureSlices") private var scrollingCaptureSlices = 5
     @AppStorage("scrollingCaptureDelay") private var scrollingCaptureDelay = 0.8
     @AppStorage("scrollingCaptureLines") private var scrollingCaptureLines = 12
+    @AppStorage("scrollingCaptureTrimOverlap") private var scrollingCaptureTrimOverlap = true
     @AppStorage("screenshotRoundedCorners") private var screenshotRoundedCorners = false
     @AppStorage("screenshotDropShadow") private var screenshotDropShadow = false
     @AppStorage("screenshotCornerRadius") private var screenshotCornerRadius = 18.0
@@ -35,58 +36,58 @@ struct SettingsView: View {
     @AppStorage("showCursor") private var showCursor = true
     @AppStorage("recordingStartDelaySeconds") private var recordingStartDelaySeconds = 0
     @AppStorage("recordingFileFormat") private var recordingFileFormat = "MOV"
-    
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 // 权限状态
                 PermissionStatusSection()
-                
+
                 Divider()
-                
+
                 // 截图设置
                 ScreenshotSettingsSection()
-                
+
                 Divider()
-                
+
                 // 录制设置
                 RecordingSettingsSection()
-                
+
                 Divider()
-                
+
                 // 窗口行为设置
                 WindowBehaviorSettingsSection()
-                
+
                 Divider()
-                
+
                 // 浮窗设置
                 FloatingWindowSettingsSection()
-                
+
                 Divider()
-                
+
                 // 通用设置
                 GeneralSettingsSection()
-                
+
                 Divider()
-                
+
                 // 快捷键设置
                 ShortcutSettingsSection()
-                
+
                 Divider()
-                
+
                 // 关于
                 AboutSection()
             }
             .padding()
         }
     }
-    
+
     @ViewBuilder
     private func PermissionStatusSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("权限状态")
                 .font(.headline)
-            
+
             VStack(spacing: 8) {
                 PermissionStatusRow(
                     title: "屏幕录制",
@@ -95,7 +96,7 @@ struct SettingsView: View {
                         permissionManager.requestScreenRecordingPermission()
                     }
                 )
-                
+
                 PermissionStatusRow(
                     title: "麦克风访问",
                     isGranted: permissionManager.hasMicrophonePermission,
@@ -103,7 +104,7 @@ struct SettingsView: View {
                         permissionManager.requestMicrophonePermission()
                     }
                 )
-                
+
                 PermissionStatusRow(
                     title: "辅助功能",
                     isGranted: permissionManager.hasAccessibilityPermission,
@@ -114,16 +115,16 @@ struct SettingsView: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private func ScreenshotSettingsSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("截图设置")
                 .font(.headline)
-            
+
             VStack(alignment: .leading, spacing: 8) {
                 Toggle("自动保存截图", isOn: $autoSaveScreenshots)
-                
+
                 HStack {
                     Text("图片格式:")
                     Spacer()
@@ -135,7 +136,7 @@ struct SettingsView: View {
                     .pickerStyle(.menu)
                     .frame(width: 100)
                 }
-                
+
                 HStack {
                     Text("保存位置:")
                     Spacer()
@@ -144,16 +145,16 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.bordered)
                 }
-                
+
                 Stepper("延时截图: \(delayedScreenshotSeconds) 秒", value: $delayedScreenshotSeconds, in: 1...30)
-                
+
                 VStack(alignment: .leading, spacing: 6) {
                     Text("长截图")
                         .font(.subheadline)
                         .fontWeight(.medium)
-                    
+
                     Stepper("截取屏数: \(scrollingCaptureSlices)", value: $scrollingCaptureSlices, in: 2...20)
-                    
+
                     HStack {
                         Text("滚动间隔:")
                         Slider(value: $scrollingCaptureDelay, in: 0.2...2.0, step: 0.1)
@@ -161,18 +162,20 @@ struct SettingsView: View {
                         Text(String(format: "%.1fs", scrollingCaptureDelay))
                             .foregroundColor(.secondary)
                     }
-                    
+
                     Stepper("每次滚动: \(scrollingCaptureLines) 行", value: $scrollingCaptureLines, in: 3...40)
+
+                    Toggle("自动裁剪重叠区域", isOn: $scrollingCaptureTrimOverlap)
                 }
                 .padding(.top, 4)
-                
+
                 VStack(alignment: .leading, spacing: 6) {
                     Text("截图美化")
                         .font(.subheadline)
                         .fontWeight(.medium)
-                    
+
                     Toggle("截图带圆角", isOn: $screenshotRoundedCorners)
-                    
+
                     if screenshotRoundedCorners {
                         HStack {
                             Text("圆角半径:")
@@ -182,9 +185,9 @@ struct SettingsView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
-                    
+
                     Toggle("截图带阴影", isOn: $screenshotDropShadow)
-                    
+
                     if screenshotDropShadow {
                         HStack {
                             Text("阴影大小:")
@@ -196,7 +199,7 @@ struct SettingsView: View {
                     }
                 }
                 .padding(.top, 4)
-                
+
                 HStack {
                     Text("取色格式:")
                     Spacer()
@@ -208,7 +211,7 @@ struct SettingsView: View {
                     .pickerStyle(.menu)
                     .frame(width: 120)
                 }
-                
+
                 HStack {
                     Text("指定 App 打开:")
                     Spacer()
@@ -216,7 +219,7 @@ struct SettingsView: View {
                         selectOpenAfterCaptureApp()
                     }
                     .buttonStyle(.bordered)
-                    
+
                     if !openAfterCaptureAppPath.isEmpty {
                         Button("清除") {
                             openAfterCaptureAppPath = ""
@@ -227,13 +230,13 @@ struct SettingsView: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private func RecordingSettingsSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("录制设置")
                 .font(.headline)
-            
+
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("默认帧率:")
@@ -246,7 +249,7 @@ struct SettingsView: View {
                     .pickerStyle(.menu)
                     .frame(width: 100)
                 }
-                
+
                 HStack {
                     Text("默认质量:")
                     Spacer()
@@ -259,7 +262,7 @@ struct SettingsView: View {
                     .pickerStyle(.menu)
                     .frame(width: 100)
                 }
-                
+
                 HStack {
                     Text("导出格式:")
                     Spacer()
@@ -270,7 +273,7 @@ struct SettingsView: View {
                     .pickerStyle(.menu)
                     .frame(width: 100)
                 }
-                
+
                 Stepper("开录延时: \(recordingStartDelaySeconds) 秒", value: $recordingStartDelaySeconds, in: 0...30)
                 Toggle("录制系统音频", isOn: $includeSystemAudio)
                 Toggle("录制麦克风", isOn: $includeMicrophone)
@@ -278,20 +281,20 @@ struct SettingsView: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private func WindowBehaviorSettingsSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("窗口行为")
                 .font(.headline)
-            
+
             VStack(alignment: .leading, spacing: 8) {
                 Toggle("截屏时自动隐藏主窗口", isOn: $autoHideWindowDuringCapture)
                     .help("启用后，开始截图或录制时会自动隐藏应用主窗口，避免干扰")
-                
+
                 Toggle("截屏完成后自动显示主窗口", isOn: $autoShowWindowAfterCapture)
                     .help("启用后，截图完成后会自动重新显示应用主窗口")
-                
+
                 if autoHideWindowDuringCapture {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("提示：")
@@ -309,26 +312,26 @@ struct SettingsView: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private func FloatingWindowSettingsSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("浮窗设置")
                 .font(.headline)
-            
+
             VStack(alignment: .leading, spacing: 8) {
                 Toggle("截图后自动显示浮窗", isOn: .constant(true))
                     .help("截图完成后立即显示预览浮窗")
-                
+
                 Toggle("自动复制到剪贴板", isOn: .constant(false))
                     .help("截图后自动将图片复制到系统剪贴板")
-                
+
                 Toggle("始终置顶显示", isOn: .constant(true))
                     .help("浮窗始终显示在其他窗口之上")
-                
+
                 Toggle("显示窗口阴影", isOn: .constant(true))
                     .help("为浮窗添加阴影效果")
-                
+
                 HStack {
                     Text("窗口透明度:")
                     Spacer()
@@ -339,7 +342,7 @@ struct SettingsView: View {
                         .foregroundColor(.secondary)
                 }
                 .help("调整浮窗的透明度")
-                
+
                 HStack {
                     Button("关闭所有浮窗") {
                         // 使用新的EditingWindowManager
@@ -347,16 +350,16 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    
+
                     Button("最小化所有浮窗") {
                         // 使用新的EditingWindowManager
                         EditingWindowManager.shared.minimizeAllWindows()
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    
+
                     Spacer()
-                    
+
                     Text("活动浮窗: 0") // 暂时显示固定值，等FloatingWindowManager完全集成后再更新
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -364,13 +367,13 @@ struct SettingsView: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private func GeneralSettingsSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("通用设置")
                 .font(.headline)
-            
+
             VStack(alignment: .leading, spacing: 8) {
                 Toggle("显示通知", isOn: $showNotifications)
                 Toggle("开机自启动", isOn: $launchAtLogin)
@@ -381,24 +384,24 @@ struct SettingsView: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private func ShortcutSettingsSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("快捷键设置")
                 .font(.headline)
-            
+
             // 集成完整的快捷键设置界面
             HotKeySettingsView()
         }
     }
-    
+
     @ViewBuilder
     private func AboutSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("关于")
                 .font(.headline)
-            
+
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("版本:")
@@ -406,22 +409,22 @@ struct SettingsView: View {
                     Text("1.0.0")
                         .foregroundColor(.secondary)
                 }
-                
+
                 HStack {
                     Text("构建:")
                     Spacer()
                     Text("2025.09.25")
                         .foregroundColor(.secondary)
                 }
-                
+
                 HStack {
                     Button("检查更新") {
                         // TODO: 实现更新检查
                     }
                     .buttonStyle(.bordered)
-                    
+
                     Spacer()
-                    
+
                     Button("反馈问题") {
                         // TODO: 打开反馈页面
                     }
@@ -430,7 +433,7 @@ struct SettingsView: View {
             }
         }
     }
-    
+
     private func selectSaveLocation() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
@@ -438,7 +441,7 @@ struct SettingsView: View {
         panel.allowsMultipleSelection = false
         panel.message = "选择截图保存位置"
         panel.prompt = "选择"
-        
+
         if panel.runModal() == .OK {
             if let url = panel.url {
                 // 开始访问安全作用域资源
@@ -446,7 +449,7 @@ struct SettingsView: View {
                     print("无法访问选择的文件夹")
                     return
                 }
-                
+
                 // 创建安全作用域书签
                 do {
                     let bookmarkData = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
@@ -458,13 +461,13 @@ struct SettingsView: View {
                 } catch {
                     print("创建书签失败: \(error)")
                 }
-                
+
                 // 停止访问安全作用域资源（书签已创建）
                 url.stopAccessingSecurityScopedResource()
             }
         }
     }
-    
+
     private func selectOpenAfterCaptureApp() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
@@ -474,12 +477,12 @@ struct SettingsView: View {
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
         panel.message = "选择用于打开截图的应用"
         panel.prompt = "选择"
-        
+
         if panel.runModal() == .OK, let url = panel.url {
             openAfterCaptureAppPath = url.path
         }
     }
-    
+
     private func setLaunchAtLogin(_ enabled: Bool) {
         // TODO: 实现开机自启动设置
         print("设置开机自启动: \(enabled)")
@@ -490,16 +493,16 @@ struct PermissionStatusRow: View {
     let title: String
     let isGranted: Bool
     let action: () -> Void
-    
+
     var body: some View {
         HStack {
             Image(systemName: isGranted ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .foregroundColor(isGranted ? .green : .red)
-            
+
             Text(title)
-            
+
             Spacer()
-            
+
             if !isGranted {
                 Button("授权") {
                     action()

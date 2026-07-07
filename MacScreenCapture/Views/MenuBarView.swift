@@ -362,21 +362,11 @@ struct MenuBarView: View {
     }
 
     private func openMainWindow() {
-        // 激活应用并显示主窗口
-        NSApp.activate(ignoringOtherApps: true)
-
-        // 如果没有窗口，创建一个新的
-        if NSApp.windows.isEmpty {
-            // TODO: 创建新的主窗口
-        } else {
-            // 显示现有窗口
-            NSApp.windows.first?.makeKeyAndOrderFront(nil)
-        }
+        WindowManager.shared.showMainWindow()
     }
 
     private func openSettings() {
-        openMainWindow()
-        // TODO: 切换到设置标签页
+        WindowManager.shared.showSettingsTab()
     }
 
     private func showAbout() {

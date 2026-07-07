@@ -47,6 +47,9 @@ struct ContentView: View {
         .onAppear {
             checkPermissions()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .showSettings)) { _ in
+            selectedTab = 2
+        }
     }
     
     private func checkPermissions() {

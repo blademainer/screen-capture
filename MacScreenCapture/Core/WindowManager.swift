@@ -274,7 +274,7 @@ class WindowManager: ObservableObject {
         mainWindow = window
     }
 
-    @objc private func showMainWindow() {
+    @objc func showMainWindow() {
         guard let window = mainWindow else {
             // 如果没有主窗口引用，尝试激活应用
             NSApp.setActivationPolicy(.regular)
@@ -330,9 +330,11 @@ class WindowManager: ObservableObject {
     }
 
     @objc private func openSettings() {
-        showMainWindow()
+        showSettingsTab()
+    }
 
-        // 发送通知切换到设置页面
+    func showSettingsTab() {
+        showMainWindow()
         NotificationCenter.default.post(name: .showSettings, object: nil)
     }
 

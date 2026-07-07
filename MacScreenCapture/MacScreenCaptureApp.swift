@@ -25,7 +25,8 @@ struct MacScreenCaptureApp: App {
             "floatingWindowShowPreview": true,
             "floatingWindowPosition": "topRight",
             "doubleOptionQuickOpenEnabled": true,
-            "numberedAnnotationStart": 1
+            "numberedAnnotationStart": 1,
+            "multiWindowDesktopBackdrop": true
         ])
     }
     

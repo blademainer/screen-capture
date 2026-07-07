@@ -228,7 +228,11 @@ class CaptureManager: ObservableObject {
     /// 多窗口截图 - 使用 macOS 系统交互选择窗口，按住 Shift 可连续选择多个窗口。
     @MainActor
     func captureMultipleWindowsScreenshot() async throws -> NSImage {
-        return try await captureInteractiveScreenshot(arguments: ["-i", "-W"], showEditor: true)
+        var arguments = ["-i", "-W"]
+        if UserDefaults.standard.object(forKey: "multiWindowDesktopBackdrop") as? Bool ?? true {
+            arguments.append("-S")
+        }
+        return try await captureInteractiveScreenshot(arguments: arguments, showEditor: true)
     }
 
     /// 全屏带壳截图

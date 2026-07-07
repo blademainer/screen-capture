@@ -19,6 +19,7 @@ struct SettingsView: View {
     @AppStorage("autoHideWindowDuringCapture") private var autoHideWindowDuringCapture = true
     @AppStorage("autoShowWindowAfterCapture") private var autoShowWindowAfterCapture = false
     @AppStorage("delayedScreenshotSeconds") private var delayedScreenshotSeconds = 5
+    @AppStorage("multiWindowDesktopBackdrop") private var multiWindowDesktopBackdrop = true
     @AppStorage("scrollingCaptureSlices") private var scrollingCaptureSlices = 5
     @AppStorage("scrollingCaptureDelay") private var scrollingCaptureDelay = 0.8
     @AppStorage("scrollingCaptureLines") private var scrollingCaptureLines = 12
@@ -152,6 +153,8 @@ struct SettingsView: View {
                 }
 
                 Stepper("延时截图: \(delayedScreenshotSeconds) 秒", value: $delayedScreenshotSeconds, in: 1...30)
+
+                Toggle("多窗口截图使用桌面底板", isOn: $multiWindowDesktopBackdrop)
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("长截图")

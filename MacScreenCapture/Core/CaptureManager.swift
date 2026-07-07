@@ -349,10 +349,10 @@ class CaptureManager: ObservableObject {
             window.frame.intersects(displayBounds)
         }
 
-        let selectedWindows = try await selectMultipleWindows(from: candidates, displayBounds: displayBounds)
-        let useDesktopBackdrop = UserDefaults.standard.object(forKey: "multiWindowDesktopBackdrop") as? Bool ?? true
+        let selection = try await selectMultipleWindows(from: candidates, displayBounds: displayBounds)
+        let useDesktopBackdrop = (UserDefaults.standard.object(forKey: "multiWindowDesktopBackdrop") as? Bool ?? true) || selection.usesDesktopBackdrop
         let composite = try await renderMultiWindowComposite(
-            selectedWindows,
+            selection.windows,
             displays: content.displays,
             allWindows: content.windows,
             useDesktopBackdrop: useDesktopBackdrop
@@ -384,20 +384,20 @@ class CaptureManager: ObservableObject {
             window.frame.intersects(displayBounds)
         }
 
-        let selectedWindows = try await selectMultipleWindows(
+        let selection = try await selectMultipleWindows(
             from: candidates,
             displayBounds: displayBounds,
             singleClickCompletes: true
         )
 
-        if selectedWindows.count == 1, let window = selectedWindows.first {
+        if selection.windows.count == 1, let window = selection.windows.first, !selection.usesDesktopBackdrop {
             let image = try await captureWindowImage(window)
             return try await finalizeCapturedImage(image, showEditor: false)
         }
 
-        let useDesktopBackdrop = UserDefaults.standard.object(forKey: "multiWindowDesktopBackdrop") as? Bool ?? true
+        let useDesktopBackdrop = (UserDefaults.standard.object(forKey: "multiWindowDesktopBackdrop") as? Bool ?? true) || selection.usesDesktopBackdrop
         let composite = try await renderMultiWindowComposite(
-            selectedWindows,
+            selection.windows,
             displays: content.displays,
             allWindows: content.windows,
             useDesktopBackdrop: useDesktopBackdrop
@@ -1623,7 +1623,7 @@ class CaptureManager: ObservableObject {
         from windows: [SCWindow],
         displayBounds: CGRect,
         singleClickCompletes: Bool = false
-    ) async throws -> [SCWindow] {
+    ) async throws -> MultiWindowSelectionResult {
         let selectionFrame = selectionOverlayFrame(for: displayBounds)
         guard !selectionFrame.isNull && !selectionFrame.isEmpty else {
             throw CaptureError.noDisplayAvailable
@@ -3251,19 +3251,26 @@ private struct MultiWindowSelectionCandidate {
 }
 
 @available(macOS 12.3, *)
+private struct MultiWindowSelectionResult {
+    let windows: [SCWindow]
+    let usesDesktopBackdrop: Bool
+}
+
+@available(macOS 12.3, *)
 final class MultiWindowSelectionView: NSView {
     private let screenFrame: CGRect
     private let candidates: [MultiWindowSelectionCandidate]
     private let singleClickCompletes: Bool
-    private let completion: (Result<[SCWindow], Error>) -> Void
+    private let completion: (Result<MultiWindowSelectionResult, Error>) -> Void
     private var selectedIDs = Set<CGWindowID>()
     private var hoverID: CGWindowID?
+    private var desktopBackdropSelected = false
 
     fileprivate init(
         screenFrame: CGRect,
         candidates: [MultiWindowSelectionCandidate],
         singleClickCompletes: Bool,
-        completion: @escaping (Result<[SCWindow], Error>) -> Void
+        completion: @escaping (Result<MultiWindowSelectionResult, Error>) -> Void
     ) {
         self.screenFrame = screenFrame
         self.candidates = candidates
@@ -3313,6 +3320,9 @@ final class MultiWindowSelectionView: NSView {
         }
 
         drawInstruction()
+        if desktopBackdropSelected {
+            drawDesktopBackdropBadge()
+        }
     }
 
     override func mouseMoved(with event: NSEvent) {
@@ -3323,10 +3333,14 @@ final class MultiWindowSelectionView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        guard let candidate = candidate(at: point) else { return }
+        guard let candidate = candidate(at: point) else {
+            desktopBackdropSelected.toggle()
+            needsDisplay = true
+            return
+        }
 
         if singleClickCompletes && !event.modifierFlags.contains(.shift) {
-            completion(.success([candidate.window]))
+            completion(.success(MultiWindowSelectionResult(windows: [candidate.window], usesDesktopBackdrop: desktopBackdropSelected)))
             return
         }
 
@@ -3346,7 +3360,7 @@ final class MultiWindowSelectionView: NSView {
                 NSSound.beep()
                 return
             }
-            completion(.success(selected))
+            completion(.success(MultiWindowSelectionResult(windows: selected, usesDesktopBackdrop: desktopBackdropSelected)))
         case 53:
             completion(.failure(CaptureError.regionSelectionCancelled))
         default:
@@ -3398,8 +3412,8 @@ final class MultiWindowSelectionView: NSView {
 
     private func drawInstruction() {
         let text = singleClickCompletes
-            ? "点击窗口截图；按住 Shift 可连续选择多个窗口，按 Enter 合成，按 Esc 取消"
-            : "点击选择多个窗口，按 Enter 合成，按 Esc 取消"
+            ? "点击窗口截图；按住 Shift 可连续选择多个窗口，点桌面用壁纸作底板，按 Enter 合成"
+            : "点击选择多个窗口，点桌面用壁纸作底板，按 Enter 合成，按 Esc 取消"
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 16, weight: .medium),
             .foregroundColor: NSColor.white
@@ -3414,6 +3428,24 @@ final class MultiWindowSelectionView: NSView {
         NSColor.black.withAlphaComponent(0.58).setFill()
         NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
         text.draw(at: CGPoint(x: rect.minX + 14, y: rect.minY + 7), withAttributes: attributes)
+    }
+
+    private func drawDesktopBackdropBadge() {
+        let text = "桌面壁纸底板已启用"
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+            .foregroundColor: NSColor.white
+        ]
+        let size = text.size(withAttributes: attributes)
+        let rect = NSRect(
+            x: bounds.midX - size.width / 2 - 12,
+            y: 28,
+            width: size.width + 24,
+            height: size.height + 12
+        )
+        NSColor.systemBlue.withAlphaComponent(0.86).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 7, yRadius: 7).fill()
+        text.draw(at: CGPoint(x: rect.minX + 12, y: rect.minY + 6), withAttributes: attributes)
     }
 }
 

@@ -84,21 +84,64 @@ final class MacScreenCaptureTests: XCTestCase {
     }
 
     func testReleaseWorkflowBuildsUniversalMacArtifacts() throws {
-        let testFileURL = URL(fileURLWithPath: #filePath)
-        let repositoryRoot = testFileURL
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let workflowURL = repositoryRoot
-            .appendingPathComponent(".github")
-            .appendingPathComponent("workflows")
-            .appendingPathComponent("build-and-release.yml")
-        let workflow = try String(contentsOf: workflowURL, encoding: .utf8)
+        let workflow = try repositoryFileContents(".github/workflows/build-and-release.yml")
 
         XCTAssertTrue(workflow.contains("ARCHS=\"arm64 x86_64\""))
         XCTAssertTrue(workflow.contains("ONLY_ACTIVE_ARCH=NO"))
         XCTAssertTrue(workflow.contains("lipo -archs"))
         XCTAssertTrue(workflow.contains("arm64"))
         XCTAssertTrue(workflow.contains("x86_64"))
+    }
+
+    func testMainScreenshotViewExposesIShotAdvancedActions() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Views/ScreenshotView.swift")
+        let expectedActions = [
+            ("延时", "captureDelayedScreenshot()"),
+            ("长截图", "captureScrollingWindow()"),
+            ("多窗口", "captureMultipleWindowsScreenshot()"),
+            ("带壳", "captureDeviceFramedFullScreen()"),
+            ("贴图", "capturePinnedRegion()"),
+            ("取色", "pickScreenColor()"),
+            ("OCR", "captureRegionAndRecognizeText()"),
+            ("翻译", "captureRegionAndTranslate()")
+        ]
+
+        for (title, methodCall) in expectedActions {
+            XCTAssertTrue(source.contains("AdvancedActionButton(title: \"\(title)\""), title)
+            XCTAssertTrue(source.contains(methodCall), title)
+        }
+    }
+
+    func testMenuBarExposesIShotAndProActions() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Views/MenuBarView.swift")
+        let expectedEntries = [
+            ("全屏截图", "⌘⇧S", "quickScreenshot(.fullScreen)"),
+            ("窗口截图", "⌘⇧W", "quickScreenshot(.window)"),
+            ("区域截图", "⌘⇧A", "quickScreenshot(.region)"),
+            ("延时截图", "⌘⌥L", "quickDelayedScreenshot()"),
+            ("长截图", "⌘⌥S", "quickScrollingScreenshot()"),
+            ("多窗口截图", "⌘⌥W", "quickMultiWindowScreenshot()"),
+            ("全屏带壳截图", "⌘⌥F", "quickDeviceFramedScreenshot()"),
+            ("取色", "⌘⇧C", "pickScreenColor()"),
+            ("OCR 识别", "⌘⌥O", "quickOCR()"),
+            ("截图翻译", "⌘⌥T", "quickTranslate()"),
+            ("贴图", "⌘⌥P", "quickPinnedScreenshot()"),
+            ("开始录制", "⌥W", "quickRecording()"),
+            ("开始录音", "⌘⇧M", "quickAudioRecording()")
+        ]
+
+        for (title, shortcut, methodCall) in expectedEntries {
+            XCTAssertTrue(source.contains("title: \"\(title)\""), title)
+            XCTAssertTrue(source.contains("shortcut: \"\(shortcut)\""), title)
+            XCTAssertTrue(source.contains(methodCall), title)
+        }
+
+        XCTAssertTrue(source.contains("用指定 App 打开"))
+        XCTAssertTrue(source.contains("quickOpenInConfiguredApp()"))
+        XCTAssertTrue(source.contains("⌘⌥Space"))
+        XCTAssertTrue(source.contains("togglePauseRecording()"))
+        XCTAssertTrue(source.contains("⌘⇧R"))
+        XCTAssertTrue(source.contains("stopRecording()"))
     }
     
     func testFileManagerExtensions() throws {
@@ -1062,6 +1105,19 @@ final class MacScreenCaptureTests: XCTestCase {
             intent: .defaultIntent
         )!
         return NSImage(cgImage: cgImage, size: NSSize(width: width, height: height))
+    }
+
+    private func repositoryFileContents(_ relativePath: String) throws -> String {
+        let testFileURL = URL(fileURLWithPath: #filePath)
+        let repositoryRoot = testFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let fileURL = relativePath
+            .split(separator: "/")
+            .reduce(repositoryRoot) { partialURL, component in
+                partialURL.appendingPathComponent(String(component))
+            }
+        return try String(contentsOf: fileURL, encoding: .utf8)
     }
 
     private func makeSolidImage(width: Int, height: Int, color: NSColor) -> NSImage {

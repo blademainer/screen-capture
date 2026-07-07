@@ -289,6 +289,18 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(captureManagerSource.contains("openLastScreenshotInConfiguredApp()"))
     }
 
+    func testScreenshotsCopyFinalImageToClipboardByDefault() throws {
+        let captureManagerSource = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+        let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")
+
+        XCTAssertTrue(settingsSource.contains("@AppStorage(\"copyScreenshotToClipboard\")"))
+        XCTAssertTrue(settingsSource.contains("Toggle(\"截图后自动复制到剪贴板\""))
+        XCTAssertTrue(captureManagerSource.contains("UserDefaults.standard.bool(forKey: \"copyScreenshotToClipboard\")"))
+        XCTAssertTrue(captureManagerSource.contains("copyImageToPasteboard(finalImage)"))
+        XCTAssertTrue(captureManagerSource.contains("private func copyImageToPasteboard(_ image: NSImage)"))
+        XCTAssertTrue(captureManagerSource.contains("NSPasteboard.general.setData(tiffData, forType: .tiff)"))
+    }
+
     func testMultiWindowSelectionSupportsShiftAndDesktopBackdrop() throws {
         let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
 
@@ -470,6 +482,7 @@ final class MacScreenCaptureTests: XCTestCase {
     func testRegisteredDefaultsCoverIShotAndProCapabilities() throws {
         let defaults = UserDefaults.macScreenCaptureDefaults
 
+        XCTAssertEqual(defaults["copyScreenshotToClipboard"] as? Bool, true)
         XCTAssertEqual(defaults["includeSystemAudio"] as? Bool, true)
         XCTAssertEqual(defaults["includeMicrophone"] as? Bool, true)
         XCTAssertEqual(defaults["recordingFrameRate"] as? Double, 60.0)

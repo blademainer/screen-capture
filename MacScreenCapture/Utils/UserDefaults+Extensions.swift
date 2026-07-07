@@ -5,6 +5,7 @@ extension UserDefaults {
     static var macScreenCaptureDefaults: [String: Any] {
         [
             "autoSaveScreenshots": true,
+            "copyScreenshotToClipboard": true,
             "floatingWindowAlwaysOnTop": true,
             "floatingWindowAutoHide": false,
             "floatingWindowAutoHideDelay": 3.0,

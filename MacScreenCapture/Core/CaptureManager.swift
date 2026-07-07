@@ -2158,6 +2158,7 @@ class CaptureManager: ObservableObject {
         let shouldAutoOpen = autoOpenAfterCapture &&
             (UserDefaults.standard.object(forKey: "autoOpenAfterCaptureInConfiguredApp") as? Bool ?? false)
         let shouldSave = forceSave || UserDefaults.standard.bool(forKey: "autoSaveScreenshots") || shouldAutoOpen
+        let shouldCopyToClipboard = UserDefaults.standard.bool(forKey: "copyScreenshotToClipboard")
 
         if shouldSave {
             try await saveScreenshot(finalImage)
@@ -2165,6 +2166,10 @@ class CaptureManager: ObservableObject {
 
         await MainActor.run {
             lastCapturedImage = finalImage
+            if shouldCopyToClipboard {
+                copyImageToPasteboard(finalImage)
+            }
+
             if !shouldSave {
                 lastSavedImageURL = nil
             }
@@ -2183,6 +2188,13 @@ class CaptureManager: ObservableObject {
         }
 
         return finalImage
+    }
+
+    private func copyImageToPasteboard(_ image: NSImage) {
+        guard let tiffData = image.tiffRepresentation else { return }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setData(tiffData, forType: .tiff)
     }
 
     private func applyOutputStyle(to image: NSImage) -> NSImage {

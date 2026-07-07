@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @EnvironmentObject var permissionManager: PermissionManager
     @AppStorage("autoSaveScreenshots") private var autoSaveScreenshots = true
+    @AppStorage("copyScreenshotToClipboard") private var copyScreenshotToClipboard = true
     @AppStorage("screenshotFormat") private var screenshotFormat = "PNG"
     @AppStorage("showNotifications") private var showNotifications = true
     @AppStorage("launchAtLogin") private var launchAtLogin = false
@@ -169,6 +170,8 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Toggle("自动保存截图", isOn: $autoSaveScreenshots)
+                Toggle("截图后自动复制到剪贴板", isOn: $copyScreenshotToClipboard)
+                    .help("截图完成后默认将最终图片写入系统剪贴板")
 
                 HStack {
                     Text("图片格式:")

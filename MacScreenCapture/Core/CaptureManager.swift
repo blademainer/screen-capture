@@ -719,17 +719,14 @@ class CaptureManager: ObservableObject {
             }
         }
 
-        let startDelay = UserDefaults.standard.integer(forKey: "recordingStartDelaySeconds")
-        if startDelay > 0 {
-            try await Task.sleep(nanoseconds: UInt64(startDelay) * 1_000_000_000)
-        }
-
         let selectedRecordingRegion: CGRect?
         if captureMode == .region {
             selectedRecordingRegion = try await selectRecordingRegion()
         } else {
             selectedRecordingRegion = nil
         }
+
+        try await waitForRecordingStartDelayIfNeeded(subtitle: "准备录制")
 
         // 通知WindowManager开始录制
         WindowManager.shared.updateCaptureState(.recording(startTime: Date()))
@@ -954,10 +951,7 @@ class CaptureManager: ObservableObject {
             throw CaptureError.recordingFailed("没有可用的录音来源")
         }
 
-        let startDelay = UserDefaults.standard.integer(forKey: "recordingStartDelaySeconds")
-        if startDelay > 0 {
-            try await Task.sleep(nanoseconds: UInt64(startDelay) * 1_000_000_000)
-        }
+        try await waitForRecordingStartDelayIfNeeded(subtitle: "准备录音")
 
         let (filter, outputURL): (SCContentFilter, URL) = try await withCheckedThrowingContinuation { continuation in
             captureQueue.async {
@@ -1284,6 +1278,26 @@ class CaptureManager: ObservableObject {
 
         settingsView.save()
         return true
+    }
+
+    @MainActor
+    private func waitForRecordingStartDelayIfNeeded(subtitle: String) async throws {
+        let startDelay = UserDefaults.standard.integer(forKey: "recordingStartDelaySeconds")
+        guard startDelay > 0 else { return }
+
+        let countdownOverlay = ScreenshotCountdownOverlayController(subtitle: subtitle)
+
+        defer {
+            countdownOverlay.close()
+        }
+
+        for remaining in stride(from: startDelay, through: 1, by: -1) {
+            countdownOverlay.show(remaining: remaining)
+            try await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+
+        countdownOverlay.close()
+        try await Task.sleep(nanoseconds: 160_000_000)
     }
 
     /// 保存截图
@@ -2968,6 +2982,11 @@ final class MultiWindowSelectionView: NSView {
 private final class ScreenshotCountdownOverlayController {
     private var window: NSWindow?
     private let label = NSTextField(labelWithString: "")
+    private let subtitle: String
+
+    init(subtitle: String = "准备截图") {
+        self.subtitle = subtitle
+    }
 
     func show(remaining: Int) {
         if window == nil {
@@ -3006,7 +3025,7 @@ private final class ScreenshotCountdownOverlayController {
         window.ignoresMouseEvents = true
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
 
-        let contentView = CountdownOverlayView(label: label)
+        let contentView = CountdownOverlayView(label: label, subtitle: subtitle)
         window.contentView = contentView
         self.window = window
     }
@@ -3025,10 +3044,11 @@ private final class ScreenshotCountdownOverlayController {
 @available(macOS 12.3, *)
 private final class CountdownOverlayView: NSView {
     private let label: NSTextField
-    private let subtitle = NSTextField(labelWithString: "准备截图")
+    private let subtitle: NSTextField
 
-    init(label: NSTextField) {
+    init(label: NSTextField, subtitle: String) {
         self.label = label
+        self.subtitle = NSTextField(labelWithString: subtitle)
         super.init(frame: NSRect(x: 0, y: 0, width: 156, height: 112))
         wantsLayer = true
         setupViews()

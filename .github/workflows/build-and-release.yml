@@ -66,6 +66,8 @@ jobs:
             -scheme MacScreenCapture \
             -configuration Release \
             -archivePath ./build/MacScreenCapture.xcarchive \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
             CODE_SIGN_IDENTITY="${{ secrets.CODE_SIGN_IDENTITY }}" \
             DEVELOPMENT_TEAM="${{ secrets.DEVELOPMENT_TEAM }}" \
             CODE_SIGN_STYLE=Manual
@@ -75,6 +77,8 @@ jobs:
             -scheme MacScreenCapture \
             -configuration Release \
             -archivePath ./build/MacScreenCapture.xcarchive \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY=""
         fi
@@ -112,6 +116,17 @@ jobs:
         cp -R ./build/MacScreenCapture.xcarchive/Products/Applications/MacScreenCapture.app ./build/export/
         ditto -c -k --keepParent ./build/export/MacScreenCapture.app ./build/MacScreenCapture.zip
         hdiutil create -volname "MacScreenCapture" -srcfolder ./build/export/MacScreenCapture.app -ov -format UDZO ./build/MacScreenCapture.dmg
+
+    - name: Validate Universal App
+      run: |
+        APP_BINARY="./build/export/MacScreenCapture.app/Contents/MacOS/MacScreenCapture"
+        ARCHS="$(lipo -archs "$APP_BINARY")"
+        echo "Built architectures: $ARCHS"
+
+        if [[ " $ARCHS " != *" arm64 "* ]] || [[ " $ARCHS " != *" x86_64 "* ]]; then
+          echo "Expected a universal app containing arm64 and x86_64 slices."
+          exit 1
+        fi
           
     - name: Notarize App (if certificates available)
       run: |

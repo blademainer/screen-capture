@@ -40,7 +40,7 @@ struct MenuBarView: View {
                     quickScreenshot(.region)
                 }
 
-                MenuButton(title: "延时截图", icon: "timer", shortcut: "5s") {
+                MenuButton(title: "延时截图", icon: "timer", shortcut: "⌘⌥L") {
                     quickDelayedScreenshot()
                 }
 
@@ -52,7 +52,7 @@ struct MenuBarView: View {
                     quickMultiWindowScreenshot()
                 }
 
-                MenuButton(title: "全屏带壳截图", icon: "laptopcomputer") {
+                MenuButton(title: "全屏带壳截图", icon: "laptopcomputer", shortcut: "⌘⌥F") {
                     quickDeviceFramedScreenshot()
                 }
             }

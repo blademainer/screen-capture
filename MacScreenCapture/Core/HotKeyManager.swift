@@ -103,7 +103,9 @@ enum HotKeyAction: String, CaseIterable, Codable {
     case fullScreenshot = "full_screenshot"
     case regionScreenshot = "region_screenshot"
     case windowScreenshot = "window_screenshot"
+    case delayedScreenshot = "delayed_screenshot"
     case multiWindowScreenshot = "multi_window_screenshot"
+    case deviceFramedScreenshot = "device_framed_screenshot"
     case startRecording = "start_recording"
     case startAudioRecording = "start_audio_recording"
     case stopRecording = "stop_recording"
@@ -121,8 +123,12 @@ enum HotKeyAction: String, CaseIterable, Codable {
             return HotKeyConfig(keyCode: 2, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "区域截图")
         case .windowScreenshot:
             return HotKeyConfig(keyCode: 3, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "窗口截图")
+        case .delayedScreenshot:
+            return HotKeyConfig(keyCode: 37, modifiers: UInt32(cmdKey | optionKey), isEnabled: true, description: "延时截图")
         case .multiWindowScreenshot:
             return HotKeyConfig(keyCode: 13, modifiers: UInt32(cmdKey | optionKey), isEnabled: true, description: "多窗口截图")
+        case .deviceFramedScreenshot:
+            return HotKeyConfig(keyCode: 3, modifiers: UInt32(cmdKey | optionKey), isEnabled: true, description: "全屏带壳截图")
         case .startRecording:
             return HotKeyConfig(keyCode: 13, modifiers: UInt32(optionKey), isEnabled: true, description: "开始录制")
         case .startAudioRecording:
@@ -147,7 +153,9 @@ enum HotKeyAction: String, CaseIterable, Codable {
         case .fullScreenshot: return "全屏截图"
         case .regionScreenshot: return "区域截图"
         case .windowScreenshot: return "窗口截图"
+        case .delayedScreenshot: return "延时截图"
         case .multiWindowScreenshot: return "多窗口截图"
+        case .deviceFramedScreenshot: return "全屏带壳截图"
         case .startRecording: return "开始录制"
         case .startAudioRecording: return "开始录音"
         case .stopRecording: return "停止录制"
@@ -390,11 +398,23 @@ class HotKeyManager: ObservableObject {
                 await captureManager.captureRegion()
             case .windowScreenshot:
                 await captureManager.captureWindow()
+            case .delayedScreenshot:
+                do {
+                    _ = try await captureManager.captureDelayedScreenshot()
+                } catch {
+                    print("延时截图失败: \(error)")
+                }
             case .multiWindowScreenshot:
                 do {
                     _ = try await captureManager.captureMultipleWindowsScreenshot()
                 } catch {
                     print("多窗口截图失败: \(error)")
+                }
+            case .deviceFramedScreenshot:
+                do {
+                    _ = try await captureManager.captureDeviceFramedFullScreen()
+                } catch {
+                    print("全屏带壳截图失败: \(error)")
                 }
             case .startRecording:
                 if !captureManager.isRecording {

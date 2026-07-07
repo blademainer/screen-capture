@@ -224,6 +224,17 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(editingWindowSource.contains("showingColorPicker: $showingColorPicker"))
     }
 
+    func testEditingWindowClosesWithEscape() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Core/EditingWindowController.swift")
+
+        XCTAssertTrue(source.contains("let window = EditingWindow("))
+        XCTAssertTrue(source.contains("final class EditingWindow: NSWindow"))
+        XCTAssertTrue(source.contains("override func cancelOperation(_ sender: Any?)"))
+        XCTAssertTrue(source.contains("override func keyDown(with event: NSEvent)"))
+        XCTAssertTrue(source.contains("event.keyCode == UInt16(kVK_Escape)"))
+        XCTAssertTrue(source.contains("close()"))
+    }
+
     func testRecordingPreflightExposesIShotAudioAndExportControls() throws {
         let captureManagerSource = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
         let recordingViewSource = try repositoryFileContents("MacScreenCapture/Views/RecordingView.swift")

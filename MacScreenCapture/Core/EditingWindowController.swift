@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Cocoa
+import Carbon
 
 // MARK: - Editing Window Controller
 class EditingWindowController: NSWindowController {
@@ -32,7 +33,7 @@ class EditingWindowController: NSWindowController {
         windowSize.width = max(windowSize.width, 500) // 最小宽度
         
         // 创建标准窗口（非浮窗）
-        let window = NSWindow(
+        let window = EditingWindow(
             contentRect: NSRect(origin: .zero, size: windowSize),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
@@ -268,6 +269,21 @@ class EditingWindowController: NSWindowController {
                 }
             }
         }
+    }
+}
+
+final class EditingWindow: NSWindow {
+    override func cancelOperation(_ sender: Any?) {
+        close()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == UInt16(kVK_Escape) {
+            close()
+            return
+        }
+
+        super.keyDown(with: event)
     }
 }
 

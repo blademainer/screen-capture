@@ -14,6 +14,7 @@ import AppKit
 import ApplicationServices
 @preconcurrency import Vision
 import NaturalLanguage
+import Translation
 
 struct RecordingAudioDiagnostics: Sendable {
     let outputURL: URL
@@ -2510,12 +2511,50 @@ class CaptureManager: ObservableObject {
 
     private func translateText(_ text: String, targetLanguage: String) async throws -> TranslationProviderResult {
         do {
+            let translated = try await translateWithAppleInstalledModel(text, targetLanguage: targetLanguage)
+            return TranslationProviderResult(text: translated, providerName: "Apple 本地翻译")
+        } catch {
+            // Fall through to online providers when the system model is unavailable or not installed.
+        }
+
+        do {
             let translated = try await translateWithGoogle(text, targetLanguage: targetLanguage)
             return TranslationProviderResult(text: translated, providerName: "Google")
         } catch {
             let translated = try await translateWithMyMemory(text, targetLanguage: targetLanguage)
             return TranslationProviderResult(text: translated, providerName: "MyMemory")
         }
+    }
+
+    private func translateWithAppleInstalledModel(_ text: String, targetLanguage: String) async throws -> String {
+        guard #available(macOS 26.0, *) else {
+            throw CaptureError.failedToTranslate
+        }
+
+        let sourceLanguage = Locale.Language(identifier: appleLanguageCode(for: detectedTranslationLanguage(for: text)))
+        let target = Locale.Language(identifier: appleLanguageCode(for: targetLanguage))
+
+        if sourceLanguage.languageCode == target.languageCode,
+           sourceLanguage.script == target.script,
+           sourceLanguage.region == target.region {
+            return text
+        }
+
+        let availability = LanguageAvailability()
+        let status = await availability.status(from: sourceLanguage, to: target)
+        guard status == .installed else {
+            throw CaptureError.failedToTranslate
+        }
+
+        let session = TranslationSession(installedSource: sourceLanguage, target: target)
+        try await session.prepareTranslation()
+        let response = try await session.translate(text)
+        let translated = response.targetText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !translated.isEmpty else {
+            throw CaptureError.failedToTranslate
+        }
+
+        return translated
     }
 
     private func translateWithGoogle(_ text: String, targetLanguage: String) async throws -> String {
@@ -2621,6 +2660,17 @@ class CaptureManager: ObservableObject {
             return "zh-TW"
         default:
             return targetLanguage
+        }
+    }
+
+    private func appleLanguageCode(for language: String) -> String {
+        switch language {
+        case "zh-CN":
+            return "zh-Hans"
+        case "zh-TW":
+            return "zh-Hant"
+        default:
+            return language
         }
     }
 

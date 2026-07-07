@@ -681,7 +681,8 @@ class CaptureManager: ObservableObject {
         let configuration = SCStreamConfiguration()
         configuration.width = Int(screenSize.width)
         configuration.height = Int(screenSize.height)
-        let frameRate = max(15, Int(UserDefaults.standard.double(forKey: "recordingFrameRate")))
+        let frameRate = min(60, max(15, Int(UserDefaults.standard.double(forKey: "recordingFrameRate"))))
+        let recordingQuality = UserDefaults.standard.string(forKey: "recordingQuality") ?? "高"
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(frameRate))
         configuration.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange // 使用 YUV 格式，更适合 H.264
         configuration.showsCursor = UserDefaults.standard.bool(forKey: "showCursor")
@@ -704,7 +705,7 @@ class CaptureManager: ObservableObject {
 
         print("音频录制设置 - 系统音频: \(includeSystemAudio), 麦克风: \(includeMicrophone)")
 
-        print("录制配置: \(Int(screenSize.width))x\(Int(screenSize.height)) @ \(frameRate)fps")
+        print("录制配置: \(Int(screenSize.width))x\(Int(screenSize.height)) @ \(frameRate)fps, 质量: \(recordingQuality)")
 
         recordingURL = outputURL
         print("录制文件路径: \(recordingURL!.path)")
@@ -715,7 +716,9 @@ class CaptureManager: ObservableObject {
             outputURL: recordingURL!,
             fileType: fileType,
             includeSystemAudio: includeSystemAudio,
-            includeMicrophone: includeMicrophone
+            includeMicrophone: includeMicrophone,
+            frameRate: frameRate,
+            quality: recordingQuality
         )
 
         // 创建并启动流
@@ -2206,6 +2209,8 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     private let fileType: AVFileType
     private let requestedSystemAudio: Bool
     private let requestedMicrophone: Bool
+    private let frameRate: Int
+    private let quality: String
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
     private var audioInput: AVAssetWriterInput?
@@ -2221,11 +2226,13 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     private var lastDiagnostics: RecordingAudioDiagnostics?
     private var finishCompletions: [(RecordingAudioDiagnostics) -> Void] = []
 
-    init(outputURL: URL, fileType: AVFileType = .mov, includeSystemAudio: Bool, includeMicrophone: Bool) {
+    init(outputURL: URL, fileType: AVFileType = .mov, includeSystemAudio: Bool, includeMicrophone: Bool, frameRate: Int, quality: String) {
         self.outputURL = outputURL
         self.fileType = fileType
         self.requestedSystemAudio = includeSystemAudio
         self.requestedMicrophone = includeMicrophone
+        self.frameRate = frameRate
+        self.quality = quality
         super.init()
     }
 
@@ -2271,17 +2278,21 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
 
             print("调整后录制分辨率: \(adjustedWidth)x\(adjustedHeight)")
 
+            let averageBitRate = videoBitRate(width: adjustedWidth, height: adjustedHeight)
+            let profileLevel = h264ProfileLevel(for: quality)
+            logMicrophone("视频编码配置: quality=\(quality), frameRate=\(frameRate), bitRate=\(averageBitRate), profile=\(profileLevel)")
+
             // 视频输入设置 - 使用 QuickTime 兼容的 H.264 设置
             let videoSettings: [String: Any] = [
                 AVVideoCodecKey: AVVideoCodecType.h264,
                 AVVideoWidthKey: adjustedWidth,
                 AVVideoHeightKey: adjustedHeight,
                 AVVideoCompressionPropertiesKey: [
-                    AVVideoProfileLevelKey: AVVideoProfileLevelH264BaselineAutoLevel,
-                    AVVideoAverageBitRateKey: 5000000,
-                    AVVideoMaxKeyFrameIntervalKey: 30,
+                    AVVideoProfileLevelKey: profileLevel,
+                    AVVideoAverageBitRateKey: averageBitRate,
+                    AVVideoMaxKeyFrameIntervalKey: frameRate,
                     AVVideoAllowFrameReorderingKey: false,
-                    AVVideoExpectedSourceFrameRateKey: 30,
+                    AVVideoExpectedSourceFrameRateKey: frameRate,
                     AVVideoH264EntropyModeKey: AVVideoH264EntropyModeCAVLC
                 ]
             ]
@@ -2737,6 +2748,36 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
             fileSize: fileSize,
             assetWriterSucceeded: assetWriterSucceeded
         )
+    }
+
+    private func videoBitRate(width: Int, height: Int) -> Int {
+        let pixelsPerSecond = Double(width * height * frameRate)
+        let bitsPerPixel: Double
+
+        switch quality {
+        case "低":
+            bitsPerPixel = 0.04
+        case "中":
+            bitsPerPixel = 0.07
+        case "超高":
+            bitsPerPixel = 0.16
+        default:
+            bitsPerPixel = 0.11
+        }
+
+        let calculatedBitRate = Int(pixelsPerSecond * bitsPerPixel)
+        return min(max(calculatedBitRate, 2_000_000), 60_000_000)
+    }
+
+    private func h264ProfileLevel(for quality: String) -> String {
+        switch quality {
+        case "低":
+            return AVVideoProfileLevelH264BaselineAutoLevel
+        case "中":
+            return AVVideoProfileLevelH264MainAutoLevel
+        default:
+            return AVVideoProfileLevelH264HighAutoLevel
+        }
     }
 
     private func completeFinish(_ diagnostics: RecordingAudioDiagnostics) {

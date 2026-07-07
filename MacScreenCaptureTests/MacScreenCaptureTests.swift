@@ -67,6 +67,49 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(uniqueName.hasSuffix(".png"))
         XCTAssertTrue(uniqueName.hasPrefix("test"))
     }
+
+    func testRegisteredDefaultsCoverIShotAndProCapabilities() throws {
+        let defaults = UserDefaults.macScreenCaptureDefaults
+
+        XCTAssertEqual(defaults["includeSystemAudio"] as? Bool, true)
+        XCTAssertEqual(defaults["includeMicrophone"] as? Bool, true)
+        XCTAssertEqual(defaults["recordingFrameRate"] as? Double, 60.0)
+        XCTAssertEqual(defaults["recordingQuality"] as? String, "高")
+        XCTAssertEqual(defaults["recordingFileFormat"] as? String, "MOV")
+        XCTAssertEqual(defaults["showCursor"] as? Bool, true)
+        XCTAssertEqual(defaults["delayedScreenshotSeconds"] as? Int, 5)
+        XCTAssertEqual(defaults["multiWindowDesktopBackdrop"] as? Bool, true)
+        XCTAssertEqual(defaults["scrollingCaptureSlices"] as? Int, 30)
+        XCTAssertEqual(defaults["scrollingCaptureDirection"] as? String, "down")
+        XCTAssertEqual(defaults["scrollingCaptureTrimOverlap"] as? Bool, true)
+        XCTAssertEqual(defaults["scrollingCaptureDetectContentArea"] as? Bool, true)
+        XCTAssertEqual(defaults["floatingWindowAlwaysOnTop"] as? Bool, true)
+        XCTAssertEqual(defaults["doubleOptionQuickOpenEnabled"] as? Bool, true)
+        XCTAssertEqual(defaults["annotationStylePreset"] as? String, AnnotationStylePreset.professional.rawValue)
+        XCTAssertEqual(defaults["colorCodeFormat"] as? String, "#HEX")
+    }
+
+    func testRegisteringDefaultsDoesNotOverwriteUserChoices() throws {
+        let suiteName = "MacScreenCaptureTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Unable to create isolated defaults suite")
+            return
+        }
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        UserDefaults.registerMacScreenCaptureDefaults(in: defaults)
+        XCTAssertTrue(defaults.bool(forKey: "includeSystemAudio"))
+        XCTAssertEqual(defaults.string(forKey: "recordingFileFormat"), "MOV")
+
+        defaults.set(false, forKey: "includeSystemAudio")
+        defaults.set("MP4", forKey: "recordingFileFormat")
+        UserDefaults.registerMacScreenCaptureDefaults(in: defaults)
+
+        XCTAssertFalse(defaults.bool(forKey: "includeSystemAudio"))
+        XCTAssertEqual(defaults.string(forKey: "recordingFileFormat"), "MP4")
+    }
     
     func testNotificationManagerInitialization() throws {
         throw XCTSkip("NotificationManager requires a real app bundle host for UNUserNotificationCenter.")

@@ -17,6 +17,7 @@ struct FloatingWindowContentView: View {
     @State private var showingColorPicker = false
     @State private var isToolbarVisible = true
     @State private var isActionBarVisible = true
+    @AppStorage("annotationTextOutlined") private var textOutlined = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -91,6 +92,7 @@ struct FloatingWindowContentView: View {
             selectedTool: $selectedTool,
             selectedColor: $selectedColor,
             lineWidth: $lineWidth,
+            textOutlined: $textOutlined,
             showingColorPicker: $showingColorPicker,
             onToolSelected: { tool in
                 selectedTool = tool
@@ -120,7 +122,8 @@ struct FloatingWindowContentView: View {
                     editingSession: editingSession,
                     selectedTool: selectedTool,
                     selectedColor: selectedColor,
-                    lineWidth: lineWidth
+                    lineWidth: lineWidth,
+                    textOutlined: textOutlined
                 )
             }
         }
@@ -255,10 +258,14 @@ struct FloatingWindowContentView: View {
 
     private func drawText(_ operation: EditingOperation) {
         guard let text = operation.text, let drawRect = operation.rect else { return }
-        let attributes: [NSAttributedString.Key: Any] = [
+        var attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: max(14, operation.lineWidth * 8)),
             .foregroundColor: operation.color.nsColor
         ]
+        if operation.textOutlined {
+            attributes[.strokeColor] = NSColor.white
+            attributes[.strokeWidth] = -3.0
+        }
         NSAttributedString(string: text, attributes: attributes).draw(in: drawRect)
     }
 
@@ -276,11 +283,15 @@ struct FloatingWindowContentView: View {
 
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .center
-        let attributes: [NSAttributedString.Key: Any] = [
+        var attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: diameter * 0.52, weight: .bold),
             .foregroundColor: NSColor.white,
             .paragraphStyle: paragraphStyle
         ]
+        if operation.textOutlined {
+            attributes[.strokeColor] = NSColor.black
+            attributes[.strokeWidth] = -4.0
+        }
         let attributedString = NSAttributedString(string: text, attributes: attributes)
         let textRect = markerRect.insetBy(dx: 2, dy: (diameter - attributedString.size().height) / 2)
         attributedString.draw(in: textRect)
@@ -304,6 +315,7 @@ struct TraditionalEditingCanvas: NSViewRepresentable {
     let selectedTool: EditingTool
     let selectedColor: Color
     let lineWidth: CGFloat
+    let textOutlined: Bool
 
     func makeNSView(context: Context) -> FloatingEditingCanvasView {
         let canvasView = FloatingEditingCanvasView()
@@ -316,6 +328,7 @@ struct TraditionalEditingCanvas: NSViewRepresentable {
         nsView.selectedTool = selectedTool
         nsView.selectedColor = NSColor(selectedColor)
         nsView.lineWidth = lineWidth
+        nsView.textOutlined = textOutlined
         nsView.needsDisplay = true
     }
 
@@ -347,10 +360,14 @@ class FloatingEditingCanvasView: NSView {
     var selectedTool: EditingTool = .none
     var selectedColor: NSColor = .red
     var lineWidth: CGFloat = 2.0
+    var textOutlined = false
 
     private var currentPoints: [CGPoint] = []
     private var isDrawing = false
     private var nextNumber = FloatingEditingCanvasView.defaultNumberStart()
+    private var movingOperationID: UUID?
+    private var movingStartPoint: CGPoint?
+    private var originalMovingOperation: EditingOperation?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -374,6 +391,8 @@ class FloatingEditingCanvasView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
+        editingSession?.operations.forEach { drawCommittedOperation($0) }
+
         // 绘制当前正在绘制的内容
         if !currentPoints.isEmpty && isDrawing {
             drawCurrentStroke()
@@ -384,7 +403,7 @@ class FloatingEditingCanvasView: NSView {
         guard !currentPoints.isEmpty else { return }
         guard let firstPoint = currentPoints.first, let lastPoint = currentPoints.last else { return }
 
-        if [.rectangle, .circle, .mosaic].contains(selectedTool), currentPoints.count >= 2 {
+        if [.rectangle, .circle, .mosaic, .text].contains(selectedTool), currentPoints.count >= 2 {
             let rect = normalizedRect(from: firstPoint, to: lastPoint)
             let path = selectedTool == .circle ? NSBezierPath(ovalIn: rect) : NSBezierPath(rect: rect)
             path.lineWidth = lineWidth
@@ -435,16 +454,38 @@ class FloatingEditingCanvasView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        let location = convert(event.locationInWindow, from: nil)
+
+        if selectedTool == .none, let operation = hitTestMovableOperation(at: location) {
+            movingOperationID = operation.id
+            movingStartPoint = location
+            originalMovingOperation = operation
+            return
+        }
+
         guard selectedTool != .none else { return }
 
-        let location = convert(event.locationInWindow, from: nil)
         currentPoints = [location]
         isDrawing = true
         needsDisplay = true
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard selectedTool != .none, selectedTool != .numbered, selectedTool != .text, isDrawing else { return }
+        if let movingOperationID,
+           let movingStartPoint,
+           let originalMovingOperation,
+           originalMovingOperation.id == movingOperationID {
+            let location = convert(event.locationInWindow, from: nil)
+            let offset = CGSize(
+                width: location.x - movingStartPoint.x,
+                height: location.y - movingStartPoint.y
+            )
+            editingSession?.updateOperation(originalMovingOperation.moved(by: offset))
+            needsDisplay = true
+            return
+        }
+
+        guard selectedTool != .none, selectedTool != .numbered, isDrawing else { return }
 
         let location = convert(event.locationInWindow, from: nil)
         currentPoints.append(location)
@@ -452,6 +493,14 @@ class FloatingEditingCanvasView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if movingOperationID != nil {
+            movingOperationID = nil
+            movingStartPoint = nil
+            originalMovingOperation = nil
+            needsDisplay = true
+            return
+        }
+
         guard selectedTool != .none, isDrawing, !currentPoints.isEmpty else {
             isDrawing = false
             return
@@ -494,12 +543,15 @@ class FloatingEditingCanvasView: NSView {
             return EditingOperation(type: selectedTool, points: [firstPoint, lastPoint], color: selectedColor, lineWidth: lineWidth)
         case .text:
             guard let text = requestTextInput(at: firstPoint) else { return nil }
-            let textRect = NSRect(x: firstPoint.x, y: firstPoint.y, width: 240, height: max(32, lineWidth * 12))
-            return EditingOperation(type: .text, color: selectedColor, lineWidth: lineWidth, text: text, rect: textRect)
+            let draggedRect = normalizedRect(from: firstPoint, to: lastPoint)
+            let textRect = draggedRect.width >= 24 && draggedRect.height >= 18
+                ? draggedRect
+                : NSRect(x: firstPoint.x, y: firstPoint.y, width: 240, height: max(32, lineWidth * 12))
+            return EditingOperation(type: .text, color: selectedColor, lineWidth: lineWidth, text: text, rect: textRect, textOutlined: textOutlined)
         case .numbered:
             let text = "\(nextNumber)"
             nextNumber += 1
-            return EditingOperation(type: .numbered, points: [firstPoint], color: selectedColor, lineWidth: lineWidth, text: text, rect: nil)
+            return EditingOperation(type: .numbered, points: [firstPoint], color: selectedColor, lineWidth: lineWidth, text: text, rect: nil, textOutlined: textOutlined)
         case .none, .crop:
             return nil
         }
@@ -551,6 +603,108 @@ class FloatingEditingCanvasView: NSView {
         arrowPath.lineWidth = operation.lineWidth
         arrowPath.stroke()
     }
+
+    private func hitTestMovableOperation(at point: CGPoint) -> EditingOperation? {
+        editingSession?.operations.reversed().first { operation in
+            switch operation.type {
+            case .text:
+                return operation.rect?.insetBy(dx: -6, dy: -6).contains(point) == true
+            case .numbered:
+                return numberedMarkerRect(for: operation).insetBy(dx: -6, dy: -6).contains(point)
+            default:
+                return false
+            }
+        }
+    }
+
+    private func drawCommittedOperation(_ operation: EditingOperation) {
+        switch operation.type {
+        case .pen, .highlighter:
+            drawCommittedStroke(operation)
+        case .rectangle:
+            guard let rect = operation.rect else { return }
+            let path = NSBezierPath(rect: rect)
+            path.lineWidth = operation.lineWidth
+            operation.color.nsColor.setStroke()
+            path.stroke()
+        case .circle:
+            guard let rect = operation.rect else { return }
+            let path = NSBezierPath(ovalIn: rect)
+            path.lineWidth = operation.lineWidth
+            operation.color.nsColor.setStroke()
+            path.stroke()
+        case .arrow:
+            drawPreviewArrow(operation)
+        case .text:
+            drawCommittedText(operation)
+        case .numbered:
+            drawCommittedNumberedMarker(operation)
+        case .mosaic:
+            guard let rect = operation.rect else { return }
+            NSColor.black.withAlphaComponent(0.18).setFill()
+            NSBezierPath(rect: rect).fill()
+        case .none, .crop:
+            break
+        }
+    }
+
+    private func drawCommittedStroke(_ operation: EditingOperation) {
+        guard operation.points.count > 1 else { return }
+        let path = NSBezierPath()
+        path.move(to: operation.points[0])
+        operation.points.dropFirst().forEach { path.line(to: $0) }
+        path.lineWidth = operation.lineWidth
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+        (operation.type == .highlighter ? operation.color.nsColor.withAlphaComponent(0.5) : operation.color.nsColor).setStroke()
+        path.stroke()
+    }
+
+    private func drawCommittedText(_ operation: EditingOperation) {
+        guard let text = operation.text, let rect = operation.rect else { return }
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: max(14, operation.lineWidth * 8)),
+            .foregroundColor: operation.color.nsColor
+        ]
+        if operation.textOutlined {
+            attributes[.strokeColor] = NSColor.white
+            attributes[.strokeWidth] = -3.0
+        }
+        NSAttributedString(string: text, attributes: attributes).draw(in: rect)
+    }
+
+    private func drawCommittedNumberedMarker(_ operation: EditingOperation) {
+        guard let text = operation.text else { return }
+        let markerRect = numberedMarkerRect(for: operation)
+        let path = NSBezierPath(ovalIn: markerRect)
+        operation.color.nsColor.setFill()
+        path.fill()
+        NSColor.white.setStroke()
+        path.lineWidth = max(1.5, operation.lineWidth / 2)
+        path.stroke()
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: markerRect.width * 0.52, weight: .bold),
+            .foregroundColor: NSColor.white,
+            .paragraphStyle: paragraphStyle
+        ]
+        if operation.textOutlined {
+            attributes[.strokeColor] = NSColor.black
+            attributes[.strokeWidth] = -4.0
+        }
+
+        let attributedString = NSAttributedString(string: text, attributes: attributes)
+        let textRect = markerRect.insetBy(dx: 2, dy: (markerRect.height - attributedString.size().height) / 2)
+        attributedString.draw(in: textRect)
+    }
+
+    private func numberedMarkerRect(for operation: EditingOperation) -> NSRect {
+        let center = operation.points.first ?? CGPoint(x: operation.rect?.midX ?? 0, y: operation.rect?.midY ?? 0)
+        let diameter = max(24, operation.lineWidth * 9)
+        return NSRect(x: center.x - diameter / 2, y: center.y - diameter / 2, width: diameter, height: diameter)
+    }
 }
 
 // MARK: - Editing Toolbar
@@ -558,6 +712,7 @@ struct EditingToolbar: View {
     @Binding var selectedTool: EditingTool
     @Binding var selectedColor: Color
     @Binding var lineWidth: CGFloat
+    @Binding var textOutlined: Bool
     @Binding var showingColorPicker: Bool
 
     let onToolSelected: (EditingTool) -> Void
@@ -621,6 +776,11 @@ struct EditingToolbar: View {
                     .foregroundColor(.secondary)
                     .frame(width: 20)
             }
+
+            Toggle("描边", isOn: $textOutlined)
+                .toggleStyle(.checkbox)
+                .font(.caption)
+                .disabled(selectedTool != .text && selectedTool != .numbered)
         }
     }
 }

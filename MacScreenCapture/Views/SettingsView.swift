@@ -31,6 +31,7 @@ struct SettingsView: View {
     @AppStorage("screenshotShadowRadius") private var screenshotShadowRadius = 24.0
     @AppStorage("screenshotShadowColorHex") private var screenshotShadowColorHex = "#000000"
     @AppStorage("numberedAnnotationStart") private var numberedAnnotationStart = 1
+    @AppStorage("annotationTextOutlined") private var annotationTextOutlined = false
     @AppStorage("colorCodeFormat") private var colorCodeFormat = "#HEX"
     @AppStorage("customColorCodeTemplate") private var customColorCodeTemplate = "{hex}"
     @AppStorage("openAfterCaptureAppPath") private var openAfterCaptureAppPath = ""
@@ -225,6 +226,7 @@ struct SettingsView: View {
                         .fontWeight(.medium)
 
                     Stepper("数字序号起始值: \(numberedAnnotationStart)", value: $numberedAnnotationStart, in: 1...999)
+                    Toggle("文字和序号启用描边", isOn: $annotationTextOutlined)
                 }
                 .padding(.top, 4)
 

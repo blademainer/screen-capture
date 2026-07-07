@@ -49,23 +49,50 @@ enum EditingTool: String, CaseIterable, Codable {
 
 // MARK: - Editing Operation
 struct EditingOperation: Identifiable, Codable {
-    let id = UUID()
+    let id: UUID
     let type: EditingTool
     let points: [CGPoint]
     let color: CodableColor
     let lineWidth: CGFloat
     let text: String?
     let rect: CGRect?
+    let textOutlined: Bool
     let timestamp: Date
 
-    init(type: EditingTool, points: [CGPoint] = [], color: NSColor = .red, lineWidth: CGFloat = 2.0, text: String? = nil, rect: CGRect? = nil) {
+    init(
+        id: UUID = UUID(),
+        type: EditingTool,
+        points: [CGPoint] = [],
+        color: NSColor = .red,
+        lineWidth: CGFloat = 2.0,
+        text: String? = nil,
+        rect: CGRect? = nil,
+        textOutlined: Bool = false,
+        timestamp: Date = Date()
+    ) {
+        self.id = id
         self.type = type
         self.points = points
         self.color = CodableColor(color: color)
         self.lineWidth = lineWidth
         self.text = text
         self.rect = rect
-        self.timestamp = Date()
+        self.textOutlined = textOutlined
+        self.timestamp = timestamp
+    }
+
+    func moved(by offset: CGSize) -> EditingOperation {
+        EditingOperation(
+            id: id,
+            type: type,
+            points: points.map { CGPoint(x: $0.x + offset.width, y: $0.y + offset.height) },
+            color: color.nsColor,
+            lineWidth: lineWidth,
+            text: text,
+            rect: rect?.offsetBy(dx: offset.width, dy: offset.height),
+            textOutlined: textOutlined,
+            timestamp: timestamp
+        )
     }
 }
 
@@ -115,6 +142,12 @@ class ImageEditingSession: ObservableObject {
         undoStack.append(operation)
         redoStack.removeAll()
 
+        updateCurrentImage()
+    }
+
+    func updateOperation(_ operation: EditingOperation) {
+        guard let index = operations.firstIndex(where: { $0.id == operation.id }) else { return }
+        operations[index] = operation
         updateCurrentImage()
     }
 
@@ -273,10 +306,14 @@ class ImageEditingSession: ObservableObject {
     private func drawText(_ operation: EditingOperation, in rect: NSRect) {
         guard let text = operation.text, let drawRect = operation.rect else { return }
 
-        let attributes: [NSAttributedString.Key: Any] = [
+        var attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 16),
             .foregroundColor: operation.color.nsColor
         ]
+        if operation.textOutlined {
+            attributes[.strokeColor] = NSColor.white
+            attributes[.strokeWidth] = -3.0
+        }
 
         let attributedString = NSAttributedString(string: text, attributes: attributes)
         attributedString.draw(in: drawRect)
@@ -308,7 +345,7 @@ class ImageEditingSession: ObservableObject {
         path.lineWidth = max(1.5, operation.lineWidth / 2)
         path.stroke()
 
-        let attributes: [NSAttributedString.Key: Any] = [
+        var attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: diameter * 0.52, weight: .bold),
             .foregroundColor: NSColor.white,
             .paragraphStyle: {
@@ -317,6 +354,10 @@ class ImageEditingSession: ObservableObject {
                 return style
             }()
         ]
+        if operation.textOutlined {
+            attributes[.strokeColor] = NSColor.black
+            attributes[.strokeWidth] = -4.0
+        }
 
         let attributedString = NSAttributedString(string: text, attributes: attributes)
         let textRect = markerRect.insetBy(dx: 2, dy: (diameter - attributedString.size().height) / 2)

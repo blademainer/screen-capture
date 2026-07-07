@@ -20,6 +20,22 @@
 		A1234567890ABCDFC /* KeyboardShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDFB /* KeyboardShortcuts.swift */; };
 		A1234567890ABCDFE /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDFD /* NotificationManager.swift */; };
 		A1234567890ABCE00 /* FileManager+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDFF /* FileManager+Extensions.swift */; };
+		A1234567890ABCE02 /* HotKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE01 /* HotKeyManager.swift */; };
+		A1234567890ABCE04 /* WindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE03 /* WindowManager.swift */; };
+		A1234567890ABCE06 /* FloatingWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE05 /* FloatingWindowController.swift */; };
+		A1234567890ABCE08 /* HotKeySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE07 /* HotKeySettingsView.swift */; };
+		A1234567890ABCE0A /* FloatingWindowContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE09 /* FloatingWindowContentView.swift */; };
+		A1234567890ABCE0C /* ColorCodeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE0B /* ColorCodeFormatter.swift */; };
+		A1234567890ABCE0E /* ScrollingImageStitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE0D /* ScrollingImageStitcher.swift */; };
+		A1234567890ABCE10 /* ScreenshotStyleRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE0F /* ScreenshotStyleRenderer.swift */; };
+		A1234567890ABCE12 /* OCRTextOrderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE11 /* OCRTextOrderer.swift */; };
+		A1234567890ABCE14 /* TranslationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE13 /* TranslationSupport.swift */; };
+		A1234567890ABCE16 /* RecordingSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE15 /* RecordingSettings.swift */; };
+		A1234567890ABCE18 /* MultiWindowCompositeLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE17 /* MultiWindowCompositeLayout.swift */; };
+		A1234567890ABCE1A /* IShotInteractionTiming.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE19 /* IShotInteractionTiming.swift */; };
+		A1234567890ABCE1C /* FloatingWindowConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE1B /* FloatingWindowConfiguration.swift */; };
+		A1234567890ABCE1E /* RecordingAudioSourceSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE1D /* RecordingAudioSourceSelection.swift */; };
+		A1234567890ABCE20 /* ScrollingCaptureSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE1F /* ScrollingCaptureSettings.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,6 +54,22 @@
 		A1234567890ABCDFB /* KeyboardShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcuts.swift; sourceTree = "<group>"; };
 		A1234567890ABCDFD /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		A1234567890ABCDFF /* FileManager+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FileManager+Extensions.swift"; sourceTree = "<group>"; };
+		A1234567890ABCE01 /* HotKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyManager.swift; sourceTree = "<group>"; };
+		A1234567890ABCE03 /* WindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowManager.swift; sourceTree = "<group>"; };
+		A1234567890ABCE05 /* FloatingWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingWindowController.swift; sourceTree = "<group>"; };
+		A1234567890ABCE07 /* HotKeySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeySettingsView.swift; sourceTree = "<group>"; };
+		A1234567890ABCE09 /* FloatingWindowContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingWindowContentView.swift; sourceTree = "<group>"; };
+		A1234567890ABCE0B /* ColorCodeFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorCodeFormatter.swift; sourceTree = "<group>"; };
+		A1234567890ABCE0D /* ScrollingImageStitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollingImageStitcher.swift; sourceTree = "<group>"; };
+		A1234567890ABCE0F /* ScreenshotStyleRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotStyleRenderer.swift; sourceTree = "<group>"; };
+		A1234567890ABCE11 /* OCRTextOrderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRTextOrderer.swift; sourceTree = "<group>"; };
+		A1234567890ABCE13 /* TranslationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationSupport.swift; sourceTree = "<group>"; };
+		A1234567890ABCE15 /* RecordingSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingSettings.swift; sourceTree = "<group>"; };
+		A1234567890ABCE17 /* MultiWindowCompositeLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiWindowCompositeLayout.swift; sourceTree = "<group>"; };
+		A1234567890ABCE19 /* IShotInteractionTiming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IShotInteractionTiming.swift; sourceTree = "<group>"; };
+		A1234567890ABCE1B /* FloatingWindowConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingWindowConfiguration.swift; sourceTree = "<group>"; };
+		A1234567890ABCE1D /* RecordingAudioSourceSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingAudioSourceSelection.swift; sourceTree = "<group>"; };
+		A1234567890ABCE1F /* ScrollingCaptureSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollingCaptureSettings.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -95,6 +127,9 @@
 			children = (
 				A1234567890ABCDEF /* CaptureManager.swift */,
 				A1234567890ABCDF1 /* PermissionManager.swift */,
+				A1234567890ABCE01 /* HotKeyManager.swift */,
+				A1234567890ABCE03 /* WindowManager.swift */,
+				A1234567890ABCE05 /* FloatingWindowController.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -106,6 +141,8 @@
 				A1234567890ABCDF5 /* RecordingView.swift */,
 				A1234567890ABCDF7 /* MenuBarView.swift */,
 				A1234567890ABCDF9 /* SettingsView.swift */,
+				A1234567890ABCE07 /* HotKeySettingsView.swift */,
+				A1234567890ABCE09 /* FloatingWindowContentView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -116,6 +153,17 @@
 				A1234567890ABCDFB /* KeyboardShortcuts.swift */,
 				A1234567890ABCDFD /* NotificationManager.swift */,
 				A1234567890ABCDFF /* FileManager+Extensions.swift */,
+				A1234567890ABCE0B /* ColorCodeFormatter.swift */,
+				A1234567890ABCE0D /* ScrollingImageStitcher.swift */,
+				A1234567890ABCE0F /* ScreenshotStyleRenderer.swift */,
+				A1234567890ABCE11 /* OCRTextOrderer.swift */,
+				A1234567890ABCE13 /* TranslationSupport.swift */,
+				A1234567890ABCE15 /* RecordingSettings.swift */,
+				A1234567890ABCE17 /* MultiWindowCompositeLayout.swift */,
+				A1234567890ABCE19 /* IShotInteractionTiming.swift */,
+				A1234567890ABCE1B /* FloatingWindowConfiguration.swift */,
+				A1234567890ABCE1D /* RecordingAudioSourceSelection.swift */,
+				A1234567890ABCE1F /* ScrollingCaptureSettings.swift */,
 			);
 			path = Utils;
 			sourceTree = "<group>";
@@ -136,8 +184,6 @@
 			dependencies = (
 			);
 			name = MacScreenCapture;
-			packageProductDependencies = (
-			);
 			productName = MacScreenCapture;
 			productReference = A1234567890ABCDD /* MacScreenCapture.app */;
 			productType = "com.apple.product-type.application";
@@ -203,6 +249,22 @@
 				A1234567890ABCDFC /* KeyboardShortcuts.swift in Sources */,
 				A1234567890ABCDFE /* NotificationManager.swift in Sources */,
 				A1234567890ABCE00 /* FileManager+Extensions.swift in Sources */,
+				A1234567890ABCE0C /* ColorCodeFormatter.swift in Sources */,
+				A1234567890ABCE0E /* ScrollingImageStitcher.swift in Sources */,
+				A1234567890ABCE10 /* ScreenshotStyleRenderer.swift in Sources */,
+				A1234567890ABCE12 /* OCRTextOrderer.swift in Sources */,
+				A1234567890ABCE14 /* TranslationSupport.swift in Sources */,
+				A1234567890ABCE16 /* RecordingSettings.swift in Sources */,
+				A1234567890ABCE18 /* MultiWindowCompositeLayout.swift in Sources */,
+				A1234567890ABCE1A /* IShotInteractionTiming.swift in Sources */,
+				A1234567890ABCE1C /* FloatingWindowConfiguration.swift in Sources */,
+				A1234567890ABCE1E /* RecordingAudioSourceSelection.swift in Sources */,
+				A1234567890ABCE20 /* ScrollingCaptureSettings.swift in Sources */,
+				A1234567890ABCE02 /* HotKeyManager.swift in Sources */,
+				A1234567890ABCE04 /* WindowManager.swift in Sources */,
+				A1234567890ABCE06 /* FloatingWindowController.swift in Sources */,
+				A1234567890ABCE08 /* HotKeySettingsView.swift in Sources */,
+				A1234567890ABCE0A /* FloatingWindowContentView.swift in Sources */,
 				A1234567890ABCDE1 /* MacScreenCaptureApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -263,7 +325,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 12.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -320,7 +382,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 12.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
@@ -342,6 +404,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "此应用需要访问麦克风来录制音频。";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -368,6 +431,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "此应用需要访问麦克风来录制音频。";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

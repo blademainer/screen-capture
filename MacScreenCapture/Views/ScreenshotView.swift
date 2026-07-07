@@ -13,37 +13,42 @@ struct ScreenshotView: View {
     @EnvironmentObject var captureManager: CaptureManager
     @EnvironmentObject var permissionManager: PermissionManager
     @State private var isCapturing = false
+    @State private var isRunningAdvancedAction = false
+    @State private var isProcessingPreview = false
     @State private var showingPreview = false
     @State private var errorMessage: String?
     
     var body: some View {
-        VStack(spacing: 20) {
-            // 权限状态检查
-            if !permissionManager.hasScreenRecordingPermission {
-                PermissionWarningView()
-            } else {
-                // 截图模式选择
-                CaptureModeSelector()
-                
-                // 显示器/窗口选择
-                if captureManager.captureMode == .fullScreen {
-                    DisplaySelector()
-                } else if captureManager.captureMode == .window {
-                    WindowSelector()
-                }
-                
-                // 截图按钮
-                CaptureButton()
-                
-                // 预览区域
-                if let image = captureManager.lastCapturedImage {
-                    PreviewSection(image: image)
+        ScrollView {
+            VStack(spacing: 20) {
+                // 权限状态检查
+                if !permissionManager.hasScreenRecordingPermission {
+                    PermissionWarningView()
+                } else {
+                    // 截图模式选择
+                    CaptureModeSelector()
+
+                    // 显示器/窗口选择
+                    if captureManager.captureMode == .fullScreen {
+                        DisplaySelector()
+                    } else if captureManager.captureMode == .window {
+                        WindowSelector()
+                    }
+
+                    // 截图按钮
+                    CaptureButton()
+
+                    // 高级截图工具
+                    AdvancedCaptureActionsSection()
+
+                    // 预览区域
+                    if let image = captureManager.lastCapturedImage {
+                        PreviewSection(image: image)
+                    }
                 }
             }
-            
-            Spacer()
+            .padding()
         }
-        .padding()
         .alert("截图错误", isPresented: .constant(errorMessage != nil)) {
             Button("确定") {
                 errorMessage = nil
@@ -58,6 +63,74 @@ struct ScreenshotView: View {
                 await captureManager.updateAvailableContent()
             }
         }
+    }
+
+    @ViewBuilder
+    private func AdvancedCaptureActionsSection() -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("高级工具")
+                .font(.headline)
+
+            LazyVGrid(columns: [
+                GridItem(.adaptive(minimum: 118), spacing: 8)
+            ], alignment: .leading, spacing: 8) {
+                AdvancedActionButton(title: "延时", icon: "timer") {
+                    runAdvancedAction {
+                        _ = try await captureManager.captureDelayedScreenshot()
+                    }
+                }
+
+                AdvancedActionButton(title: "长截图", icon: "rectangle.expand.vertical") {
+                    runAdvancedAction {
+                        await captureManager.captureScrollingWindow()
+                    }
+                }
+
+                AdvancedActionButton(title: "多窗口", icon: "rectangle.3.group") {
+                    runAdvancedAction {
+                        _ = try await captureManager.captureMultipleWindowsScreenshot()
+                    }
+                }
+
+                AdvancedActionButton(title: "带壳", icon: "laptopcomputer") {
+                    runAdvancedAction {
+                        _ = try await captureManager.captureDeviceFramedFullScreen()
+                    }
+                }
+
+                AdvancedActionButton(title: "贴图", icon: "pin") {
+                    runAdvancedAction {
+                        _ = try await captureManager.capturePinnedRegion()
+                    }
+                }
+
+                AdvancedActionButton(title: "取色", icon: "eyedropper") {
+                    captureManager.pickScreenColor()
+                }
+
+                AdvancedActionButton(title: "OCR", icon: "text.viewfinder") {
+                    runAdvancedAction {
+                        _ = try await captureManager.captureRegionAndRecognizeText()
+                    }
+                }
+
+                AdvancedActionButton(title: "翻译", icon: "character.book.closed") {
+                    runAdvancedAction {
+                        _ = try await captureManager.captureRegionAndTranslate()
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func AdvancedActionButton(title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .frame(maxWidth: .infinity, minHeight: 28)
+        }
+        .buttonStyle(.bordered)
+        .disabled(isCapturing || isRunningAdvancedAction || isProcessingPreview)
     }
     
     @ViewBuilder
@@ -184,18 +257,39 @@ struct ScreenshotView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    HStack {
-                        Button("在Finder中显示") {
-                            showInFinder()
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Button("编辑") {
+                                editPreviewImage(image)
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button("在Finder中显示") {
+                                showInFinder()
+                            }
+                            .disabled(captureManager.lastSavedImageURL == nil)
+                            .buttonStyle(.bordered)
+
+                            Button("复制到剪贴板") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setData(image.tiffRepresentation, forType: .tiff)
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .disabled(captureManager.lastSavedImageURL == nil)
-                        .buttonStyle(.bordered)
-                        
-                        Button("复制到剪贴板") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setData(image.tiffRepresentation, forType: .tiff)
+
+                        HStack {
+                            Button("识别文字") {
+                                recognizePreviewText()
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(isProcessingPreview)
+
+                            Button("翻译截图") {
+                                translatePreviewImage()
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(isProcessingPreview)
                         }
-                        .buttonStyle(.bordered)
                     }
                 }
                 
@@ -212,7 +306,11 @@ struct ScreenshotView: View {
         
         Task {
             do {
-                _ = try await captureManager.captureScreenshot()
+                if captureManager.captureMode == .window {
+                    _ = try await captureManager.captureInteractiveWindowScreenshot()
+                } else {
+                    _ = try await captureManager.captureScreenshot()
+                }
                 await MainActor.run {
                     isCapturing = false
                     showingPreview = true
@@ -225,10 +323,78 @@ struct ScreenshotView: View {
             }
         }
     }
+
+    private func runAdvancedAction(_ action: @escaping () async throws -> Void) {
+        guard !isRunningAdvancedAction else { return }
+
+        isRunningAdvancedAction = true
+        errorMessage = nil
+
+        Task {
+            do {
+                try await action()
+                await MainActor.run {
+                    isRunningAdvancedAction = false
+                    showingPreview = true
+                }
+            } catch {
+                await MainActor.run {
+                    isRunningAdvancedAction = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
     
     private func showInFinder() {
         guard let fileURL = captureManager.lastSavedImageURL else { return }
         NSWorkspace.shared.selectFile(fileURL.path, inFileViewerRootedAtPath: "")
+    }
+
+    private func editPreviewImage(_ image: NSImage) {
+        WindowManager.shared.showEditingWindow(for: image)
+    }
+
+    private func recognizePreviewText() {
+        guard !isProcessingPreview else { return }
+
+        isProcessingPreview = true
+        errorMessage = nil
+
+        Task {
+            do {
+                _ = try await captureManager.recognizeTextFromLastScreenshot()
+                await MainActor.run {
+                    isProcessingPreview = false
+                }
+            } catch {
+                await MainActor.run {
+                    isProcessingPreview = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func translatePreviewImage() {
+        guard !isProcessingPreview else { return }
+
+        isProcessingPreview = true
+        errorMessage = nil
+
+        Task {
+            do {
+                _ = try await captureManager.translateLastScreenshot()
+                await MainActor.run {
+                    isProcessingPreview = false
+                }
+            } catch {
+                await MainActor.run {
+                    isProcessingPreview = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 }
 

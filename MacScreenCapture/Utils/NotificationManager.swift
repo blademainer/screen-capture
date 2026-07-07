@@ -21,19 +21,32 @@ class NotificationManager: NSObject, ObservableObject {
     @Published var notificationsEnabled = true
     
     // MARK: - Private Properties
-    private let notificationCenter = UNUserNotificationCenter.current()
+    private let notificationCenter: UNUserNotificationCenter?
     
     // MARK: - Initialization
     override private init() {
+        if Bundle.main.bundleURL.pathExtension == "app" {
+            notificationCenter = UNUserNotificationCenter.current()
+        } else {
+            notificationCenter = nil
+        }
+
         super.init()
-        setupNotificationCenter()
-        checkNotificationPermission()
+        if notificationCenter != nil {
+            setupNotificationCenter()
+            checkNotificationPermission()
+        }
     }
     
     // MARK: - Public Methods
     
     /// 请求通知权限
     func requestNotificationPermission() {
+        guard let notificationCenter else {
+            hasNotificationPermission = false
+            return
+        }
+
         notificationCenter.requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
             DispatchQueue.main.async {
                 self?.hasNotificationPermission = granted
@@ -46,7 +59,7 @@ class NotificationManager: NSObject, ObservableObject {
     
     /// 显示截图成功通知
     func showScreenshotSuccessNotification(filePath: URL) {
-        guard notificationsEnabled && hasNotificationPermission else { return }
+        guard let notificationCenter, notificationsEnabled && hasNotificationPermission else { return }
         
         let content = UNMutableNotificationContent()
         content.title = "截图成功"
@@ -92,7 +105,7 @@ class NotificationManager: NSObject, ObservableObject {
     
     /// 显示录制开始通知
     func showRecordingStartNotification() {
-        guard notificationsEnabled && hasNotificationPermission else { return }
+        guard let notificationCenter, notificationsEnabled && hasNotificationPermission else { return }
         
         let content = UNMutableNotificationContent()
         content.title = "录制开始"
@@ -113,12 +126,17 @@ class NotificationManager: NSObject, ObservableObject {
     }
     
     /// 显示录制完成通知
-    func showRecordingCompleteNotification(filePath: URL, duration: TimeInterval) {
-        guard notificationsEnabled && hasNotificationPermission else { return }
+    func showRecordingCompleteNotification(filePath: URL, duration: TimeInterval, audioDiagnostics: RecordingAudioDiagnostics? = nil, audioOnly: Bool = false) {
+        guard let notificationCenter, notificationsEnabled && hasNotificationPermission else { return }
         
         let content = UNMutableNotificationContent()
-        content.title = "录制完成"
-        content.body = "录制时长 \(formatDuration(duration))，已保存到 \(filePath.lastPathComponent)"
+        content.title = audioOnly ? "录音完成" : "录制完成"
+        let durationLabel = audioOnly ? "录音时长" : "录制时长"
+        if let audioDiagnostics, audioDiagnostics.requestedAnyAudio {
+            content.body = "\(durationLabel) \(formatDuration(duration))，\(audioDiagnostics.summaryText)，已保存到 \(filePath.lastPathComponent)"
+        } else {
+            content.body = "\(durationLabel) \(formatDuration(duration))，已保存到 \(filePath.lastPathComponent)"
+        }
         content.sound = .default
         content.userInfo = ["filePath": filePath.path, "type": "recording"]
         
@@ -160,7 +178,10 @@ class NotificationManager: NSObject, ObservableObject {
     
     /// 显示错误通知
     func showErrorNotification(title: String, message: String) {
-        guard notificationsEnabled && hasNotificationPermission else { return }
+        guard let notificationCenter, notificationsEnabled && hasNotificationPermission else {
+            print("\(title): \(message)")
+            return
+        }
         
         let content = UNMutableNotificationContent()
         content.title = title
@@ -182,7 +203,7 @@ class NotificationManager: NSObject, ObservableObject {
     
     /// 显示权限提醒通知
     func showPermissionReminderNotification() {
-        guard notificationsEnabled && hasNotificationPermission else { return }
+        guard let notificationCenter, notificationsEnabled && hasNotificationPermission else { return }
         
         let content = UNMutableNotificationContent()
         content.title = "需要权限"
@@ -204,6 +225,8 @@ class NotificationManager: NSObject, ObservableObject {
     
     /// 清除所有通知
     func clearAllNotifications() {
+        guard let notificationCenter else { return }
+
         notificationCenter.removeAllPendingNotificationRequests()
         notificationCenter.removeAllDeliveredNotifications()
     }
@@ -212,11 +235,18 @@ class NotificationManager: NSObject, ObservableObject {
     
     /// 设置通知中心
     private func setupNotificationCenter() {
+        guard let notificationCenter else { return }
+
         notificationCenter.delegate = self
     }
     
     /// 检查通知权限
     private func checkNotificationPermission() {
+        guard let notificationCenter else {
+            hasNotificationPermission = false
+            return
+        }
+
         notificationCenter.getNotificationSettings { [weak self] settings in
             DispatchQueue.main.async {
                 self?.hasNotificationPermission = settings.authorizationStatus == .authorized

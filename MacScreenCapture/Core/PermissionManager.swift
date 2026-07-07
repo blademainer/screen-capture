@@ -7,7 +7,7 @@
 
 import Foundation
 import AVFoundation
-import ScreenCaptureKit
+@preconcurrency import ScreenCaptureKit
 import AppKit
 
 /// 权限管理器 - 负责处理所有系统权限相关的功能
@@ -48,10 +48,12 @@ class PermissionManager: ObservableObject {
         guard !hasScreenRecordingPermission else { return }
         
         permissionCheckInProgress = true
+        _ = CGRequestScreenCaptureAccess()
         
         // 使用ScreenCaptureKit检查权限
         if #available(macOS 12.3, *) {
             Task {
+                try? await Task.sleep(nanoseconds: 500_000_000)
                 do {
                     let content = try await SCShareableContent.excludingDesktopWindows(
                         false,
@@ -67,7 +69,7 @@ class PermissionManager: ObservableObject {
                     await MainActor.run {
                         self.hasScreenRecordingPermission = false
                         self.permissionCheckInProgress = false
-                        // self.showPermissionAlert(for: .screenRecording)
+                        self.showPermissionAlert(for: .screenRecording)
                     }
                 }
             }
@@ -90,15 +92,93 @@ class PermissionManager: ObservableObject {
                 DispatchQueue.main.async {
                     self?.hasMicrophonePermission = granted
                     if !granted {
-                        // self?.showPermissionAlert(for: .microphone)
+                        self?.showPermissionAlert(for: .microphone)
                     }
                 }
             }
         case .denied, .restricted:
             hasMicrophonePermission = false
-            // showPermissionAlert(for: .microphone)
+            showPermissionAlert(for: .microphone)
         @unknown default:
             hasMicrophonePermission = false
+        }
+    }
+    
+    /// 异步请求麦克风权限并等待结果
+    func requestMicrophonePermissionAsync() async -> Bool {
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        
+        switch status {
+        case .authorized:
+            await MainActor.run {
+                self.hasMicrophonePermission = true
+            }
+            return true
+            
+        case .notDetermined:
+            let granted = await AVCaptureDevice.requestAccess(for: .audio)
+            await MainActor.run {
+                self.hasMicrophonePermission = granted
+                if !granted {
+                    self.showPermissionAlert(for: .microphone)
+                }
+            }
+            return granted
+            
+        case .denied, .restricted:
+            await MainActor.run {
+                self.hasMicrophonePermission = false
+                self.showPermissionAlert(for: .microphone)
+            }
+            return false
+            
+        @unknown default:
+            await MainActor.run {
+                self.hasMicrophonePermission = false
+            }
+            return false
+        }
+    }
+    
+    /// 检查麦克风设备是否可用
+    func checkMicrophoneDeviceAvailable() -> Bool {
+        let discoverySession = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInMicrophone, .externalUnknown],
+            mediaType: .audio,
+            position: .unspecified
+        )
+        let devices = discoverySession.devices
+        
+        logToFile("检测到的音频设备数量: \(devices.count)")
+        for (index, device) in devices.enumerated() {
+            logToFile("  设备 \(index + 1): \(device.localizedName)")
+        }
+        
+        return !devices.isEmpty
+    }
+    
+    /// 写入日志到桌面文件
+    private func logToFile(_ message: String) {
+        let desktopURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
+        let logFileURL = desktopURL.appendingPathComponent("MacScreenCapture_Microphone_Debug.log")
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+        let timestamp = dateFormatter.string(from: Date())
+        let logMessage = "[\(timestamp)] [INFO] \(message)\n"
+        
+        print("🎤 \(logMessage.trimmingCharacters(in: .newlines))")
+        
+        if let data = logMessage.data(using: .utf8) {
+            if FileManager.default.fileExists(atPath: logFileURL.path) {
+                if let fileHandle = try? FileHandle(forWritingTo: logFileURL) {
+                    fileHandle.seekToEndOfFile()
+                    fileHandle.write(data)
+                    fileHandle.closeFile()
+                }
+            } else {
+                try? data.write(to: logFileURL)
+            }
         }
     }
     
@@ -106,11 +186,12 @@ class PermissionManager: ObservableObject {
     func requestAccessibilityPermission() {
         guard !hasAccessibilityPermission else { return }
         
-        let trusted = AXIsProcessTrusted()
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        let trusted = AXIsProcessTrustedWithOptions(options)
         hasAccessibilityPermission = trusted
         
         if !trusted {
-            // showPermissionAlert(for: .accessibility)
+            showPermissionAlert(for: .accessibility)
         }
     }
     
@@ -144,27 +225,20 @@ class PermissionManager: ObservableObject {
         hasAccessibilityPermission = AXIsProcessTrusted()
     }
     
-    /// 为旧系统检查屏幕录制权限
+    /// 使用 ScreenCaptureKit 检查屏幕录制权限
     private func checkLegacyScreenRecordingPermission() {
-        // 尝试创建一个CGDisplayStream来检查权限
-        let displayID = CGMainDisplayID()
-        
-        let stream = CGDisplayStream(
-            dispatchQueueDisplay: displayID,
-            outputWidth: 1,
-            outputHeight: 1,
-            pixelFormat: Int32(kCVPixelFormatType_32BGRA),
-            properties: nil,
-            queue: DispatchQueue.global(qos: .background)
-        ) { _, _, _, _ in }
-        
-        if let stream = stream {
-            stream.start()
-            stream.stop()
-            hasScreenRecordingPermission = true
-        } else {
-            hasScreenRecordingPermission = false
-            // showPermissionAlert(for: .screenRecording)
+        Task {
+            do {
+                // 尝试获取可共享内容来检查权限
+                _ = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+                await MainActor.run {
+                    hasScreenRecordingPermission = true
+                }
+            } catch {
+                await MainActor.run {
+                    hasScreenRecordingPermission = false
+                }
+            }
         }
         
         permissionCheckInProgress = false

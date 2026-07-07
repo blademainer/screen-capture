@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "MacScreenCapture",
     platforms: [
-        .macOS(.v12)
+        .macOS("15.0")
     ],
     products: [
         .executable(

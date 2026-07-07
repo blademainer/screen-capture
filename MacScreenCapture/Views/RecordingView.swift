@@ -14,7 +14,7 @@ struct RecordingView: View {
     @EnvironmentObject var permissionManager: PermissionManager
     @State private var errorMessage: String?
     @State private var showingSettings = false
-    
+
     var body: some View {
         VStack(spacing: 20) {
             // 权限状态检查
@@ -23,23 +23,23 @@ struct RecordingView: View {
             } else {
                 // 录制模式选择
                 RecordingModeSelector()
-                
+
                 // 显示器/窗口选择
                 if captureManager.captureMode == .fullScreen {
                     DisplaySelector()
                 } else if captureManager.captureMode == .window {
                     WindowSelector()
                 }
-                
+
                 // 录制控制区域
                 RecordingControlsView()
-                
+
                 // 录制状态显示
-                if captureManager.isRecording {
+                if captureManager.isRecording || captureManager.recordingURL != nil {
                     RecordingStatusView()
                 }
             }
-            
+
             Spacer()
         }
         .padding()
@@ -58,22 +58,22 @@ struct RecordingView: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private func PermissionWarningView() -> some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 48))
                 .foregroundColor(.orange)
-            
+
             Text("需要屏幕录制权限")
                 .font(.title2)
                 .fontWeight(.semibold)
-            
+
             Text("请在系统偏好设置中允许此应用访问屏幕录制功能")
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
-            
+
             Button("打开系统偏好设置") {
                 permissionManager.requestScreenRecordingPermission()
             }
@@ -81,15 +81,15 @@ struct RecordingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     @ViewBuilder
     private func RecordingModeSelector() -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("录制模式")
                 .font(.headline)
-            
+
             Picker("录制模式", selection: $captureManager.captureMode) {
-                ForEach([CaptureMode.fullScreen, CaptureMode.window], id: \.self) { mode in
+                ForEach([CaptureMode.fullScreen, CaptureMode.window, CaptureMode.region], id: \.self) { mode in
                     Label(mode.rawValue, systemImage: mode.systemImage)
                         .tag(mode)
                 }
@@ -98,13 +98,13 @@ struct RecordingView: View {
             .disabled(captureManager.isRecording)
         }
     }
-    
+
     @ViewBuilder
     private func DisplaySelector() -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("选择显示器")
                 .font(.headline)
-            
+
             if captureManager.availableDisplays.isEmpty {
                 Text("没有可用的显示器")
                     .foregroundColor(.secondary)
@@ -120,20 +120,20 @@ struct RecordingView: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private func WindowSelector() -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("选择窗口")
                 .font(.headline)
-            
+
             if captureManager.availableWindows.isEmpty {
                 Text("没有可用的窗口")
                     .foregroundColor(.secondary)
             } else {
                 Picker("窗口", selection: $captureManager.selectedWindow) {
                     Text("请选择窗口").tag(nil as SCWindow?)
-                    
+
                     ForEach(captureManager.availableWindows, id: \.windowID) { window in
                         Text(window.title ?? "未知窗口")
                             .tag(window as SCWindow?)
@@ -144,7 +144,7 @@ struct RecordingView: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private func RecordingControlsView() -> some View {
         VStack(spacing: 16) {
@@ -163,15 +163,30 @@ struct RecordingView: View {
                     HStack {
                         Image(systemName: captureManager.isRecording ? "stop.fill" : "record.circle")
                             .foregroundColor(captureManager.isRecording ? .red : .primary)
-                        
+
                         Text(captureManager.isRecording ? "停止录制" : "开始录制")
                     }
                     .frame(minWidth: 120)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!permissionManager.hasScreenRecordingPermission)
-                .keyboardShortcut(.init("r"), modifiers: [.command, .shift])
-                
+                .keyboardShortcut(.init("w"), modifiers: [.option])
+
+                if !captureManager.isRecording {
+                    Button(action: {
+                        startAudioRecording()
+                    }) {
+                        HStack {
+                            Image(systemName: "waveform.circle")
+                            Text("开始录音")
+                        }
+                        .frame(minWidth: 110)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!permissionManager.hasScreenRecordingPermission)
+                    .keyboardShortcut(.init("m"), modifiers: [.command, .shift])
+                }
+
                 // 暂停/恢复按钮
                 if captureManager.isRecording {
                     Button(action: {
@@ -184,10 +199,10 @@ struct RecordingView: View {
                         .frame(minWidth: 80)
                     }
                     .buttonStyle(.bordered)
-                    .keyboardShortcut(.space, modifiers: [.command])
+                    .keyboardShortcut(.space, modifiers: [.command, .option])
                 }
             }
-            
+
             // 录制设置按钮
             if !captureManager.isRecording {
                 Button("录制设置") {
@@ -200,28 +215,39 @@ struct RecordingView: View {
             RecordingSettingsView()
         }
     }
-    
+
     @ViewBuilder
     private func RecordingStatusView() -> some View {
         VStack(spacing: 12) {
             // 录制指示器
             HStack {
-                Circle()
-                    .fill(captureManager.isPaused ? Color.orange : Color.red)
-                    .frame(width: 12, height: 12)
-                    .scaleEffect(captureManager.isPaused ? 1.0 : 1.2)
-                    .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: captureManager.isPaused)
-                
-                Text(captureManager.isPaused ? "录制已暂停" : "正在录制")
+                if captureManager.isRecording {
+                    Circle()
+                        .fill(recordingStatusColor)
+                        .frame(width: 12, height: 12)
+                        .scaleEffect(captureManager.isPaused ? 1.0 : 1.2)
+                        .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: captureManager.isPaused)
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(recordingStatusColor)
+                }
+
+                Text(statusTitle)
                     .font(.headline)
-                    .foregroundColor(captureManager.isPaused ? .orange : .red)
+                    .foregroundColor(recordingStatusColor)
             }
-            
+
             // 录制时长
-            Text(formatDuration(captureManager.recordingDuration))
-                .font(.title)
-                .bold()
-            
+            if captureManager.isRecording {
+                Text(formatDuration(captureManager.recordingDuration))
+                    .font(.title)
+                    .bold()
+            } else if captureManager.recordingURL != nil {
+                Text(completedRecordingSummary.detail)
+                    .font(.title3)
+                    .bold()
+            }
+
             // 录制信息
             VStack(alignment: .leading, spacing: 4) {
                 if let url = captureManager.recordingURL {
@@ -229,12 +255,46 @@ struct RecordingView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                
-                Text("模式: \(captureManager.captureMode.rawValue)")
+
+                Text("模式: \(recordingModeLabel)")
                     .font(.caption)
                     .foregroundColor(.secondary)
+
+                // 音频录制状态
+                HStack(spacing: 8) {
+                    let includeSystemAudio = UserDefaults.standard.bool(forKey: "includeSystemAudio")
+                    let includeMicrophone = UserDefaults.standard.bool(forKey: "includeMicrophone")
+
+                    if includeSystemAudio {
+                        HStack(spacing: 2) {
+                            Image(systemName: "speaker.wave.2.fill")
+                                .foregroundColor(.blue)
+                            Text("系统音频")
+                        }
+                        .font(.caption)
+                    }
+
+                    if includeMicrophone {
+                        HStack(spacing: 2) {
+                            Image(systemName: permissionManager.hasMicrophonePermission ? "mic.fill" : "mic.slash.fill")
+                                .foregroundColor(permissionManager.hasMicrophonePermission ? .green : .red)
+                            Text("麦克风")
+                        }
+                        .font(.caption)
+                    }
+
+                    if !includeSystemAudio && !includeMicrophone {
+                        HStack(spacing: 2) {
+                            Image(systemName: "speaker.slash.fill")
+                                .foregroundColor(.gray)
+                            Text("静音录制")
+                        }
+                        .font(.caption)
+                    }
+                }
+                .foregroundColor(.secondary)
             }
-            
+
             // 在Finder中显示按钮（录制完成后显示）
             if !captureManager.isRecording && captureManager.recordingURL != nil {
                 Button("在Finder中显示") {
@@ -247,13 +307,13 @@ struct RecordingView: View {
         .background(Color(.controlBackgroundColor))
         .cornerRadius(12)
     }
-    
+
     private func startRecording() {
         errorMessage = nil
-        
+
         Task {
             do {
-                try await captureManager.startRecording()
+                _ = try await captureManager.startRecordingWithPreflight()
             } catch {
                 await MainActor.run {
                     errorMessage = error.localizedDescription
@@ -261,19 +321,79 @@ struct RecordingView: View {
             }
         }
     }
-    
+
+    private func startAudioRecording() {
+        errorMessage = nil
+
+        Task {
+            do {
+                _ = try await captureManager.startAudioRecordingWithPreflight()
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private var statusTitle: String {
+        if !captureManager.isRecording {
+            return completedRecordingSummary.title
+        }
+        if captureManager.isPaused {
+            return captureManager.isAudioOnlyRecording ? "录音已暂停" : "录制已暂停"
+        }
+        return captureManager.isAudioOnlyRecording ? "正在录音" : "正在录制"
+    }
+
+    private var recordingStatusColor: Color {
+        if !captureManager.isRecording {
+            switch completedRecordingSummary.severity {
+            case .success:
+                return .green
+            case .warning:
+                return .orange
+            case .error:
+                return .red
+            }
+        }
+        return captureManager.isPaused ? .orange : .red
+    }
+
+    private var completedRecordingIsAudioOnly: Bool {
+        captureManager.recordingURL?.pathExtension.lowercased() == "m4a"
+    }
+
+    private var recordingModeLabel: String {
+        if !captureManager.isRecording {
+            return completedRecordingSummary.modeLabel
+        }
+        if captureManager.isAudioOnlyRecording {
+            return "仅录音"
+        }
+        return captureManager.captureMode.rawValue
+    }
+
+    private var completedRecordingSummary: RecordingCompletionSummary {
+        RecordingCompletionSummary.make(
+            outputURL: captureManager.recordingURL,
+            diagnostics: captureManager.lastRecordingAudioDiagnostics,
+            fallbackModeLabel: captureManager.captureMode.rawValue
+        )
+    }
+
     private func formatDuration(_ duration: TimeInterval) -> String {
         let hours = Int(duration) / 3600
         let minutes = Int(duration) % 3600 / 60
         let seconds = Int(duration) % 60
-        
+
         if hours > 0 {
             return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
         } else {
             return String(format: "%02d:%02d", minutes, seconds)
         }
     }
-    
+
     private func showRecordingInFinder() {
         guard let fileURL = captureManager.recordingURL else { return }
         NSWorkspace.shared.selectFile(fileURL.path, inFileViewerRootedAtPath: "")
@@ -282,17 +402,21 @@ struct RecordingView: View {
 
 struct RecordingSettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var permissionManager: PermissionManager
     @State private var frameRate: Double = 60
     @State private var quality: RecordingQuality = .high
-    @State private var includeAudio = true
+    @State private var includeSystemAudio = true
+    @State private var includeMicrophone = true
     @State private var showCursor = true
-    
+    @State private var startDelaySeconds = 0
+    @State private var fileFormat = "MOV"
+
     var body: some View {
         VStack(spacing: 20) {
             Text("录制设置")
                 .font(.title2)
                 .fontWeight(.semibold)
-            
+
             Form {
                 Section("视频设置") {
                     HStack {
@@ -304,38 +428,90 @@ struct RecordingSettingsView: View {
                         Text("\(Int(frameRate)) FPS")
                             .frame(width: 60)
                     }
-                    
+
                     Picker("质量", selection: $quality) {
                         ForEach(RecordingQuality.allCases, id: \.self) { quality in
                             Text(quality.rawValue).tag(quality)
                         }
                     }
-                    
+
+                    Stepper("开录延时: \(startDelaySeconds) 秒", value: $startDelaySeconds, in: 0...30)
+
+                    Picker("导出格式", selection: $fileFormat) {
+                        Text("MOV").tag("MOV")
+                        Text("MP4").tag("MP4")
+                    }
+
                     Toggle("显示鼠标指针", isOn: $showCursor)
                 }
-                
+
                 Section("音频设置") {
-                    Toggle("录制音频", isOn: $includeAudio)
+                    Toggle("录制系统音频", isOn: $includeSystemAudio)
+
+                    HStack {
+                        Toggle("录制麦克风", isOn: $includeMicrophone)
+
+                        if !permissionManager.hasMicrophonePermission {
+                            Button("授权") {
+                                permissionManager.requestMicrophonePermission()
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        } else {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                        }
+                    }
+
+                    if includeMicrophone && !permissionManager.hasMicrophonePermission {
+                        Text("需要麦克风权限才能录制音频")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
                 }
             }
-            
+
             HStack {
                 Button("取消") {
                     dismiss()
                 }
                 .buttonStyle(.bordered)
-                
+
                 Spacer()
-                
+
                 Button("保存") {
-                    // TODO: 保存设置
+                    // 保存设置到 UserDefaults
+                    UserDefaults.standard.set(frameRate, forKey: "recordingFrameRate")
+                    UserDefaults.standard.set(quality.rawValue, forKey: "recordingQuality")
+                    UserDefaults.standard.set(includeSystemAudio, forKey: "includeSystemAudio")
+                    UserDefaults.standard.set(includeMicrophone, forKey: "includeMicrophone")
+                    UserDefaults.standard.set(showCursor, forKey: "showCursor")
+                    UserDefaults.standard.set(startDelaySeconds, forKey: "recordingStartDelaySeconds")
+                    UserDefaults.standard.set(fileFormat, forKey: "recordingFileFormat")
+
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
             }
         }
         .padding()
-        .frame(width: 400, height: 300)
+        .frame(width: 450, height: 350)
+        .onAppear {
+            // 加载保存的设置
+            frameRate = UserDefaults.standard.double(forKey: "recordingFrameRate")
+            if frameRate == 0 { frameRate = 60 }
+
+            if let qualityString = UserDefaults.standard.string(forKey: "recordingQuality"),
+               let savedQuality = RecordingQuality(rawValue: qualityString) {
+                quality = savedQuality
+            }
+
+            includeSystemAudio = UserDefaults.standard.bool(forKey: "includeSystemAudio")
+            includeMicrophone = UserDefaults.standard.bool(forKey: "includeMicrophone")
+            showCursor = UserDefaults.standard.bool(forKey: "showCursor")
+            startDelaySeconds = UserDefaults.standard.integer(forKey: "recordingStartDelaySeconds")
+            fileFormat = UserDefaults.standard.string(forKey: "recordingFileFormat") ?? "MOV"
+        }
     }
 }
 

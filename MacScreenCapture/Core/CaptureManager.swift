@@ -2509,7 +2509,7 @@ class CaptureManager: ObservableObject {
                 }
 
                 let observations = request.results as? [VNRecognizedTextObservation] ?? []
-                let text = observations
+                let text = self.readingOrderedTextObservations(observations)
                     .compactMap { $0.topCandidates(1).first?.string }
                     .joined(separator: "\n")
 
@@ -2528,6 +2528,21 @@ class CaptureManager: ObservableObject {
                     continuation.resume(throwing: error)
                 }
             }
+        }
+    }
+
+    private func readingOrderedTextObservations(_ observations: [VNRecognizedTextObservation]) -> [VNRecognizedTextObservation] {
+        observations.sorted { lhs, rhs in
+            let lhsBox = lhs.boundingBox
+            let rhsBox = rhs.boundingBox
+            let lineTolerance = max(lhsBox.height, rhsBox.height) * 0.5
+            let verticalDelta = lhsBox.midY - rhsBox.midY
+
+            if abs(verticalDelta) > lineTolerance {
+                return lhsBox.midY > rhsBox.midY
+            }
+
+            return lhsBox.minX < rhsBox.minX
         }
     }
 

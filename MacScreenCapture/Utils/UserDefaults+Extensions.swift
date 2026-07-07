@@ -38,6 +38,7 @@ extension UserDefaults {
             "annotationCustom3TextOutlined": AnnotationStylePreset.professional.textOutlined,
             "colorCodeFormat": "#HEX",
             "customColorCodeTemplate": "{hex}",
+            "translationTargetLanguage": "zh-CN",
             "multiWindowDesktopBackdrop": true,
             "delayedScreenshotSeconds": 5,
             "scrollingCaptureSlices": 30,

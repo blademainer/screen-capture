@@ -13,6 +13,7 @@ struct ScreenshotView: View {
     @EnvironmentObject var captureManager: CaptureManager
     @EnvironmentObject var permissionManager: PermissionManager
     @State private var isCapturing = false
+    @State private var isProcessingPreview = false
     @State private var showingPreview = false
     @State private var errorMessage: String?
     
@@ -184,18 +185,34 @@ struct ScreenshotView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    HStack {
-                        Button("在Finder中显示") {
-                            showInFinder()
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Button("在Finder中显示") {
+                                showInFinder()
+                            }
+                            .disabled(captureManager.lastSavedImageURL == nil)
+                            .buttonStyle(.bordered)
+
+                            Button("复制到剪贴板") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setData(image.tiffRepresentation, forType: .tiff)
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .disabled(captureManager.lastSavedImageURL == nil)
-                        .buttonStyle(.bordered)
-                        
-                        Button("复制到剪贴板") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setData(image.tiffRepresentation, forType: .tiff)
+
+                        HStack {
+                            Button("识别文字") {
+                                recognizePreviewText()
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(isProcessingPreview)
+
+                            Button("翻译截图") {
+                                translatePreviewImage()
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(isProcessingPreview)
                         }
-                        .buttonStyle(.bordered)
                     }
                 }
                 
@@ -233,6 +250,48 @@ struct ScreenshotView: View {
     private func showInFinder() {
         guard let fileURL = captureManager.lastSavedImageURL else { return }
         NSWorkspace.shared.selectFile(fileURL.path, inFileViewerRootedAtPath: "")
+    }
+
+    private func recognizePreviewText() {
+        guard !isProcessingPreview else { return }
+
+        isProcessingPreview = true
+        errorMessage = nil
+
+        Task {
+            do {
+                _ = try await captureManager.recognizeTextFromLastScreenshot()
+                await MainActor.run {
+                    isProcessingPreview = false
+                }
+            } catch {
+                await MainActor.run {
+                    isProcessingPreview = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func translatePreviewImage() {
+        guard !isProcessingPreview else { return }
+
+        isProcessingPreview = true
+        errorMessage = nil
+
+        Task {
+            do {
+                _ = try await captureManager.translateLastScreenshot()
+                await MainActor.run {
+                    isProcessingPreview = false
+                }
+            } catch {
+                await MainActor.run {
+                    isProcessingPreview = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 }
 

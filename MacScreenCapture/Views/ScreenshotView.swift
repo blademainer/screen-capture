@@ -259,6 +259,11 @@ struct ScreenshotView: View {
                     
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
+                            Button("编辑") {
+                                editPreviewImage(image)
+                            }
+                            .buttonStyle(.bordered)
+
                             Button("在Finder中显示") {
                                 showInFinder()
                             }
@@ -344,6 +349,10 @@ struct ScreenshotView: View {
     private func showInFinder() {
         guard let fileURL = captureManager.lastSavedImageURL else { return }
         NSWorkspace.shared.selectFile(fileURL.path, inFileViewerRootedAtPath: "")
+    }
+
+    private func editPreviewImage(_ image: NSImage) {
+        WindowManager.shared.showEditingWindow(for: image)
     }
 
     private func recognizePreviewText() {

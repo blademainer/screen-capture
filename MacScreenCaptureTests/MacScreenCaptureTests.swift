@@ -143,6 +143,57 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(source.contains("⌘⇧R"))
         XCTAssertTrue(source.contains("stopRecording()"))
     }
+
+    func testEditingToolsCoverIShotAnnotationSuite() throws {
+        let expectedTools: [(EditingTool, String, String)] = [
+            (.none, "选择", "hand.point.up.left"),
+            (.pen, "画笔", "pencil"),
+            (.highlighter, "荧光笔", "highlighter"),
+            (.rectangle, "矩形", "rectangle"),
+            (.circle, "圆形", "circle"),
+            (.arrow, "箭头", "arrow.up.right"),
+            (.text, "文字", "textformat"),
+            (.numbered, "序号", "1.circle"),
+            (.mosaic, "马赛克", "mosaic"),
+            (.crop, "裁剪", "crop")
+        ]
+
+        XCTAssertEqual(EditingTool.allCases, expectedTools.map(\.0))
+
+        for (tool, name, icon) in expectedTools {
+            XCTAssertEqual(tool.name, name)
+            XCTAssertEqual(tool.icon, icon)
+        }
+    }
+
+    func testAnnotationSettingsExposeNumberStyleAndTemplateControls() throws {
+        let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")
+        let editorSource = try repositoryFileContents("MacScreenCapture/Views/FloatingWindowContentView.swift")
+        let editingWindowSource = try repositoryFileContents("MacScreenCapture/Views/EditingWindowContentView.swift")
+
+        XCTAssertTrue(settingsSource.contains("Stepper(\"数字序号起始值:"))
+        XCTAssertTrue(settingsSource.contains("Text(\"默认颜色:\")"))
+        XCTAssertTrue(settingsSource.contains("Text(\"默认字号:\")"))
+        XCTAssertTrue(settingsSource.contains("Toggle(\"文字和序号启用描边\""))
+        XCTAssertTrue(settingsSource.contains("Button(\"导出模板\")"))
+        XCTAssertTrue(settingsSource.contains("Button(\"导入模板\")"))
+        XCTAssertTrue(settingsSource.contains("saveCustomAnnotationPreset(.custom)"))
+        XCTAssertTrue(settingsSource.contains("saveCustomAnnotationPreset(.custom2)"))
+        XCTAssertTrue(settingsSource.contains("saveCustomAnnotationPreset(.custom3)"))
+
+        XCTAssertTrue(editorSource.contains("ForEach(EditingTool.allCases"))
+        XCTAssertTrue(editorSource.contains("ColorPicker(\"选择颜色\""))
+        XCTAssertTrue(editorSource.contains("Text(\"字号\")"))
+        XCTAssertTrue(editorSource.contains("Toggle(\"描边\""))
+        XCTAssertTrue(editorSource.contains("disabled(selectedTool != .text && selectedTool != .numbered)"))
+        XCTAssertTrue(editorSource.contains("defaultNumberStart()"))
+        XCTAssertTrue(editorSource.contains("UserDefaults.standard.integer(forKey: \"numberedAnnotationStart\")"))
+        XCTAssertTrue(editorSource.contains("editTextOperation(operation)"))
+        XCTAssertTrue(editorSource.contains("moved(by: offset)"))
+
+        XCTAssertTrue(editingWindowSource.contains("EditingToolbar("))
+        XCTAssertTrue(editingWindowSource.contains("showingColorPicker: $showingColorPicker"))
+    }
     
     func testFileManagerExtensions() throws {
         let screenshotDir = FileManager.defaultScreenshotDirectory

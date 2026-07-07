@@ -26,6 +26,7 @@
 		A1234567890ABCE08 /* HotKeySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE07 /* HotKeySettingsView.swift */; };
 		A1234567890ABCE0A /* FloatingWindowContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE09 /* FloatingWindowContentView.swift */; };
 		A1234567890ABCE0C /* ColorCodeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE0B /* ColorCodeFormatter.swift */; };
+		A1234567890ABCE0E /* ScrollingImageStitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE0D /* ScrollingImageStitcher.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -50,6 +51,7 @@
 		A1234567890ABCE07 /* HotKeySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeySettingsView.swift; sourceTree = "<group>"; };
 		A1234567890ABCE09 /* FloatingWindowContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingWindowContentView.swift; sourceTree = "<group>"; };
 		A1234567890ABCE0B /* ColorCodeFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorCodeFormatter.swift; sourceTree = "<group>"; };
+		A1234567890ABCE0D /* ScrollingImageStitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollingImageStitcher.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -134,6 +136,7 @@
 				A1234567890ABCDFD /* NotificationManager.swift */,
 				A1234567890ABCDFF /* FileManager+Extensions.swift */,
 				A1234567890ABCE0B /* ColorCodeFormatter.swift */,
+				A1234567890ABCE0D /* ScrollingImageStitcher.swift */,
 			);
 			path = Utils;
 			sourceTree = "<group>";
@@ -220,6 +223,7 @@
 				A1234567890ABCDFE /* NotificationManager.swift in Sources */,
 				A1234567890ABCE00 /* FileManager+Extensions.swift in Sources */,
 				A1234567890ABCE0C /* ColorCodeFormatter.swift in Sources */,
+				A1234567890ABCE0E /* ScrollingImageStitcher.swift in Sources */,
 				A1234567890ABCE02 /* HotKeyManager.swift in Sources */,
 				A1234567890ABCE04 /* WindowManager.swift in Sources */,
 				A1234567890ABCE06 /* FloatingWindowController.swift in Sources */,

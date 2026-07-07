@@ -259,6 +259,26 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(captureManagerSource.contains("func captureRegionAndOpenInConfiguredApp()"))
         XCTAssertTrue(captureManagerSource.contains("openLastScreenshotInConfiguredApp()"))
     }
+
+    func testMultiWindowSelectionSupportsShiftAndDesktopBackdrop() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+
+        XCTAssertTrue(source.contains("captureMultipleWindowsScreenshot()"))
+        XCTAssertTrue(source.contains("captureInteractiveWindowScreenshot()"))
+        XCTAssertTrue(source.contains("singleClickCompletes: true"))
+        XCTAssertTrue(source.contains("desktopBackdropSelected.toggle()"))
+        XCTAssertTrue(source.contains("!event.modifierFlags.contains(.shift)"))
+        XCTAssertTrue(source.contains("MultiWindowSelectionResult(windows: [candidate.window], usesDesktopBackdrop: desktopBackdropSelected)"))
+        XCTAssertTrue(source.contains("selectedIDs.insert(candidate.id)"))
+        XCTAssertTrue(source.contains("case 36, 76:"))
+        XCTAssertTrue(source.contains("usesDesktopBackdrop: desktopBackdropSelected"))
+        XCTAssertTrue(source.contains("drawDesktopBackdropBadge()"))
+        XCTAssertTrue(source.contains("按住 Shift 可连续选择多个窗口"))
+        XCTAssertTrue(source.contains("点桌面用壁纸作底板"))
+        XCTAssertTrue(source.contains("captureDesktopBackdropSegments("))
+        XCTAssertTrue(source.contains("captureDisplayImageWithoutSaving("))
+        XCTAssertTrue(source.contains("renderMultiWindowComposite("))
+    }
     
     func testFileManagerExtensions() throws {
         let screenshotDir = FileManager.defaultScreenshotDirectory

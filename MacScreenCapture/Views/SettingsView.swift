@@ -68,6 +68,7 @@ struct SettingsView: View {
     @AppStorage("recordingFileFormat") private var recordingFileFormat = "MOV"
     @State private var isPreparingTranslationModels = false
     @State private var translationModelStatusMessage = ""
+    @State private var annotationTemplateTransferMessage = ""
 
     var body: some View {
         ScrollView {
@@ -355,6 +356,23 @@ struct SettingsView: View {
                             saveCustomAnnotationPreset(.custom3)
                         }
                         .buttonStyle(.bordered)
+                    }
+                    HStack {
+                        Spacer()
+                        Button("导出模板") {
+                            exportAnnotationTemplates()
+                        }
+                        .buttonStyle(.bordered)
+                        Button("导入模板") {
+                            importAnnotationTemplates()
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    if !annotationTemplateTransferMessage.isEmpty {
+                        Text(annotationTemplateTransferMessage)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
                 .padding(.top, 4)
@@ -759,6 +777,106 @@ struct SettingsView: View {
         annotationStylePreset = preset.rawValue
     }
 
+    private func exportAnnotationTemplates() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "MacScreenCapture-Annotation-Templates.json"
+        panel.message = "导出 3 套自定义标注模板"
+        panel.prompt = "导出"
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let payload = AnnotationTemplateExport(
+            version: 1,
+            templates: [
+                annotationTemplatePayload(name: "自定义 1", colorHex: annotationCustomColorHex, lineWidth: annotationCustomLineWidth, textOutlined: annotationCustomTextOutlined),
+                annotationTemplatePayload(name: "自定义 2", colorHex: annotationCustom2ColorHex, lineWidth: annotationCustom2LineWidth, textOutlined: annotationCustom2TextOutlined),
+                annotationTemplatePayload(name: "自定义 3", colorHex: annotationCustom3ColorHex, lineWidth: annotationCustom3LineWidth, textOutlined: annotationCustom3TextOutlined)
+            ]
+        )
+
+        do {
+            let data = try JSONEncoder().encode(payload)
+            try data.write(to: url, options: .atomic)
+            annotationTemplateTransferMessage = "已导出标注模板。"
+        } catch {
+            annotationTemplateTransferMessage = "导出失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func importAnnotationTemplates() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.json]
+        panel.message = "导入自定义标注模板"
+        panel.prompt = "导入"
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let data = try Data(contentsOf: url)
+            let payload = try JSONDecoder().decode(AnnotationTemplateExport.self, from: data)
+            guard payload.templates.count >= 3 else {
+                annotationTemplateTransferMessage = "导入失败：模板文件至少需要 3 套模板。"
+                return
+            }
+
+            applyAnnotationTemplate(payload.templates[0], to: .custom)
+            applyAnnotationTemplate(payload.templates[1], to: .custom2)
+            applyAnnotationTemplate(payload.templates[2], to: .custom3)
+            applyAnnotationPreset(annotationStylePreset)
+            annotationTemplateTransferMessage = "已导入标注模板。"
+        } catch {
+            annotationTemplateTransferMessage = "导入失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func annotationTemplatePayload(name: String, colorHex: String, lineWidth: Double, textOutlined: Bool) -> AnnotationTemplatePayload {
+        AnnotationTemplatePayload(
+            name: name,
+            colorHex: normalizedAnnotationHex(colorHex),
+            lineWidth: min(max(lineWidth, 1), 10),
+            textOutlined: textOutlined
+        )
+    }
+
+    private func applyAnnotationTemplate(_ template: AnnotationTemplatePayload, to preset: AnnotationStylePreset) {
+        let colorHex = normalizedAnnotationHex(template.colorHex)
+        let lineWidth = min(max(template.lineWidth, 1), 10)
+
+        switch preset {
+        case .custom:
+            annotationCustomColorHex = colorHex
+            annotationCustomLineWidth = lineWidth
+            annotationCustomTextOutlined = template.textOutlined
+        case .custom2:
+            annotationCustom2ColorHex = colorHex
+            annotationCustom2LineWidth = lineWidth
+            annotationCustom2TextOutlined = template.textOutlined
+        case .custom3:
+            annotationCustom3ColorHex = colorHex
+            annotationCustom3LineWidth = lineWidth
+            annotationCustom3TextOutlined = template.textOutlined
+        default:
+            break
+        }
+    }
+
+    private func normalizedAnnotationHex(_ value: String) -> String {
+        var clean = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if clean.hasPrefix("#") {
+            clean.removeFirst()
+        }
+
+        guard clean.count == 6, Int(clean, radix: 16) != nil else {
+            return AnnotationStylePreset.professional.colorHex
+        }
+
+        return "#\(clean)"
+    }
+
     private func prepareLocalTranslationModels() {
         isPreparingTranslationModels = true
         translationModelStatusMessage = "正在检查 Apple 本地翻译模型..."
@@ -778,6 +896,18 @@ struct SettingsView: View {
         // TODO: 实现开机自启动设置
         print("设置开机自启动: \(enabled)")
     }
+}
+
+private struct AnnotationTemplateExport: Codable {
+    let version: Int
+    let templates: [AnnotationTemplatePayload]
+}
+
+private struct AnnotationTemplatePayload: Codable {
+    let name: String
+    let colorHex: String
+    let lineWidth: Double
+    let textOutlined: Bool
 }
 
 struct PermissionStatusRow: View {

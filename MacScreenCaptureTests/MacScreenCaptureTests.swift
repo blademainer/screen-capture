@@ -313,6 +313,48 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(captureManagerSource.contains("kAXScrollAreaRole"))
         XCTAssertTrue(captureManagerSource.contains("AXWebArea"))
     }
+
+    func testOCRAndTranslationEntrypointsStayAlignedWithIShotPro() throws {
+        let captureManagerSource = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+        let screenshotViewSource = try repositoryFileContents("MacScreenCapture/Views/ScreenshotView.swift")
+        let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")
+
+        XCTAssertTrue(screenshotViewSource.contains("AdvancedActionButton(title: \"OCR\""))
+        XCTAssertTrue(screenshotViewSource.contains("captureRegionAndRecognizeText()"))
+        XCTAssertTrue(screenshotViewSource.contains("AdvancedActionButton(title: \"翻译\""))
+        XCTAssertTrue(screenshotViewSource.contains("captureRegionAndTranslate()"))
+        XCTAssertTrue(screenshotViewSource.contains("recognizeTextFromLastScreenshot()"))
+        XCTAssertTrue(screenshotViewSource.contains("translateLastScreenshot()"))
+
+        XCTAssertTrue(captureManagerSource.contains("func captureRegionAndRecognizeText()"))
+        XCTAssertTrue(captureManagerSource.contains("captureInteractiveScreenshot(arguments: [\"-i\", \"-r\"], forceStyle: false, showEditor: false, autoOpenAfterCapture: false)"))
+        XCTAssertTrue(captureManagerSource.contains("NSPasteboard.general.setString(text, forType: .string)"))
+        XCTAssertTrue(captureManagerSource.contains("VNRecognizeTextRequest"))
+        XCTAssertTrue(captureManagerSource.contains("request.recognitionLevel = .accurate"))
+        XCTAssertTrue(captureManagerSource.contains("request.recognitionLanguages = [\"zh-Hans\", \"zh-Hant\", \"en-US\", \"ja-JP\", \"ko-KR\"]"))
+        XCTAssertTrue(captureManagerSource.contains("OCRTextOrderer.joinedText(textBoxes)"))
+
+        XCTAssertTrue(captureManagerSource.contains("func captureRegionAndTranslate()"))
+        XCTAssertTrue(captureManagerSource.contains("translationTargetLanguage"))
+        XCTAssertTrue(captureManagerSource.contains("translateWithAppleInstalledModel"))
+        XCTAssertTrue(captureManagerSource.contains("providerName: \"Apple 本地翻译\""))
+        XCTAssertTrue(captureManagerSource.contains("translateWithGoogle"))
+        XCTAssertTrue(captureManagerSource.contains("providerName: \"Google\""))
+        XCTAssertTrue(captureManagerSource.contains("translateWithMyMemory"))
+        XCTAssertTrue(captureManagerSource.contains("providerName: \"MyMemory\""))
+        XCTAssertTrue(captureManagerSource.contains("openWebTranslation(for: trimmedText, targetLanguage: targetLanguage)"))
+        XCTAssertTrue(captureManagerSource.contains("providerName: \"网页翻译\""))
+        XCTAssertTrue(captureManagerSource.contains("showTranslationWindow(result)"))
+        XCTAssertTrue(captureManagerSource.contains("prepareAppleTranslationModels(targetLanguage: String)"))
+
+        XCTAssertTrue(settingsSource.contains("Picker(\"截图翻译目标\""))
+        XCTAssertTrue(settingsSource.contains("Text(\"简体中文\").tag(\"zh-CN\")"))
+        XCTAssertTrue(settingsSource.contains("Text(\"English\").tag(\"en\")"))
+        XCTAssertTrue(settingsSource.contains("Text(\"日本語\").tag(\"ja\")"))
+        XCTAssertTrue(settingsSource.contains("Text(\"한국어\").tag(\"ko\")"))
+        XCTAssertTrue(settingsSource.contains("Button(isPreparingTranslationModels ? \"检查中...\" : \"检查并准备\")"))
+        XCTAssertTrue(settingsSource.contains("prepareLocalTranslationModels()"))
+    }
     
     func testFileManagerExtensions() throws {
         let screenshotDir = FileManager.defaultScreenshotDirectory

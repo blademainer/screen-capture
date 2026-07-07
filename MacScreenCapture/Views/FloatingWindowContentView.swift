@@ -13,12 +13,14 @@ struct FloatingWindowContentView: View {
     @State private var selectedTool: EditingTool = .none
     @State private var selectedColor: Color = .red
     @State private var lineWidth: CGFloat = 2.0
+    @State private var fontSize: CGFloat = 18.0
     @State private var isEditing = false
     @State private var showingColorPicker = false
     @State private var isToolbarVisible = true
     @State private var isActionBarVisible = true
     @AppStorage("annotationDefaultColorHex") private var annotationDefaultColorHex = AnnotationStylePreset.professional.colorHex
     @AppStorage("annotationDefaultLineWidth") private var annotationDefaultLineWidth = AnnotationStylePreset.professional.lineWidth
+    @AppStorage("annotationDefaultFontSize") private var annotationDefaultFontSize = AnnotationStylePreset.professional.fontSize
     @AppStorage("annotationTextOutlined") private var textOutlined = false
 
     var body: some View {
@@ -47,6 +49,7 @@ struct FloatingWindowContentView: View {
         .onAppear {
             selectedColor = .annotationDefault(hex: annotationDefaultColorHex)
             lineWidth = CGFloat(annotationDefaultLineWidth)
+            fontSize = CGFloat(annotationDefaultFontSize)
         }
     }
 
@@ -98,6 +101,7 @@ struct FloatingWindowContentView: View {
             selectedTool: $selectedTool,
             selectedColor: $selectedColor,
             lineWidth: $lineWidth,
+            fontSize: $fontSize,
             textOutlined: $textOutlined,
             showingColorPicker: $showingColorPicker,
             onToolSelected: { tool in
@@ -129,6 +133,7 @@ struct FloatingWindowContentView: View {
                     selectedTool: selectedTool,
                     selectedColor: selectedColor,
                     lineWidth: lineWidth,
+                    fontSize: fontSize,
                     textOutlined: textOutlined
                 )
             }
@@ -189,6 +194,7 @@ struct TraditionalEditingCanvas: NSViewRepresentable {
     let selectedTool: EditingTool
     let selectedColor: Color
     let lineWidth: CGFloat
+    let fontSize: CGFloat
     let textOutlined: Bool
 
     func makeNSView(context: Context) -> FloatingEditingCanvasView {
@@ -203,6 +209,7 @@ struct TraditionalEditingCanvas: NSViewRepresentable {
         nsView.selectedTool = selectedTool
         nsView.selectedColor = NSColor(selectedColor)
         nsView.lineWidth = lineWidth
+        nsView.fontSize = fontSize
         nsView.textOutlined = textOutlined
         nsView.needsDisplay = true
     }
@@ -235,6 +242,7 @@ class FloatingEditingCanvasView: NSView {
     var selectedTool: EditingTool = .none
     var selectedColor: NSColor = .red
     var lineWidth: CGFloat = 2.0
+    var fontSize: CGFloat = 18.0
     var textOutlined = false
     var imageSize: CGSize = .zero
 
@@ -435,11 +443,11 @@ class FloatingEditingCanvasView: NSView {
             let textRect = draggedRect.width >= 24 && draggedRect.height >= 18
                 ? draggedRect
                 : NSRect(x: firstPoint.x, y: firstPoint.y, width: 240, height: max(32, lineWidth * 12))
-            return EditingOperation(type: .text, color: selectedColor, lineWidth: lineWidth, text: text, rect: textRect, textOutlined: textOutlined)
+            return EditingOperation(type: .text, color: selectedColor, lineWidth: lineWidth, text: text, rect: textRect, fontSize: fontSize, textOutlined: textOutlined)
         case .numbered:
             let text = "\(nextNumber)"
             nextNumber += 1
-            return EditingOperation(type: .numbered, points: [firstPoint], color: selectedColor, lineWidth: lineWidth, text: text, rect: nil, textOutlined: textOutlined)
+            return EditingOperation(type: .numbered, points: [firstPoint], color: selectedColor, lineWidth: lineWidth, text: text, rect: nil, fontSize: fontSize, textOutlined: textOutlined)
         case .none:
             return nil
         }
@@ -623,7 +631,7 @@ class FloatingEditingCanvasView: NSView {
     private func drawCommittedText(_ operation: EditingOperation) {
         guard let text = operation.text, let rect = operation.rect else { return }
         var attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: max(14, operation.lineWidth * 8)),
+            .font: NSFont.systemFont(ofSize: operation.resolvedAnnotationFontSize),
             .foregroundColor: operation.color.nsColor
         ]
         if operation.textOutlined {
@@ -646,7 +654,7 @@ class FloatingEditingCanvasView: NSView {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .center
         var attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: markerRect.width * 0.52, weight: .bold),
+            .font: NSFont.systemFont(ofSize: operation.resolvedAnnotationFontSize, weight: .bold),
             .foregroundColor: NSColor.white,
             .paragraphStyle: paragraphStyle
         ]
@@ -662,7 +670,7 @@ class FloatingEditingCanvasView: NSView {
 
     private func numberedMarkerRect(for operation: EditingOperation) -> NSRect {
         let center = operation.points.first ?? CGPoint(x: operation.rect?.midX ?? 0, y: operation.rect?.midY ?? 0)
-        let diameter = max(24, operation.lineWidth * 9)
+        let diameter = operation.resolvedNumberedMarkerDiameter
         return NSRect(x: center.x - diameter / 2, y: center.y - diameter / 2, width: diameter, height: diameter)
     }
 }
@@ -672,6 +680,7 @@ struct EditingToolbar: View {
     @Binding var selectedTool: EditingTool
     @Binding var selectedColor: Color
     @Binding var lineWidth: CGFloat
+    @Binding var fontSize: CGFloat
     @Binding var textOutlined: Bool
     @Binding var showingColorPicker: Bool
 
@@ -736,6 +745,21 @@ struct EditingToolbar: View {
                     .foregroundColor(.secondary)
                     .frame(width: 20)
             }
+
+            HStack {
+                Text("字号")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Slider(value: $fontSize, in: 10...72, step: 1)
+                    .frame(width: 88)
+
+                Text("\(Int(fontSize))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(width: 24)
+            }
+            .disabled(selectedTool != .text && selectedTool != .numbered)
 
             Toggle("描边", isOn: $textOutlined)
                 .toggleStyle(.checkbox)

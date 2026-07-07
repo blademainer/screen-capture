@@ -38,6 +38,15 @@ enum AnnotationStylePreset: String, CaseIterable {
         }
     }
 
+    var fontSize: Double {
+        switch self {
+        case .professional: return 18
+        case .highContrast: return 22
+        case .presentation: return 28
+        case .custom, .custom2, .custom3: return 18
+        }
+    }
+
     var textOutlined: Bool {
         switch self {
         case .professional: return false

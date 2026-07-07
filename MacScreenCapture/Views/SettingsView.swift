@@ -43,15 +43,19 @@ struct SettingsView: View {
     @AppStorage("annotationStylePreset") private var annotationStylePreset = AnnotationStylePreset.professional.rawValue
     @AppStorage("annotationDefaultColorHex") private var annotationDefaultColorHex = AnnotationStylePreset.professional.colorHex
     @AppStorage("annotationDefaultLineWidth") private var annotationDefaultLineWidth = AnnotationStylePreset.professional.lineWidth
+    @AppStorage("annotationDefaultFontSize") private var annotationDefaultFontSize = AnnotationStylePreset.professional.fontSize
     @AppStorage("annotationTextOutlined") private var annotationTextOutlined = false
     @AppStorage("annotationCustomColorHex") private var annotationCustomColorHex = AnnotationStylePreset.professional.colorHex
     @AppStorage("annotationCustomLineWidth") private var annotationCustomLineWidth = AnnotationStylePreset.professional.lineWidth
+    @AppStorage("annotationCustomFontSize") private var annotationCustomFontSize = AnnotationStylePreset.professional.fontSize
     @AppStorage("annotationCustomTextOutlined") private var annotationCustomTextOutlined = false
     @AppStorage("annotationCustom2ColorHex") private var annotationCustom2ColorHex = AnnotationStylePreset.professional.colorHex
     @AppStorage("annotationCustom2LineWidth") private var annotationCustom2LineWidth = AnnotationStylePreset.professional.lineWidth
+    @AppStorage("annotationCustom2FontSize") private var annotationCustom2FontSize = AnnotationStylePreset.professional.fontSize
     @AppStorage("annotationCustom2TextOutlined") private var annotationCustom2TextOutlined = false
     @AppStorage("annotationCustom3ColorHex") private var annotationCustom3ColorHex = AnnotationStylePreset.professional.colorHex
     @AppStorage("annotationCustom3LineWidth") private var annotationCustom3LineWidth = AnnotationStylePreset.professional.lineWidth
+    @AppStorage("annotationCustom3FontSize") private var annotationCustom3FontSize = AnnotationStylePreset.professional.fontSize
     @AppStorage("annotationCustom3TextOutlined") private var annotationCustom3TextOutlined = false
     @AppStorage("colorCodeFormat") private var colorCodeFormat = "#HEX"
     @AppStorage("customColorCodeTemplate") private var customColorCodeTemplate = "{hex}"
@@ -358,6 +362,13 @@ struct SettingsView: View {
                         Slider(value: $annotationDefaultLineWidth, in: 1...10, step: 1)
                             .frame(width: 140)
                         Text("\(Int(annotationDefaultLineWidth))")
+                            .foregroundColor(.secondary)
+                    }
+                    HStack {
+                        Text("默认字号:")
+                        Slider(value: $annotationDefaultFontSize, in: 10...72, step: 1)
+                            .frame(width: 140)
+                        Text("\(Int(annotationDefaultFontSize))")
                             .foregroundColor(.secondary)
                     }
                     Toggle("文字和序号启用描边", isOn: $annotationTextOutlined)
@@ -757,16 +768,19 @@ struct SettingsView: View {
         case .custom:
             annotationDefaultColorHex = annotationCustomColorHex
             annotationDefaultLineWidth = annotationCustomLineWidth
+            annotationDefaultFontSize = annotationCustomFontSize
             annotationTextOutlined = annotationCustomTextOutlined
             return
         case .custom2:
             annotationDefaultColorHex = annotationCustom2ColorHex
             annotationDefaultLineWidth = annotationCustom2LineWidth
+            annotationDefaultFontSize = annotationCustom2FontSize
             annotationTextOutlined = annotationCustom2TextOutlined
             return
         case .custom3:
             annotationDefaultColorHex = annotationCustom3ColorHex
             annotationDefaultLineWidth = annotationCustom3LineWidth
+            annotationDefaultFontSize = annotationCustom3FontSize
             annotationTextOutlined = annotationCustom3TextOutlined
             return
         default:
@@ -775,6 +789,7 @@ struct SettingsView: View {
 
         annotationDefaultColorHex = preset.colorHex
         annotationDefaultLineWidth = preset.lineWidth
+        annotationDefaultFontSize = preset.fontSize
         annotationTextOutlined = preset.textOutlined
     }
 
@@ -783,14 +798,17 @@ struct SettingsView: View {
         case .custom:
             annotationCustomColorHex = annotationDefaultColorHex
             annotationCustomLineWidth = annotationDefaultLineWidth
+            annotationCustomFontSize = annotationDefaultFontSize
             annotationCustomTextOutlined = annotationTextOutlined
         case .custom2:
             annotationCustom2ColorHex = annotationDefaultColorHex
             annotationCustom2LineWidth = annotationDefaultLineWidth
+            annotationCustom2FontSize = annotationDefaultFontSize
             annotationCustom2TextOutlined = annotationTextOutlined
         case .custom3:
             annotationCustom3ColorHex = annotationDefaultColorHex
             annotationCustom3LineWidth = annotationDefaultLineWidth
+            annotationCustom3FontSize = annotationDefaultFontSize
             annotationCustom3TextOutlined = annotationTextOutlined
         default:
             return
@@ -811,9 +829,9 @@ struct SettingsView: View {
         let payload = AnnotationTemplateExport(
             version: 1,
             templates: [
-                annotationTemplatePayload(name: "自定义 1", colorHex: annotationCustomColorHex, lineWidth: annotationCustomLineWidth, textOutlined: annotationCustomTextOutlined),
-                annotationTemplatePayload(name: "自定义 2", colorHex: annotationCustom2ColorHex, lineWidth: annotationCustom2LineWidth, textOutlined: annotationCustom2TextOutlined),
-                annotationTemplatePayload(name: "自定义 3", colorHex: annotationCustom3ColorHex, lineWidth: annotationCustom3LineWidth, textOutlined: annotationCustom3TextOutlined)
+                annotationTemplatePayload(name: "自定义 1", colorHex: annotationCustomColorHex, lineWidth: annotationCustomLineWidth, fontSize: annotationCustomFontSize, textOutlined: annotationCustomTextOutlined),
+                annotationTemplatePayload(name: "自定义 2", colorHex: annotationCustom2ColorHex, lineWidth: annotationCustom2LineWidth, fontSize: annotationCustom2FontSize, textOutlined: annotationCustom2TextOutlined),
+                annotationTemplatePayload(name: "自定义 3", colorHex: annotationCustom3ColorHex, lineWidth: annotationCustom3LineWidth, fontSize: annotationCustom3FontSize, textOutlined: annotationCustom3TextOutlined)
             ]
         )
 
@@ -855,11 +873,12 @@ struct SettingsView: View {
         }
     }
 
-    private func annotationTemplatePayload(name: String, colorHex: String, lineWidth: Double, textOutlined: Bool) -> AnnotationTemplatePayload {
+    private func annotationTemplatePayload(name: String, colorHex: String, lineWidth: Double, fontSize: Double, textOutlined: Bool) -> AnnotationTemplatePayload {
         AnnotationTemplatePayload(
             name: name,
             colorHex: normalizedAnnotationHex(colorHex),
             lineWidth: min(max(lineWidth, 1), 10),
+            fontSize: min(max(fontSize, 10), 72),
             textOutlined: textOutlined
         )
     }
@@ -867,19 +886,23 @@ struct SettingsView: View {
     private func applyAnnotationTemplate(_ template: AnnotationTemplatePayload, to preset: AnnotationStylePreset) {
         let colorHex = normalizedAnnotationHex(template.colorHex)
         let lineWidth = min(max(template.lineWidth, 1), 10)
+        let fontSize = min(max(template.fontSize ?? AnnotationStylePreset.professional.fontSize, 10), 72)
 
         switch preset {
         case .custom:
             annotationCustomColorHex = colorHex
             annotationCustomLineWidth = lineWidth
+            annotationCustomFontSize = fontSize
             annotationCustomTextOutlined = template.textOutlined
         case .custom2:
             annotationCustom2ColorHex = colorHex
             annotationCustom2LineWidth = lineWidth
+            annotationCustom2FontSize = fontSize
             annotationCustom2TextOutlined = template.textOutlined
         case .custom3:
             annotationCustom3ColorHex = colorHex
             annotationCustom3LineWidth = lineWidth
+            annotationCustom3FontSize = fontSize
             annotationCustom3TextOutlined = template.textOutlined
         default:
             break
@@ -929,6 +952,7 @@ private struct AnnotationTemplatePayload: Codable {
     let name: String
     let colorHex: String
     let lineWidth: Double
+    let fontSize: Double?
     let textOutlined: Bool
 }
 

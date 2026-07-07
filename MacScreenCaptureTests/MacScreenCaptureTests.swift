@@ -88,6 +88,10 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(defaults["doubleOptionQuickOpenEnabled"] as? Bool, true)
         XCTAssertEqual(defaults["annotationStylePreset"] as? String, AnnotationStylePreset.professional.rawValue)
         XCTAssertEqual(defaults["colorCodeFormat"] as? String, "#HEX")
+        XCTAssertEqual(defaults["annotationDefaultFontSize"] as? Double, AnnotationStylePreset.professional.fontSize)
+        XCTAssertEqual(defaults["annotationCustomFontSize"] as? Double, AnnotationStylePreset.professional.fontSize)
+        XCTAssertEqual(defaults["annotationCustom2FontSize"] as? Double, AnnotationStylePreset.professional.fontSize)
+        XCTAssertEqual(defaults["annotationCustom3FontSize"] as? Double, AnnotationStylePreset.professional.fontSize)
     }
 
     func testRegisteringDefaultsDoesNotOverwriteUserChoices() throws {
@@ -281,6 +285,41 @@ final class MacScreenCaptureTests: XCTestCase {
             OCRTextOrderer.sortedTextBoxes(boxes).map(\.text),
             ["上方靠右", "下方靠左"]
         )
+    }
+
+    func testEditingOperationPreservesExplicitAnnotationFontSize() throws {
+        let operation = EditingOperation(
+            type: .numbered,
+            points: [CGPoint(x: 20, y: 30)],
+            color: .systemRed,
+            lineWidth: 2,
+            text: "7",
+            rect: CGRect(x: 40, y: 50, width: 100, height: 36),
+            fontSize: 32,
+            textOutlined: true
+        )
+
+        let moved = operation.moved(by: CGSize(width: 8, height: -4))
+        let renamed = moved.replacingText(with: "8")
+
+        XCTAssertEqual(operation.resolvedAnnotationFontSize, 32)
+        XCTAssertEqual(operation.resolvedNumberedMarkerDiameter, max(24, 32 / 0.52), accuracy: 0.001)
+        XCTAssertEqual(moved.fontSize, 32)
+        XCTAssertEqual(moved.points.first, CGPoint(x: 28, y: 26))
+        XCTAssertEqual(moved.rect?.origin, CGPoint(x: 48, y: 46))
+        XCTAssertEqual(renamed.text, "8")
+        XCTAssertEqual(renamed.fontSize, 32)
+        XCTAssertTrue(renamed.textOutlined)
+    }
+
+    func testEditingOperationClampsAnnotationFontSizeForRendering() throws {
+        let tiny = EditingOperation(type: .text, lineWidth: 1, text: "small", fontSize: 4)
+        let huge = EditingOperation(type: .text, lineWidth: 1, text: "large", fontSize: 120)
+        let legacy = EditingOperation(type: .text, lineWidth: 3, text: "legacy")
+
+        XCTAssertEqual(tiny.resolvedAnnotationFontSize, 10)
+        XCTAssertEqual(huge.resolvedAnnotationFontSize, 72)
+        XCTAssertEqual(legacy.resolvedAnnotationFontSize, 24)
     }
 
     func testTranslationSupportParsesGoogleResponseSegments() throws {

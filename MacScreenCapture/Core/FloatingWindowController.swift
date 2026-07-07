@@ -56,6 +56,7 @@ struct EditingOperation: Identifiable, Codable {
     let lineWidth: CGFloat
     let text: String?
     let rect: CGRect?
+    let fontSize: CGFloat?
     let textOutlined: Bool
     let timestamp: Date
 
@@ -67,6 +68,7 @@ struct EditingOperation: Identifiable, Codable {
         lineWidth: CGFloat = 2.0,
         text: String? = nil,
         rect: CGRect? = nil,
+        fontSize: CGFloat? = nil,
         textOutlined: Bool = false,
         timestamp: Date = Date()
     ) {
@@ -77,8 +79,17 @@ struct EditingOperation: Identifiable, Codable {
         self.lineWidth = lineWidth
         self.text = text
         self.rect = rect
+        self.fontSize = fontSize
         self.textOutlined = textOutlined
         self.timestamp = timestamp
+    }
+
+    var resolvedAnnotationFontSize: CGFloat {
+        fontSize.map { min(max($0, 10), 72) } ?? max(14, lineWidth * 8)
+    }
+
+    var resolvedNumberedMarkerDiameter: CGFloat {
+        max(24, resolvedAnnotationFontSize / 0.52)
     }
 
     func moved(by offset: CGSize) -> EditingOperation {
@@ -90,6 +101,7 @@ struct EditingOperation: Identifiable, Codable {
             lineWidth: lineWidth,
             text: text,
             rect: rect?.offsetBy(dx: offset.width, dy: offset.height),
+            fontSize: fontSize,
             textOutlined: textOutlined,
             timestamp: timestamp
         )
@@ -104,6 +116,22 @@ struct EditingOperation: Identifiable, Codable {
             lineWidth: lineWidth,
             text: newText,
             rect: rect,
+            fontSize: fontSize,
+            textOutlined: textOutlined,
+            timestamp: timestamp
+        )
+    }
+
+    func replacingFontSize(with newFontSize: CGFloat) -> EditingOperation {
+        EditingOperation(
+            id: id,
+            type: type,
+            points: points,
+            color: color.nsColor,
+            lineWidth: lineWidth,
+            text: text,
+            rect: rect,
+            fontSize: newFontSize,
             textOutlined: textOutlined,
             timestamp: timestamp
         )
@@ -348,7 +376,7 @@ class ImageEditingSession: ObservableObject {
         guard let text = operation.text, let drawRect = operation.rect else { return }
 
         var attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: max(14, operation.lineWidth * 8)),
+            .font: NSFont.systemFont(ofSize: operation.resolvedAnnotationFontSize),
             .foregroundColor: operation.color.nsColor
         ]
         if operation.textOutlined {
@@ -370,7 +398,7 @@ class ImageEditingSession: ObservableObject {
         } else {
             center = .zero
         }
-        let diameter = max(24, operation.lineWidth * 9)
+        let diameter = operation.resolvedNumberedMarkerDiameter
         let markerRect = NSRect(
             x: center.x - diameter / 2,
             y: center.y - diameter / 2,
@@ -387,7 +415,7 @@ class ImageEditingSession: ObservableObject {
         path.stroke()
 
         var attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: diameter * 0.52, weight: .bold),
+            .font: NSFont.systemFont(ofSize: operation.resolvedAnnotationFontSize, weight: .bold),
             .foregroundColor: NSColor.white,
             .paragraphStyle: {
                 let style = NSMutableParagraphStyle()

@@ -13,12 +13,14 @@ struct EditingWindowContentView: View {
     @State private var selectedTool: EditingTool = .none
     @State private var selectedColor: Color = .red
     @State private var lineWidth: CGFloat = 2.0
+    @State private var fontSize: CGFloat = 18.0
     @State private var isEditing = false
     @State private var showingColorPicker = false
     @State private var isToolbarVisible = true
     @State private var isActionBarVisible = true
     @AppStorage("annotationDefaultColorHex") private var annotationDefaultColorHex = AnnotationStylePreset.professional.colorHex
     @AppStorage("annotationDefaultLineWidth") private var annotationDefaultLineWidth = AnnotationStylePreset.professional.lineWidth
+    @AppStorage("annotationDefaultFontSize") private var annotationDefaultFontSize = AnnotationStylePreset.professional.fontSize
     @AppStorage("annotationTextOutlined") private var textOutlined = false
     
     var body: some View {
@@ -58,6 +60,7 @@ struct EditingWindowContentView: View {
         .onAppear {
             selectedColor = .annotationDefault(hex: annotationDefaultColorHex)
             lineWidth = CGFloat(annotationDefaultLineWidth)
+            fontSize = CGFloat(annotationDefaultFontSize)
         }
     }
     
@@ -68,6 +71,7 @@ struct EditingWindowContentView: View {
                 selectedTool: $selectedTool,
                 selectedColor: $selectedColor,
                 lineWidth: $lineWidth,
+                fontSize: $fontSize,
                 textOutlined: $textOutlined,
                 showingColorPicker: $showingColorPicker,
                 onToolSelected: { tool in
@@ -128,6 +132,7 @@ struct EditingWindowContentView: View {
                     selectedTool: selectedTool,
                     selectedColor: selectedColor,
                     lineWidth: lineWidth,
+                    fontSize: fontSize,
                     textOutlined: textOutlined
                 )
             }

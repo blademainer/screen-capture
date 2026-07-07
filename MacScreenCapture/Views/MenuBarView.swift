@@ -189,7 +189,11 @@ struct MenuBarView: View {
             captureManager.captureMode = mode
 
             do {
-                _ = try await captureManager.captureScreenshot()
+                if mode == .window {
+                    _ = try await captureManager.captureInteractiveWindowScreenshot()
+                } else {
+                    _ = try await captureManager.captureScreenshot()
+                }
                 // 显示成功通知
                 showNotification(title: "截图成功", message: "截图已保存")
             } catch {

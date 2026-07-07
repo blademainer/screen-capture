@@ -220,10 +220,7 @@ class CaptureManager: ObservableObject {
     @MainActor
     func captureWindow() async {
         do {
-            let originalMode = captureMode
-            captureMode = .window
-            _ = try await captureScreenshot()
-            captureMode = originalMode
+            _ = try await captureInteractiveWindowScreenshot()
         } catch {
             print("窗口截图失败: \(error)")
         }
@@ -300,7 +297,7 @@ class CaptureManager: ObservableObject {
     @MainActor
     func captureMultipleWindowsScreenshot() async throws -> NSImage {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        guard let display = selectedDisplay ?? content.displays.first else {
+        guard let display = preferredDisplay(from: content.displays) else {
             throw CaptureError.noDisplayAvailable
         }
 
@@ -315,6 +312,51 @@ class CaptureManager: ObservableObject {
         }
 
         let selectedWindows = try await selectMultipleWindows(from: candidates, displayBounds: displayBounds)
+        let useDesktopBackdrop = UserDefaults.standard.object(forKey: "multiWindowDesktopBackdrop") as? Bool ?? true
+        let composite = try await renderMultiWindowComposite(
+            selectedWindows,
+            display: display,
+            allWindows: content.windows,
+            useDesktopBackdrop: useDesktopBackdrop
+        )
+        return try await finalizeCapturedImage(composite, showEditor: true)
+    }
+
+    /// 交互式窗口截图：普通点击立即截取单窗口，Shift 点击可连续选择多个窗口后合成。
+    @MainActor
+    func captureInteractiveWindowScreenshot() async throws -> NSImage {
+        WindowManager.shared.updateCaptureState(.screenshotting)
+
+        defer {
+            WindowManager.shared.updateCaptureState(.idle)
+        }
+
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        guard let display = preferredDisplay(from: content.displays) else {
+            throw CaptureError.noDisplayAvailable
+        }
+
+        let currentPID = Int(ProcessInfo.processInfo.processIdentifier)
+        let displayBounds = CGDisplayBounds(display.displayID)
+        let candidates = content.windows.filter { window in
+            window.owningApplication?.processID != pid_t(currentPID) &&
+            window.title?.isEmpty == false &&
+            window.frame.width > 80 &&
+            window.frame.height > 80 &&
+            window.frame.intersects(displayBounds)
+        }
+
+        let selectedWindows = try await selectMultipleWindows(
+            from: candidates,
+            displayBounds: displayBounds,
+            singleClickCompletes: true
+        )
+
+        if selectedWindows.count == 1, let window = selectedWindows.first {
+            let image = try await captureWindowImage(window)
+            return try await finalizeCapturedImage(image, showEditor: false)
+        }
+
         let useDesktopBackdrop = UserDefaults.standard.object(forKey: "multiWindowDesktopBackdrop") as? Bool ?? true
         let composite = try await renderMultiWindowComposite(
             selectedWindows,
@@ -1463,7 +1505,26 @@ class CaptureManager: ObservableObject {
     }
 
     @MainActor
-    private func selectMultipleWindows(from windows: [SCWindow], displayBounds: CGRect) async throws -> [SCWindow] {
+    private func preferredDisplay(from displays: [SCDisplay]) -> SCDisplay? {
+        if let selectedDisplay {
+            return selectedDisplay
+        }
+
+        guard let mouseLocation = CGEvent(source: nil)?.location else {
+            return displays.first
+        }
+
+        return displays.first { display in
+            CGDisplayBounds(display.displayID).contains(mouseLocation) || display.frame.contains(mouseLocation)
+        } ?? displays.first
+    }
+
+    @MainActor
+    private func selectMultipleWindows(
+        from windows: [SCWindow],
+        displayBounds: CGRect,
+        singleClickCompletes: Bool = false
+    ) async throws -> [SCWindow] {
         guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(displayBounds) }) ?? NSScreen.main else {
             throw CaptureError.noDisplayAvailable
         }
@@ -1498,7 +1559,11 @@ class CaptureManager: ObservableObject {
             selectionWindow.ignoresMouseEvents = false
             selectionWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
-            let overlayView = MultiWindowSelectionView(screenFrame: screen.frame, candidates: candidates) { result in
+            let overlayView = MultiWindowSelectionView(
+                screenFrame: screen.frame,
+                candidates: candidates,
+                singleClickCompletes: singleClickCompletes
+            ) { result in
                 guard !didResume else { return }
                 didResume = true
                 selectionWindow.contentView = nil
@@ -2556,6 +2621,7 @@ private struct MultiWindowSelectionCandidate {
 final class MultiWindowSelectionView: NSView {
     private let screenFrame: CGRect
     private let candidates: [MultiWindowSelectionCandidate]
+    private let singleClickCompletes: Bool
     private let completion: (Result<[SCWindow], Error>) -> Void
     private var selectedIDs = Set<CGWindowID>()
     private var hoverID: CGWindowID?
@@ -2563,10 +2629,12 @@ final class MultiWindowSelectionView: NSView {
     fileprivate init(
         screenFrame: CGRect,
         candidates: [MultiWindowSelectionCandidate],
+        singleClickCompletes: Bool,
         completion: @escaping (Result<[SCWindow], Error>) -> Void
     ) {
         self.screenFrame = screenFrame
         self.candidates = candidates
+        self.singleClickCompletes = singleClickCompletes
         self.completion = completion
         super.init(frame: NSRect(origin: .zero, size: screenFrame.size))
         wantsLayer = true
@@ -2623,6 +2691,11 @@ final class MultiWindowSelectionView: NSView {
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         guard let candidate = candidate(at: point) else { return }
+
+        if singleClickCompletes && !event.modifierFlags.contains(.shift) {
+            completion(.success([candidate.window]))
+            return
+        }
 
         if selectedIDs.contains(candidate.id) {
             selectedIDs.remove(candidate.id)
@@ -2691,7 +2764,9 @@ final class MultiWindowSelectionView: NSView {
     }
 
     private func drawInstruction() {
-        let text = "点击选择多个窗口，按 Enter 合成，按 Esc 取消"
+        let text = singleClickCompletes
+            ? "点击窗口截图；按住 Shift 可连续选择多个窗口，按 Enter 合成，按 Esc 取消"
+            : "点击选择多个窗口，按 Enter 合成，按 Esc 取消"
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 16, weight: .medium),
             .foregroundColor: NSColor.white

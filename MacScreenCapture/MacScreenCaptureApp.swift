@@ -13,10 +13,11 @@ import AppKit
 @main
 struct MacScreenCaptureApp: App {
     @StateObject private var permissionManager = PermissionManager()
-    @StateObject private var captureManager = CaptureManager()
+    @StateObject private var captureManager: CaptureManager
     
     init() {
         UserDefaults.registerMacScreenCaptureDefaults()
+        _captureManager = StateObject(wrappedValue: CaptureManager.shared)
     }
     
     var body: some Scene {

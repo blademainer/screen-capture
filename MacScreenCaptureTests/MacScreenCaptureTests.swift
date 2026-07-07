@@ -7,6 +7,7 @@
 
 import XCTest
 import AppKit
+import Carbon
 @testable import MacScreenCapture
 
 final class MacScreenCaptureTests: XCTestCase {
@@ -50,6 +51,20 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(CaptureMode.fullScreen.systemImage, "display")
         XCTAssertEqual(CaptureMode.window.systemImage, "macwindow")
         XCTAssertEqual(CaptureMode.region.systemImage, "crop")
+    }
+
+    func testIShotStyleDefaultHotKeysAreAvailableAtLaunch() throws {
+        XCTAssertEqual(HotKeyAction.startRecording.defaultConfig.keyCode, UInt32(kVK_ANSI_W))
+        XCTAssertEqual(HotKeyAction.startRecording.defaultConfig.modifiers, UInt32(optionKey))
+        XCTAssertTrue(HotKeyAction.startRecording.defaultConfig.isEnabled)
+
+        XCTAssertEqual(HotKeyAction.multiWindowScreenshot.defaultConfig.keyCode, UInt32(kVK_ANSI_W))
+        XCTAssertEqual(HotKeyAction.multiWindowScreenshot.defaultConfig.modifiers, UInt32(cmdKey | optionKey))
+        XCTAssertTrue(HotKeyAction.multiWindowScreenshot.defaultConfig.isEnabled)
+
+        XCTAssertEqual(HotKeyAction.togglePauseRecording.defaultConfig.keyCode, UInt32(kVK_Space))
+        XCTAssertEqual(HotKeyAction.togglePauseRecording.defaultConfig.modifiers, UInt32(cmdKey | optionKey))
+        XCTAssertTrue(HotKeyAction.togglePauseRecording.defaultConfig.isEnabled)
     }
     
     func testFileManagerExtensions() throws {

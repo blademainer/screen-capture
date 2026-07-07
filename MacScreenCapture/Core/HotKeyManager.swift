@@ -211,6 +211,7 @@ class HotKeyManager: ObservableObject {
         loadConfiguration()
         setupDefaultHotKeys()
         registerEventHandler()
+        registerAllHotKeys()
         registerModifierKeyMonitors()
     }
     

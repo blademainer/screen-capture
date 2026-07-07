@@ -25,6 +25,7 @@ struct SettingsView: View {
     @AppStorage("scrollingCaptureLines") private var scrollingCaptureLines = 12
     @AppStorage("scrollingCaptureTrimOverlap") private var scrollingCaptureTrimOverlap = true
     @AppStorage("scrollingCaptureCropToWindow") private var scrollingCaptureCropToWindow = true
+    @AppStorage("scrollingCaptureStopWhenUnchanged") private var scrollingCaptureStopWhenUnchanged = true
     @AppStorage("screenshotRoundedCorners") private var screenshotRoundedCorners = false
     @AppStorage("screenshotDropShadow") private var screenshotDropShadow = false
     @AppStorage("screenshotCornerRadius") private var screenshotCornerRadius = 18.0
@@ -182,6 +183,8 @@ struct SettingsView: View {
                     Stepper("每次滚动: \(scrollingCaptureLines) 行", value: $scrollingCaptureLines, in: 3...40)
 
                     Toggle("裁剪到鼠标所在窗口", isOn: $scrollingCaptureCropToWindow)
+
+                    Toggle("滚动到底自动停止", isOn: $scrollingCaptureStopWhenUnchanged)
 
                     Toggle("自动裁剪重叠区域", isOn: $scrollingCaptureTrimOverlap)
                 }

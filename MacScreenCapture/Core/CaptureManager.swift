@@ -236,10 +236,11 @@ class CaptureManager: ObservableObject {
         let scrollLines = max(3, UserDefaults.standard.integer(forKey: "scrollingCaptureLines"))
         let trimOverlap = UserDefaults.standard.object(forKey: "scrollingCaptureTrimOverlap") as? Bool ?? true
         let cropToWindow = UserDefaults.standard.object(forKey: "scrollingCaptureCropToWindow") as? Bool ?? true
+        let stopWhenUnchanged = UserDefaults.standard.object(forKey: "scrollingCaptureStopWhenUnchanged") as? Bool ?? true
 
         let alert = NSAlert()
         alert.messageText = "长截图助手"
-        alert.informativeText = "点击开始后，请在 1 秒内把鼠标放到需要滚动的窗口上。应用会截取 \(sliceCount) 屏，每屏之间自动向下滚动并拼接成长图。"
+        alert.informativeText = "点击开始后，请在 1 秒内把鼠标放到需要滚动的窗口上。应用最多截取 \(sliceCount) 屏，每屏之间自动向下滚动并拼接成长图。"
         alert.alertStyle = .informational
         alert.addButton(withTitle: "开始")
         alert.addButton(withTitle: "取消")
@@ -263,11 +264,20 @@ class CaptureManager: ObservableObject {
                 }
 
                 let image = try await captureDisplayImageWithoutSaving(display: target?.display)
+                let sliceImage: NSImage
                 if let target {
-                    images.append(cropDisplayImage(image, to: target.cropRect, in: target.display))
+                    sliceImage = cropDisplayImage(image, to: target.cropRect, in: target.display)
                 } else {
-                    images.append(image)
+                    sliceImage = image
                 }
+
+                if stopWhenUnchanged,
+                   let previous = images.last,
+                   imagesAreVisuallySimilar(previous, sliceImage) {
+                    break
+                }
+
+                images.append(sliceImage)
             }
 
             let stitchedImage = stitchImagesVertically(images, trimOverlap: trimOverlap)
@@ -1122,6 +1132,7 @@ class CaptureManager: ObservableObject {
             UserDefaults.standard.set(0.8, forKey: "scrollingCaptureDelay")
             UserDefaults.standard.set(12, forKey: "scrollingCaptureLines")
             UserDefaults.standard.set(true, forKey: "scrollingCaptureTrimOverlap")
+            UserDefaults.standard.set(true, forKey: "scrollingCaptureStopWhenUnchanged")
             UserDefaults.standard.set("#HEX", forKey: "colorCodeFormat")
             UserDefaults.standard.set(false, forKey: "screenshotRoundedCorners")
             UserDefaults.standard.set(false, forKey: "screenshotDropShadow")
@@ -1918,6 +1929,46 @@ class CaptureManager: ObservableObject {
 
         // 低差异才裁剪，避免两个无关画面被误判为重叠。
         return bestScore < 16 ? bestOverlap : 0
+    }
+
+    private func imagesAreVisuallySimilar(_ previous: NSImage, _ next: NSImage) -> Bool {
+        guard let previousCG = previous.cgImage(forProposedRect: nil, context: nil, hints: nil),
+              let nextCG = next.cgImage(forProposedRect: nil, context: nil, hints: nil),
+              previousCG.width == nextCG.width,
+              previousCG.height == nextCG.height,
+              let previousBuffer = rgbaBuffer(from: previousCG),
+              let nextBuffer = rgbaBuffer(from: nextCG) else {
+            return false
+        }
+
+        let width = previousCG.width
+        let height = previousCG.height
+        let sampleXStride = max(8, width / 96)
+        let sampleYStride = max(8, height / 96)
+        var totalDifference = 0
+        var samples = 0
+        var changedSamples = 0
+
+        for y in stride(from: 0, to: height, by: sampleYStride) {
+            for x in stride(from: 0, to: width, by: sampleXStride) {
+                let offset = (y * width + x) * 4
+                let difference =
+                    abs(Int(previousBuffer[offset]) - Int(nextBuffer[offset])) +
+                    abs(Int(previousBuffer[offset + 1]) - Int(nextBuffer[offset + 1])) +
+                    abs(Int(previousBuffer[offset + 2]) - Int(nextBuffer[offset + 2]))
+
+                totalDifference += difference
+                samples += 3
+                if difference > 18 {
+                    changedSamples += 1
+                }
+            }
+        }
+
+        guard samples > 0 else { return false }
+        let averageDifference = Double(totalDifference) / Double(samples)
+        let changedRatio = Double(changedSamples) / Double(max(1, samples / 3))
+        return averageDifference < 1.8 && changedRatio < 0.015
     }
 
     private func rgbaBuffer(from image: CGImage) -> [UInt8]? {

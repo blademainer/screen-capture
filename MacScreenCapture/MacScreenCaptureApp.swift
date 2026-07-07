@@ -28,6 +28,7 @@ struct MacScreenCaptureApp: App {
             "numberedAnnotationStart": 1,
             "multiWindowDesktopBackdrop": true,
             "scrollingCaptureCropToWindow": true,
+            "scrollingCaptureStopWhenUnchanged": true,
             "deviceFrameBezelWidth": 42.0,
             "deviceFramePadding": 48.0,
             "deviceFrameCornerRadius": 26.0,

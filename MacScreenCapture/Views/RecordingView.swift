@@ -199,7 +199,7 @@ struct RecordingView: View {
                         .frame(minWidth: 80)
                     }
                     .buttonStyle(.bordered)
-                    .keyboardShortcut(.space, modifiers: [.command])
+                    .keyboardShortcut(.space, modifiers: [.command, .option])
                 }
             }
 

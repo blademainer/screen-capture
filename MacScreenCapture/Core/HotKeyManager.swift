@@ -108,6 +108,7 @@ enum HotKeyAction: String, CaseIterable, Codable {
     case deviceFramedScreenshot = "device_framed_screenshot"
     case startRecording = "start_recording"
     case startAudioRecording = "start_audio_recording"
+    case togglePauseRecording = "toggle_pause_recording"
     case stopRecording = "stop_recording"
     case scrollScreenshot = "scroll_screenshot"
     case pickColor = "pick_color"
@@ -133,6 +134,8 @@ enum HotKeyAction: String, CaseIterable, Codable {
             return HotKeyConfig(keyCode: 13, modifiers: UInt32(optionKey), isEnabled: true, description: "开始录制")
         case .startAudioRecording:
             return HotKeyConfig(keyCode: 46, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "开始录音")
+        case .togglePauseRecording:
+            return HotKeyConfig(keyCode: 49, modifiers: UInt32(cmdKey | optionKey), isEnabled: true, description: "暂停/恢复录制")
         case .stopRecording:
             return HotKeyConfig(keyCode: 15, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "停止录制")
         case .scrollScreenshot:
@@ -158,6 +161,7 @@ enum HotKeyAction: String, CaseIterable, Codable {
         case .deviceFramedScreenshot: return "全屏带壳截图"
         case .startRecording: return "开始录制"
         case .startAudioRecording: return "开始录音"
+        case .togglePauseRecording: return "暂停/恢复录制"
         case .stopRecording: return "停止录制"
         case .scrollScreenshot: return "滚动截图"
         case .pickColor: return "取色"
@@ -437,6 +441,10 @@ class HotKeyManager: ObservableObject {
                     } catch {
                         print("开始录音失败: \(error)")
                     }
+                }
+            case .togglePauseRecording:
+                if captureManager.isRecording {
+                    captureManager.togglePauseRecording()
                 }
             case .stopRecording:
                 if captureManager.isRecording {

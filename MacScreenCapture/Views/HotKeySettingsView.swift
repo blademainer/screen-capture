@@ -245,6 +245,7 @@ struct HotKeyRow: View {
         case .deviceFramedScreenshot: return "laptopcomputer"
         case .startRecording: return "record.circle"
         case .startAudioRecording: return "waveform.circle"
+        case .togglePauseRecording: return "pause.circle"
         case .stopRecording: return "stop.circle"
         case .scrollScreenshot: return "scroll"
         case .pickColor: return "eyedropper"

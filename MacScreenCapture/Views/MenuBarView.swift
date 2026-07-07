@@ -90,7 +90,7 @@ struct MenuBarView: View {
                     MenuButton(
                         title: captureManager.isPaused ? (captureManager.isAudioOnlyRecording ? "恢复录音" : "恢复录制") : (captureManager.isAudioOnlyRecording ? "暂停录音" : "暂停录制"),
                         icon: captureManager.isPaused ? "play.fill" : "pause.fill",
-                        shortcut: "⌘Space"
+                        shortcut: "⌘⌥Space"
                     ) {
                         captureManager.togglePauseRecording()
                     }

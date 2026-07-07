@@ -288,11 +288,30 @@ class CaptureManager: ObservableObject {
     /// 多窗口截图 - 使用 macOS 系统交互选择窗口，按住 Shift 可连续选择多个窗口。
     @MainActor
     func captureMultipleWindowsScreenshot() async throws -> NSImage {
-        var arguments = ["-i", "-W"]
-        if UserDefaults.standard.object(forKey: "multiWindowDesktopBackdrop") as? Bool ?? true {
-            arguments.append("-S")
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        guard let display = selectedDisplay ?? content.displays.first else {
+            throw CaptureError.noDisplayAvailable
         }
-        return try await captureInteractiveScreenshot(arguments: arguments, showEditor: true)
+
+        let currentPID = Int(ProcessInfo.processInfo.processIdentifier)
+        let displayBounds = CGDisplayBounds(display.displayID)
+        let candidates = content.windows.filter { window in
+            window.owningApplication?.processID != pid_t(currentPID) &&
+            window.title?.isEmpty == false &&
+            window.frame.width > 80 &&
+            window.frame.height > 80 &&
+            window.frame.intersects(displayBounds)
+        }
+
+        let selectedWindows = try await selectMultipleWindows(from: candidates, displayBounds: displayBounds)
+        let useDesktopBackdrop = UserDefaults.standard.object(forKey: "multiWindowDesktopBackdrop") as? Bool ?? true
+        let composite = try await renderMultiWindowComposite(
+            selectedWindows,
+            display: display,
+            allWindows: content.windows,
+            useDesktopBackdrop: useDesktopBackdrop
+        )
+        return try await finalizeCapturedImage(composite, showEditor: true)
     }
 
     /// 贴图 - 交互选择区域后打开置顶浮窗，可重复创建多个贴图。
@@ -1392,13 +1411,13 @@ class CaptureManager: ObservableObject {
     }
 
     /// 捕获当前显示器画面但不保存，供长截图、带壳截图等高级功能复用。
-    private func captureDisplayImageWithoutSaving(display requestedDisplay: SCDisplay? = nil) async throws -> NSImage {
+    private func captureDisplayImageWithoutSaving(display requestedDisplay: SCDisplay? = nil, excludingWindows: [SCWindow] = []) async throws -> NSImage {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         guard let display = requestedDisplay ?? selectedDisplay ?? content.displays.first else {
             throw CaptureError.noDisplayAvailable
         }
 
-        let filter = SCContentFilter(display: display, excludingWindows: [])
+        let filter = SCContentFilter(display: display, excludingWindows: excludingWindows)
         let configuration = SCStreamConfiguration()
         configuration.width = Int(display.width)
         configuration.height = Int(display.height)
@@ -1411,6 +1430,129 @@ class CaptureManager: ObservableObject {
         )
 
         return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+    }
+
+    private func captureWindowImage(_ window: SCWindow) async throws -> NSImage {
+        let filter = SCContentFilter(desktopIndependentWindow: window)
+        let configuration = SCStreamConfiguration()
+        configuration.width = max(1, Int(window.frame.width))
+        configuration.height = max(1, Int(window.frame.height))
+        configuration.pixelFormat = kCVPixelFormatType_32BGRA
+        configuration.showsCursor = false
+
+        let cgImage = try await SCScreenshotManager.captureImage(
+            contentFilter: filter,
+            configuration: configuration
+        )
+
+        return NSImage(cgImage: cgImage, size: window.frame.size)
+    }
+
+    @MainActor
+    private func selectMultipleWindows(from windows: [SCWindow], displayBounds: CGRect) async throws -> [SCWindow] {
+        guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(displayBounds) }) ?? NSScreen.main else {
+            throw CaptureError.noDisplayAvailable
+        }
+
+        let candidates = windows.map { window in
+            MultiWindowSelectionCandidate(
+                id: window.windowID,
+                title: window.title ?? window.owningApplication?.applicationName ?? "窗口",
+                window: window,
+                screenRect: window.frame.intersection(displayBounds)
+            )
+        }
+        .filter { $0.screenRect.width > 40 && $0.screenRect.height > 40 }
+
+        guard !candidates.isEmpty else {
+            throw CaptureError.noWindowSelected
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            var didResume = false
+            let selectionWindow = NSWindow(
+                contentRect: screen.frame,
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+
+            selectionWindow.level = .screenSaver
+            selectionWindow.backgroundColor = .clear
+            selectionWindow.isOpaque = false
+            selectionWindow.hasShadow = false
+            selectionWindow.ignoresMouseEvents = false
+            selectionWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+            let overlayView = MultiWindowSelectionView(screenFrame: screen.frame, candidates: candidates) { result in
+                guard !didResume else { return }
+                didResume = true
+                selectionWindow.contentView = nil
+                selectionWindow.close()
+                continuation.resume(with: result)
+            }
+
+            selectionWindow.contentView = overlayView
+            selectionWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    private func renderMultiWindowComposite(
+        _ windows: [SCWindow],
+        display: SCDisplay,
+        allWindows: [SCWindow],
+        useDesktopBackdrop: Bool
+    ) async throws -> NSImage {
+        guard !windows.isEmpty else {
+            throw CaptureError.noWindowSelected
+        }
+
+        let displayBounds = CGDisplayBounds(display.displayID)
+        let windowFrames = windows.map { $0.frame.intersection(displayBounds) }.filter { $0.width > 1 && $0.height > 1 }
+        guard var outputRect = windowFrames.first else {
+            throw CaptureError.failedToCapture
+        }
+
+        for frame in windowFrames.dropFirst() {
+            outputRect = outputRect.union(frame)
+        }
+        outputRect = outputRect.insetBy(dx: -24, dy: -24).intersection(displayBounds).integral
+
+        let backdrop: NSImage?
+        if useDesktopBackdrop {
+            let desktopImage = try await captureDisplayImageWithoutSaving(display: display, excludingWindows: allWindows)
+            backdrop = cropDisplayImage(desktopImage, to: outputRect, in: display)
+        } else {
+            backdrop = nil
+        }
+
+        var capturedWindows: [(window: SCWindow, image: NSImage)] = []
+        for window in windows {
+            capturedWindows.append((window: window, image: try await captureWindowImage(window)))
+        }
+
+        let output = NSImage(size: outputRect.size)
+        output.lockFocus()
+        NSColor.clear.setFill()
+        NSRect(origin: .zero, size: outputRect.size).fill()
+
+        backdrop?.draw(in: NSRect(origin: .zero, size: outputRect.size))
+
+        for (window, image) in capturedWindows {
+            let frame = window.frame.intersection(displayBounds)
+            guard frame.width > 1, frame.height > 1 else { continue }
+            let drawRect = NSRect(
+                x: frame.minX - outputRect.minX,
+                y: outputRect.height - (frame.maxY - outputRect.minY),
+                width: frame.width,
+                height: frame.height
+            )
+            image.draw(in: drawRect)
+        }
+
+        output.unlockFocus()
+        return output
     }
 
     private func scrollingCaptureTargetUnderMouse(from content: SCShareableContent) -> ScrollingCaptureTarget? {
@@ -2240,6 +2382,173 @@ final class ScreenshotTranslationWindowController: NSWindowController {
     private func copyToPasteboard(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
+// MARK: - Multi Window Selection
+
+@available(macOS 12.3, *)
+private struct MultiWindowSelectionCandidate {
+    let id: CGWindowID
+    let title: String
+    let window: SCWindow
+    let screenRect: CGRect
+}
+
+@available(macOS 12.3, *)
+final class MultiWindowSelectionView: NSView {
+    private let screenFrame: CGRect
+    private let candidates: [MultiWindowSelectionCandidate]
+    private let completion: (Result<[SCWindow], Error>) -> Void
+    private var selectedIDs = Set<CGWindowID>()
+    private var hoverID: CGWindowID?
+
+    fileprivate init(
+        screenFrame: CGRect,
+        candidates: [MultiWindowSelectionCandidate],
+        completion: @escaping (Result<[SCWindow], Error>) -> Void
+    ) {
+        self.screenFrame = screenFrame
+        self.candidates = candidates
+        self.completion = completion
+        super.init(frame: NSRect(origin: .zero, size: screenFrame.size))
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.activeAlways, .mouseMoved, .inVisibleRect],
+            owner: self
+        ))
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.makeFirstResponder(self)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        NSColor.black.withAlphaComponent(0.30).setFill()
+        bounds.fill()
+
+        for candidate in candidates {
+            let rect = viewRect(for: candidate.screenRect)
+            let selected = selectedIDs.contains(candidate.id)
+            let hovered = hoverID == candidate.id
+
+            (selected ? NSColor.systemBlue.withAlphaComponent(0.24) : NSColor.black.withAlphaComponent(0.08)).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
+
+            let border = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
+            border.lineWidth = selected ? 3 : (hovered ? 2 : 1)
+            (selected ? NSColor.systemBlue : (hovered ? NSColor.white : NSColor.white.withAlphaComponent(0.45))).setStroke()
+            border.stroke()
+
+            drawWindowLabel(candidate.title, index: selectionIndex(for: candidate.id), in: rect)
+        }
+
+        drawInstruction()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        hoverID = candidate(at: point)?.id
+        needsDisplay = true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let candidate = candidate(at: point) else { return }
+
+        if selectedIDs.contains(candidate.id) {
+            selectedIDs.remove(candidate.id)
+        } else {
+            selectedIDs.insert(candidate.id)
+        }
+        needsDisplay = true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        switch event.keyCode {
+        case 36, 76:
+            let selected = candidates.filter { selectedIDs.contains($0.id) }.map(\.window)
+            guard !selected.isEmpty else {
+                NSSound.beep()
+                return
+            }
+            completion(.success(selected))
+        case 53:
+            completion(.failure(CaptureError.regionSelectionCancelled))
+        default:
+            super.keyDown(with: event)
+        }
+    }
+
+    private func candidate(at point: CGPoint) -> MultiWindowSelectionCandidate? {
+        candidates.reversed().first { viewRect(for: $0.screenRect).contains(point) }
+    }
+
+    private func viewRect(for screenRect: CGRect) -> CGRect {
+        CGRect(
+            x: screenRect.minX - screenFrame.minX,
+            y: screenFrame.height - (screenRect.maxY - screenFrame.minY),
+            width: screenRect.width,
+            height: screenRect.height
+        )
+    }
+
+    private func selectionIndex(for id: CGWindowID) -> Int? {
+        let selected = candidates.filter { selectedIDs.contains($0.id) }
+        return selected.firstIndex { $0.id == id }.map { $0 + 1 }
+    }
+
+    private func drawWindowLabel(_ title: String, index: Int?, in rect: CGRect) {
+        let prefix = index.map { "\($0). " } ?? ""
+        let text = "\(prefix)\(title)"
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+            .foregroundColor: NSColor.white
+        ]
+        let maxWidth = max(60, rect.width - 16)
+        let size = text.size(withAttributes: attributes)
+        let labelRect = NSRect(
+            x: rect.minX + 8,
+            y: rect.maxY - min(size.height + 12, rect.height),
+            width: min(size.width + 12, maxWidth),
+            height: size.height + 8
+        )
+        NSColor.black.withAlphaComponent(0.62).setFill()
+        NSBezierPath(roundedRect: labelRect, xRadius: 5, yRadius: 5).fill()
+        text.draw(
+            with: labelRect.insetBy(dx: 6, dy: 4),
+            options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine],
+            attributes: attributes
+        )
+    }
+
+    private func drawInstruction() {
+        let text = "点击选择多个窗口，按 Enter 合成，按 Esc 取消"
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 16, weight: .medium),
+            .foregroundColor: NSColor.white
+        ]
+        let size = text.size(withAttributes: attributes)
+        let rect = NSRect(
+            x: bounds.midX - size.width / 2 - 14,
+            y: bounds.maxY - size.height - 36,
+            width: size.width + 28,
+            height: size.height + 14
+        )
+        NSColor.black.withAlphaComponent(0.58).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
+        text.draw(at: CGPoint(x: rect.minX + 14, y: rect.minY + 7), withAttributes: attributes)
     }
 }
 

@@ -284,13 +284,14 @@ class CaptureManager: ObservableObject {
     /// 滚动截图 - 快捷键调用
     @MainActor
     func captureScrollingWindow() async {
-        let sliceCount = max(2, UserDefaults.standard.integer(forKey: "scrollingCaptureSlices"))
-        let delay = max(0.2, UserDefaults.standard.double(forKey: "scrollingCaptureDelay"))
-        let scrollLines = max(3, UserDefaults.standard.integer(forKey: "scrollingCaptureLines"))
+        let scrollingSettings = ScrollingCaptureSettings.fromDefaults()
+        let sliceCount = scrollingSettings.sliceCount
+        let delay = scrollingSettings.delay
+        let scrollLines = scrollingSettings.scrollLines
         let trimOverlap = UserDefaults.standard.object(forKey: "scrollingCaptureTrimOverlap") as? Bool ?? true
         let cropToWindow = UserDefaults.standard.object(forKey: "scrollingCaptureCropToWindow") as? Bool ?? true
         let stopWhenUnchanged = UserDefaults.standard.object(forKey: "scrollingCaptureStopWhenUnchanged") as? Bool ?? true
-        let scrollDirection = UserDefaults.standard.string(forKey: "scrollingCaptureDirection") == "up" ? "up" : "down"
+        let scrollDirection = scrollingSettings.direction
         let directionLabel = scrollDirection == "up" ? "向上" : "向下"
 
         let alert = NSAlert()

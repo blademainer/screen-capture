@@ -35,6 +35,7 @@
 		A1234567890ABCE1A /* IShotInteractionTiming.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE19 /* IShotInteractionTiming.swift */; };
 		A1234567890ABCE1C /* FloatingWindowConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE1B /* FloatingWindowConfiguration.swift */; };
 		A1234567890ABCE1E /* RecordingAudioSourceSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE1D /* RecordingAudioSourceSelection.swift */; };
+		A1234567890ABCE20 /* ScrollingCaptureSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE1F /* ScrollingCaptureSettings.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -68,6 +69,7 @@
 		A1234567890ABCE19 /* IShotInteractionTiming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IShotInteractionTiming.swift; sourceTree = "<group>"; };
 		A1234567890ABCE1B /* FloatingWindowConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingWindowConfiguration.swift; sourceTree = "<group>"; };
 		A1234567890ABCE1D /* RecordingAudioSourceSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingAudioSourceSelection.swift; sourceTree = "<group>"; };
+		A1234567890ABCE1F /* ScrollingCaptureSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollingCaptureSettings.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -161,6 +163,7 @@
 				A1234567890ABCE19 /* IShotInteractionTiming.swift */,
 				A1234567890ABCE1B /* FloatingWindowConfiguration.swift */,
 				A1234567890ABCE1D /* RecordingAudioSourceSelection.swift */,
+				A1234567890ABCE1F /* ScrollingCaptureSettings.swift */,
 			);
 			path = Utils;
 			sourceTree = "<group>";
@@ -256,6 +259,7 @@
 				A1234567890ABCE1A /* IShotInteractionTiming.swift in Sources */,
 				A1234567890ABCE1C /* FloatingWindowConfiguration.swift in Sources */,
 				A1234567890ABCE1E /* RecordingAudioSourceSelection.swift in Sources */,
+				A1234567890ABCE20 /* ScrollingCaptureSettings.swift in Sources */,
 				A1234567890ABCE02 /* HotKeyManager.swift in Sources */,
 				A1234567890ABCE04 /* WindowManager.swift in Sources */,
 				A1234567890ABCE06 /* FloatingWindowController.swift in Sources */,

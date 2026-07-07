@@ -279,6 +279,44 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertFalse(ScrollingImageStitcher.imagesAreVisuallySimilar(image, changed))
     }
 
+    func testScrollingCaptureSettingsNormalizeExecutionBounds() throws {
+        XCTAssertEqual(ScrollingCaptureSettings.normalizedSliceCount(0), 30)
+        XCTAssertEqual(ScrollingCaptureSettings.normalizedSliceCount(1), 2)
+        XCTAssertEqual(ScrollingCaptureSettings.normalizedSliceCount(250), 100)
+
+        XCTAssertEqual(ScrollingCaptureSettings.normalizedDelay(0), 0.8)
+        XCTAssertEqual(ScrollingCaptureSettings.normalizedDelay(0.05), 0.2)
+        XCTAssertEqual(ScrollingCaptureSettings.normalizedDelay(8.0), 2.0)
+
+        XCTAssertEqual(ScrollingCaptureSettings.normalizedScrollLines(0), 12)
+        XCTAssertEqual(ScrollingCaptureSettings.normalizedScrollLines(1), 3)
+        XCTAssertEqual(ScrollingCaptureSettings.normalizedScrollLines(120), 40)
+
+        XCTAssertEqual(ScrollingCaptureSettings.normalizedDirection("up"), "up")
+        XCTAssertEqual(ScrollingCaptureSettings.normalizedDirection("sideways"), "down")
+        XCTAssertEqual(ScrollingCaptureSettings.normalizedDirection(nil), "down")
+    }
+
+    func testScrollingCaptureSettingsReadNormalizedDefaults() throws {
+        let suiteName = "MacScreenCaptureTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        defaults.set(1_000, forKey: "scrollingCaptureSlices")
+        defaults.set(10.0, forKey: "scrollingCaptureDelay")
+        defaults.set(-5, forKey: "scrollingCaptureLines")
+        defaults.set("up", forKey: "scrollingCaptureDirection")
+
+        let settings = ScrollingCaptureSettings.fromDefaults(defaults)
+
+        XCTAssertEqual(settings.sliceCount, 100)
+        XCTAssertEqual(settings.delay, 2.0)
+        XCTAssertEqual(settings.scrollLines, 12)
+        XCTAssertEqual(settings.direction, "up")
+    }
+
     func testMultiWindowCompositeLayoutKeepsRelativeWindowPositions() throws {
         let displayBounds = CGRect(x: 0, y: 0, width: 800, height: 600)
         let firstWindow = CGRect(x: 100, y: 120, width: 220, height: 160)

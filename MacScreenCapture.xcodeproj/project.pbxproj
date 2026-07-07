@@ -32,6 +32,7 @@
 		A1234567890ABCE14 /* TranslationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE13 /* TranslationSupport.swift */; };
 		A1234567890ABCE16 /* RecordingSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE15 /* RecordingSettings.swift */; };
 		A1234567890ABCE18 /* MultiWindowCompositeLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE17 /* MultiWindowCompositeLayout.swift */; };
+		A1234567890ABCE1A /* IShotInteractionTiming.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE19 /* IShotInteractionTiming.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -62,6 +63,7 @@
 		A1234567890ABCE13 /* TranslationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationSupport.swift; sourceTree = "<group>"; };
 		A1234567890ABCE15 /* RecordingSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingSettings.swift; sourceTree = "<group>"; };
 		A1234567890ABCE17 /* MultiWindowCompositeLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiWindowCompositeLayout.swift; sourceTree = "<group>"; };
+		A1234567890ABCE19 /* IShotInteractionTiming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IShotInteractionTiming.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -152,6 +154,7 @@
 				A1234567890ABCE13 /* TranslationSupport.swift */,
 				A1234567890ABCE15 /* RecordingSettings.swift */,
 				A1234567890ABCE17 /* MultiWindowCompositeLayout.swift */,
+				A1234567890ABCE19 /* IShotInteractionTiming.swift */,
 			);
 			path = Utils;
 			sourceTree = "<group>";
@@ -244,6 +247,7 @@
 				A1234567890ABCE14 /* TranslationSupport.swift in Sources */,
 				A1234567890ABCE16 /* RecordingSettings.swift in Sources */,
 				A1234567890ABCE18 /* MultiWindowCompositeLayout.swift in Sources */,
+				A1234567890ABCE1A /* IShotInteractionTiming.swift in Sources */,
 				A1234567890ABCE02 /* HotKeyManager.swift in Sources */,
 				A1234567890ABCE04 /* WindowManager.swift in Sources */,
 				A1234567890ABCE06 /* FloatingWindowController.swift in Sources */,

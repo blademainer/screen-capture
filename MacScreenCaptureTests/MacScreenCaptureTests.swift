@@ -444,7 +444,39 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(tiny, 2_000_000)
         XCTAssertEqual(huge, 60_000_000)
     }
-    
+
+    func testIShotInteractionTimingNormalizesDelayAndDoubleOptionWindows() throws {
+        XCTAssertEqual(IShotInteractionTiming.delayedScreenshotSeconds(0), 5)
+        XCTAssertEqual(IShotInteractionTiming.delayedScreenshotSeconds(-3), 1)
+        XCTAssertEqual(IShotInteractionTiming.delayedScreenshotSeconds(45), 30)
+        XCTAssertEqual(IShotInteractionTiming.doubleOptionInterval(0), 0.45)
+        XCTAssertEqual(IShotInteractionTiming.doubleOptionInterval(0.1), 0.25)
+        XCTAssertEqual(IShotInteractionTiming.doubleOptionInterval(2), 1.2)
+        XCTAssertEqual(IShotInteractionTiming.doubleOptionCooldown(0), 1.0)
+        XCTAssertEqual(IShotInteractionTiming.doubleOptionCooldown(0.1), 0.5)
+        XCTAssertEqual(IShotInteractionTiming.doubleOptionCooldown(9), 3.0)
+    }
+
+    func testIShotInteractionTimingDetectsDoubleOptionAndCooldown() throws {
+        var detector = IShotInteractionTiming.DoubleOptionDetector()
+        let start = Date(timeIntervalSince1970: 1_000)
+
+        XCTAssertFalse(detector.registerPress(at: start, interval: 0.45, cooldown: 1.0))
+        XCTAssertTrue(detector.registerPress(at: start.addingTimeInterval(0.30), interval: 0.45, cooldown: 1.0))
+        XCTAssertFalse(detector.registerPress(at: start.addingTimeInterval(0.60), interval: 0.45, cooldown: 1.0))
+        XCTAssertFalse(detector.registerPress(at: start.addingTimeInterval(1.65), interval: 0.45, cooldown: 1.0))
+        XCTAssertTrue(detector.registerPress(at: start.addingTimeInterval(1.90), interval: 0.45, cooldown: 1.0))
+    }
+
+    func testIShotInteractionTimingDoesNotTriggerOutsideDoublePressWindow() throws {
+        var detector = IShotInteractionTiming.DoubleOptionDetector()
+        let start = Date(timeIntervalSince1970: 2_000)
+
+        XCTAssertFalse(detector.registerPress(at: start, interval: 0.45, cooldown: 1.0))
+        XCTAssertFalse(detector.registerPress(at: start.addingTimeInterval(0.80), interval: 0.45, cooldown: 1.0))
+        XCTAssertTrue(detector.registerPress(at: start.addingTimeInterval(1.00), interval: 0.45, cooldown: 1.0))
+    }
+
     func testNotificationManagerInitialization() throws {
         throw XCTSkip("NotificationManager requires a real app bundle host for UNUserNotificationCenter.")
     }

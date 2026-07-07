@@ -189,15 +189,12 @@ class HotKeyManager: ObservableObject {
     private var localFlagsMonitor: Any?
     private var globalFlagsMonitor: Any?
     private var isOptionKeyDown = false
-    private var lastOptionPressAt: Date?
-    private var lastOptionActionAt: Date?
+    private var doubleOptionDetector = IShotInteractionTiming.DoubleOptionDetector()
     private var optionDoublePressInterval: TimeInterval {
-        let value = UserDefaults.standard.double(forKey: "doubleOptionQuickOpenInterval")
-        return value == 0 ? 0.45 : min(max(value, 0.25), 1.2)
+        IShotInteractionTiming.doubleOptionInterval(UserDefaults.standard.double(forKey: "doubleOptionQuickOpenInterval"))
     }
     private var optionActionCooldown: TimeInterval {
-        let value = UserDefaults.standard.double(forKey: "doubleOptionQuickOpenCooldown")
-        return value == 0 ? 1.0 : min(max(value, 0.5), 3.0)
+        IShotInteractionTiming.doubleOptionCooldown(UserDefaults.standard.double(forKey: "doubleOptionQuickOpenCooldown"))
     }
     
     // 配置文件路径
@@ -332,18 +329,12 @@ class HotKeyManager: ObservableObject {
 
         guard optionIsDown, !isOptionKeyDown else { return }
 
-        let now = Date()
-        if let lastOptionActionAt, now.timeIntervalSince(lastOptionActionAt) < optionActionCooldown {
-            lastOptionPressAt = now
-            return
-        }
-
-        if let lastOptionPressAt, now.timeIntervalSince(lastOptionPressAt) <= optionDoublePressInterval {
-            self.lastOptionPressAt = nil
-            self.lastOptionActionAt = now
+        if doubleOptionDetector.registerPress(
+            at: Date(),
+            interval: optionDoublePressInterval,
+            cooldown: optionActionCooldown
+        ) {
             performDoubleOptionQuickOpen()
-        } else {
-            lastOptionPressAt = now
         }
     }
 

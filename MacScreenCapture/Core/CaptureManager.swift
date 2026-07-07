@@ -346,7 +346,8 @@ class CaptureManager: ObservableObject {
     /// 延时截图
     @MainActor
     func captureDelayedScreenshot(seconds: Int? = nil) async throws -> NSImage {
-        let delay = seconds ?? max(1, UserDefaults.standard.integer(forKey: "delayedScreenshotSeconds"))
+        let rawDelay = seconds ?? UserDefaults.standard.integer(forKey: "delayedScreenshotSeconds")
+        let delay = IShotInteractionTiming.delayedScreenshotSeconds(rawDelay)
         let countdownOverlay = ScreenshotCountdownOverlayController()
 
         defer {
@@ -1299,7 +1300,7 @@ class CaptureManager: ObservableObject {
 
     @MainActor
     private func waitForRecordingStartDelayIfNeeded(subtitle: String) async throws {
-        let startDelay = UserDefaults.standard.integer(forKey: "recordingStartDelaySeconds")
+        let startDelay = min(max(UserDefaults.standard.integer(forKey: "recordingStartDelaySeconds"), 0), 30)
         guard startDelay > 0 else { return }
 
         let countdownOverlay = ScreenshotCountdownOverlayController(subtitle: subtitle)

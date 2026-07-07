@@ -247,8 +247,10 @@ struct MenuBarView: View {
 
         Task {
             do {
-                let seconds = UserDefaults.standard.integer(forKey: "delayedScreenshotSeconds")
-                _ = try await captureManager.captureDelayedScreenshot(seconds: seconds == 0 ? 5 : seconds)
+                let seconds = IShotInteractionTiming.delayedScreenshotSeconds(
+                    UserDefaults.standard.integer(forKey: "delayedScreenshotSeconds")
+                )
+                _ = try await captureManager.captureDelayedScreenshot(seconds: seconds)
                 showNotification(title: "延时截图成功", message: "截图已保存")
             } catch {
                 showNotification(title: "延时截图失败", message: error.localizedDescription)

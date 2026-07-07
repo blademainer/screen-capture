@@ -345,7 +345,23 @@ class CaptureManager: ObservableObject {
     /// OCR 后翻译并显示结果
     @MainActor
     func translateLastScreenshot() async throws -> ScreenshotTranslationResult {
-        let text = try await recognizeTextFromLastScreenshot()
+        guard let image = lastCapturedImage else {
+            throw CaptureError.noImageAvailable
+        }
+
+        return try await translateScreenshotImage(image)
+    }
+
+    /// 框选截图区域后直接 OCR 并翻译，覆盖 iShot 的截图翻译直达流程。
+    @MainActor
+    func captureRegionAndTranslate() async throws -> ScreenshotTranslationResult {
+        let image = try await captureInteractiveScreenshot(arguments: ["-i", "-r"], forceStyle: false, showEditor: false)
+        return try await translateScreenshotImage(image)
+    }
+
+    @MainActor
+    private func translateScreenshotImage(_ image: NSImage) async throws -> ScreenshotTranslationResult {
+        let text = try await recognizeText(in: image)
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else {
             throw CaptureError.noRecognizedText
@@ -1502,7 +1518,7 @@ class CaptureManager: ObservableObject {
 
     /// 使用系统 screencapture 交互选择并保存结果。
     @MainActor
-    private func captureInteractiveScreenshot(arguments: [String], showEditor: Bool) async throws -> NSImage {
+    private func captureInteractiveScreenshot(arguments: [String], forceStyle: Bool = true, showEditor: Bool) async throws -> NSImage {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
 
@@ -1515,7 +1531,7 @@ class CaptureManager: ObservableObject {
                 Task { @MainActor in
                     if process.terminationStatus == 0, let image = NSImage(contentsOf: tempURL) {
                         do {
-                            let finalImage = try await self.finalizeCapturedImage(image, showEditor: showEditor)
+                            let finalImage = try await self.finalizeCapturedImage(image, forceStyle: forceStyle, showEditor: showEditor)
                             try? FileManager.default.removeItem(at: tempURL)
                             continuation.resume(returning: finalImage)
                         } catch {

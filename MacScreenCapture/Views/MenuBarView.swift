@@ -323,7 +323,7 @@ struct MenuBarView: View {
     private func quickTranslate() {
         Task {
             do {
-                let result = try await captureManager.translateLastScreenshot()
+                let result = try await captureManager.captureRegionAndTranslate()
                 if result.usedWebFallback {
                     showNotification(title: "截图翻译已打开网页", message: "在线接口不可用，原文已复制（\(result.targetLanguage)）")
                 } else {

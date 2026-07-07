@@ -54,29 +54,51 @@ final class MacScreenCaptureTests: XCTestCase {
     }
 
     func testIShotStyleDefaultHotKeysAreAvailableAtLaunch() throws {
-        XCTAssertEqual(HotKeyAction.fullScreenshot.defaultConfig.keyCode, UInt32(kVK_ANSI_S))
-        XCTAssertEqual(HotKeyAction.fullScreenshot.defaultConfig.modifiers, UInt32(cmdKey | shiftKey))
-        XCTAssertEqual(HotKeyAction.fullScreenshot.defaultConfig.displayString, "⌘⇧S")
+        let expectedHotKeys: [HotKeyAction: (keyCode: UInt32, modifiers: UInt32, display: String)] = [
+            .fullScreenshot: (UInt32(kVK_ANSI_S), UInt32(cmdKey | shiftKey), "⌘⇧S"),
+            .regionScreenshot: (UInt32(kVK_ANSI_A), UInt32(cmdKey | shiftKey), "⌘⇧A"),
+            .windowScreenshot: (UInt32(kVK_ANSI_W), UInt32(cmdKey | shiftKey), "⌘⇧W"),
+            .delayedScreenshot: (UInt32(kVK_ANSI_L), UInt32(cmdKey | optionKey), "⌘⌥L"),
+            .multiWindowScreenshot: (UInt32(kVK_ANSI_W), UInt32(cmdKey | optionKey), "⌘⌥W"),
+            .deviceFramedScreenshot: (UInt32(kVK_ANSI_F), UInt32(cmdKey | optionKey), "⌘⌥F"),
+            .startRecording: (UInt32(kVK_ANSI_W), UInt32(optionKey), "⌥W"),
+            .startAudioRecording: (UInt32(kVK_ANSI_M), UInt32(cmdKey | shiftKey), "⌘⇧M"),
+            .togglePauseRecording: (UInt32(kVK_Space), UInt32(cmdKey | optionKey), "⌘⌥Space"),
+            .stopRecording: (UInt32(kVK_ANSI_R), UInt32(cmdKey | shiftKey), "⌘⇧R"),
+            .scrollScreenshot: (UInt32(kVK_ANSI_S), UInt32(cmdKey | optionKey), "⌘⌥S"),
+            .pickColor: (UInt32(kVK_ANSI_C), UInt32(cmdKey | shiftKey), "⌘⇧C"),
+            .pinnedScreenshot: (UInt32(kVK_ANSI_P), UInt32(cmdKey | optionKey), "⌘⌥P"),
+            .ocrScreenshot: (UInt32(kVK_ANSI_O), UInt32(cmdKey | optionKey), "⌘⌥O"),
+            .translateScreenshot: (UInt32(kVK_ANSI_T), UInt32(cmdKey | optionKey), "⌘⌥T")
+        ]
 
-        XCTAssertEqual(HotKeyAction.windowScreenshot.defaultConfig.keyCode, UInt32(kVK_ANSI_W))
-        XCTAssertEqual(HotKeyAction.windowScreenshot.defaultConfig.modifiers, UInt32(cmdKey | shiftKey))
-        XCTAssertEqual(HotKeyAction.windowScreenshot.defaultConfig.displayString, "⌘⇧W")
+        XCTAssertEqual(Set(expectedHotKeys.keys), Set(HotKeyAction.allCases))
 
-        XCTAssertEqual(HotKeyAction.regionScreenshot.defaultConfig.keyCode, UInt32(kVK_ANSI_A))
-        XCTAssertEqual(HotKeyAction.regionScreenshot.defaultConfig.modifiers, UInt32(cmdKey | shiftKey))
-        XCTAssertEqual(HotKeyAction.regionScreenshot.defaultConfig.displayString, "⌘⇧A")
+        for (action, expected) in expectedHotKeys {
+            let config = action.defaultConfig
+            XCTAssertEqual(config.keyCode, expected.keyCode, action.localizedDescription)
+            XCTAssertEqual(config.modifiers, expected.modifiers, action.localizedDescription)
+            XCTAssertEqual(config.displayString, expected.display, action.localizedDescription)
+            XCTAssertTrue(config.isEnabled, action.localizedDescription)
+        }
+    }
 
-        XCTAssertEqual(HotKeyAction.startRecording.defaultConfig.keyCode, UInt32(kVK_ANSI_W))
-        XCTAssertEqual(HotKeyAction.startRecording.defaultConfig.modifiers, UInt32(optionKey))
-        XCTAssertTrue(HotKeyAction.startRecording.defaultConfig.isEnabled)
+    func testReleaseWorkflowBuildsUniversalMacArtifacts() throws {
+        let testFileURL = URL(fileURLWithPath: #filePath)
+        let repositoryRoot = testFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let workflowURL = repositoryRoot
+            .appendingPathComponent(".github")
+            .appendingPathComponent("workflows")
+            .appendingPathComponent("build-and-release.yml")
+        let workflow = try String(contentsOf: workflowURL, encoding: .utf8)
 
-        XCTAssertEqual(HotKeyAction.multiWindowScreenshot.defaultConfig.keyCode, UInt32(kVK_ANSI_W))
-        XCTAssertEqual(HotKeyAction.multiWindowScreenshot.defaultConfig.modifiers, UInt32(cmdKey | optionKey))
-        XCTAssertTrue(HotKeyAction.multiWindowScreenshot.defaultConfig.isEnabled)
-
-        XCTAssertEqual(HotKeyAction.togglePauseRecording.defaultConfig.keyCode, UInt32(kVK_Space))
-        XCTAssertEqual(HotKeyAction.togglePauseRecording.defaultConfig.modifiers, UInt32(cmdKey | optionKey))
-        XCTAssertTrue(HotKeyAction.togglePauseRecording.defaultConfig.isEnabled)
+        XCTAssertTrue(workflow.contains("ARCHS=\"arm64 x86_64\""))
+        XCTAssertTrue(workflow.contains("ONLY_ACTIVE_ARCH=NO"))
+        XCTAssertTrue(workflow.contains("lipo -archs"))
+        XCTAssertTrue(workflow.contains("arm64"))
+        XCTAssertTrue(workflow.contains("x86_64"))
     }
     
     func testFileManagerExtensions() throws {

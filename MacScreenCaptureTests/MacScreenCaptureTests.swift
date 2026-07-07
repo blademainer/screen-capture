@@ -184,6 +184,65 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(ScrollingImageStitcher.imagesAreVisuallySimilar(image, image))
         XCTAssertFalse(ScrollingImageStitcher.imagesAreVisuallySimilar(image, changed))
     }
+
+    func testScreenshotStyleRendererRoundsCornersToTransparentPixels() throws {
+        let image = makeSolidImage(width: 40, height: 40, color: .systemRed)
+        let rounded = ScreenshotStyleRenderer.renderRoundedImage(image, radius: 16)
+
+        let corner = try rgbaPixel(in: rounded, x: 0, y: 0)
+        let center = try rgbaPixel(in: rounded, x: 20, y: 20)
+
+        XCTAssertLessThan(corner.alpha, 10)
+        XCTAssertGreaterThan(center.red, 200)
+        XCTAssertGreaterThan(center.alpha, 240)
+    }
+
+    func testScreenshotStyleRendererKeepsRoundedShadowCornersTransparent() throws {
+        let image = makeSolidImage(width: 40, height: 40, color: .systemBlue)
+        let styled = ScreenshotStyleRenderer.applyOutputStyle(
+            to: image,
+            style: ScreenshotStyleRenderer.OutputStyle(
+                roundedCorners: true,
+                cornerRadius: 16,
+                dropShadow: true,
+                shadowRadius: 12,
+                shadowColor: .black
+            )
+        )
+
+        XCTAssertEqual(Int(styled.size.width), 88)
+        XCTAssertEqual(Int(styled.size.height), 88)
+
+        let outerCorner = try rgbaPixel(in: styled, x: 0, y: 0)
+        let containsBlueImage = try imageContainsPixel(in: styled) { pixel in
+            pixel.blue > 150 && pixel.alpha > 240
+        }
+
+        XCTAssertLessThan(outerCorner.alpha, 10)
+        XCTAssertTrue(containsBlueImage)
+    }
+
+    func testScreenshotStyleRendererBuildsDeviceFrameWithoutWatermark() throws {
+        let image = makeSolidImage(width: 20, height: 12, color: .white)
+        let framed = ScreenshotStyleRenderer.renderDeviceFrame(
+            around: image,
+            style: ScreenshotStyleRenderer.DeviceFrameStyle(
+                bezel: 18,
+                padding: 16,
+                cornerRadius: 12,
+                shadowRadius: 0,
+                bodyColor: .black,
+                shadowColor: .black
+            )
+        )
+
+        XCTAssertEqual(Int(framed.size.width), 88)
+        XCTAssertEqual(Int(framed.size.height), 104)
+        let containsWhiteScreen = try imageContainsPixel(in: framed) { pixel in
+            pixel.red > 240 && pixel.green > 240 && pixel.blue > 240 && pixel.alpha > 240
+        }
+        XCTAssertTrue(containsWhiteScreen)
+    }
     
     func testNotificationManagerInitialization() throws {
         throw XCTSkip("NotificationManager requires a real app bundle host for UNUserNotificationCenter.")
@@ -337,5 +396,71 @@ final class MacScreenCaptureTests: XCTestCase {
             intent: .defaultIntent
         )!
         return NSImage(cgImage: cgImage, size: NSSize(width: width, height: height))
+    }
+
+    private func makeSolidImage(width: Int, height: Int, color: NSColor) -> NSImage {
+        let image = NSImage(size: NSSize(width: width, height: height))
+        image.lockFocus()
+        color.setFill()
+        NSRect(x: 0, y: 0, width: width, height: height).fill()
+        image.unlockFocus()
+        return image
+    }
+
+    private func rgbaPixel(in image: NSImage, x: Int, y: Int) throws -> (red: Int, green: Int, blue: Int, alpha: Int) {
+        let pixels = try rgbaPixels(in: image)
+        XCTAssertTrue((0..<pixels.width).contains(x))
+        XCTAssertTrue((0..<pixels.height).contains(y))
+
+        let offset = (y * pixels.width + x) * 4
+        return (
+            Int(pixels.buffer[offset]),
+            Int(pixels.buffer[offset + 1]),
+            Int(pixels.buffer[offset + 2]),
+            Int(pixels.buffer[offset + 3])
+        )
+    }
+
+    private func imageContainsPixel(
+        in image: NSImage,
+        matching predicate: ((red: Int, green: Int, blue: Int, alpha: Int)) -> Bool
+    ) throws -> Bool {
+        let pixels = try rgbaPixels(in: image)
+        for y in 0..<pixels.height {
+            for x in 0..<pixels.width {
+                let offset = (y * pixels.width + x) * 4
+                let pixel = (
+                    red: Int(pixels.buffer[offset]),
+                    green: Int(pixels.buffer[offset + 1]),
+                    blue: Int(pixels.buffer[offset + 2]),
+                    alpha: Int(pixels.buffer[offset + 3])
+                )
+                if predicate(pixel) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    private func rgbaPixels(in image: NSImage) throws -> (width: Int, height: Int, buffer: [UInt8]) {
+        let cgImage = try XCTUnwrap(image.cgImage(forProposedRect: nil, context: nil, hints: nil))
+        let width = cgImage.width
+        let height = cgImage.height
+
+        let bytesPerPixel = 4
+        let bytesPerRow = width * bytesPerPixel
+        var buffer = [UInt8](repeating: 0, count: height * bytesPerRow)
+        let context = try XCTUnwrap(CGContext(
+            data: &buffer,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return (width, height, buffer)
     }
 }

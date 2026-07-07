@@ -350,7 +350,7 @@ class FloatingEditingCanvasView: NSView {
 
     private var currentPoints: [CGPoint] = []
     private var isDrawing = false
-    private var nextNumber = 1
+    private var nextNumber = FloatingEditingCanvasView.defaultNumberStart()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -365,6 +365,10 @@ class FloatingEditingCanvasView: NSView {
     private func setupView() {
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    private static func defaultNumberStart() -> Int {
+        max(1, UserDefaults.standard.integer(forKey: "numberedAnnotationStart"))
     }
 
     override func draw(_ dirtyRect: NSRect) {

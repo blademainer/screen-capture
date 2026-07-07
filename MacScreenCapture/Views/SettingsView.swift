@@ -28,6 +28,7 @@ struct SettingsView: View {
     @AppStorage("screenshotCornerRadius") private var screenshotCornerRadius = 18.0
     @AppStorage("screenshotShadowRadius") private var screenshotShadowRadius = 24.0
     @AppStorage("screenshotShadowColorHex") private var screenshotShadowColorHex = "#000000"
+    @AppStorage("numberedAnnotationStart") private var numberedAnnotationStart = 1
     @AppStorage("colorCodeFormat") private var colorCodeFormat = "#HEX"
     @AppStorage("customColorCodeTemplate") private var customColorCodeTemplate = "{hex}"
     @AppStorage("openAfterCaptureAppPath") private var openAfterCaptureAppPath = ""
@@ -209,6 +210,15 @@ struct SettingsView: View {
                                 .frame(width: 110)
                         }
                     }
+                }
+                .padding(.top, 4)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("标注")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+
+                    Stepper("数字序号起始值: \(numberedAnnotationStart)", value: $numberedAnnotationStart, in: 1...999)
                 }
                 .padding(.top, 4)
 

@@ -35,7 +35,7 @@ struct RecordingView: View {
                 RecordingControlsView()
 
                 // 录制状态显示
-                if captureManager.isRecording {
+                if captureManager.isRecording || captureManager.recordingURL != nil {
                     RecordingStatusView()
                 }
             }
@@ -221,21 +221,32 @@ struct RecordingView: View {
         VStack(spacing: 12) {
             // 录制指示器
             HStack {
-                Circle()
-                    .fill(captureManager.isPaused ? Color.orange : Color.red)
-                    .frame(width: 12, height: 12)
-                    .scaleEffect(captureManager.isPaused ? 1.0 : 1.2)
-                    .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: captureManager.isPaused)
+                if captureManager.isRecording {
+                    Circle()
+                        .fill(recordingStatusColor)
+                        .frame(width: 12, height: 12)
+                        .scaleEffect(captureManager.isPaused ? 1.0 : 1.2)
+                        .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: captureManager.isPaused)
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(recordingStatusColor)
+                }
 
                 Text(statusTitle)
                     .font(.headline)
-                    .foregroundColor(captureManager.isPaused ? .orange : .red)
+                    .foregroundColor(recordingStatusColor)
             }
 
             // 录制时长
-            Text(formatDuration(captureManager.recordingDuration))
-                .font(.title)
-                .bold()
+            if captureManager.isRecording {
+                Text(formatDuration(captureManager.recordingDuration))
+                    .font(.title)
+                    .bold()
+            } else if captureManager.recordingURL != nil {
+                Text("文件已保存")
+                    .font(.title3)
+                    .bold()
+            }
 
             // 录制信息
             VStack(alignment: .leading, spacing: 4) {
@@ -245,7 +256,7 @@ struct RecordingView: View {
                         .foregroundColor(.secondary)
                 }
 
-                Text("模式: \(captureManager.isAudioOnlyRecording ? "仅录音" : captureManager.captureMode.rawValue)")
+                Text("模式: \(recordingModeLabel)")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
@@ -326,10 +337,31 @@ struct RecordingView: View {
     }
 
     private var statusTitle: String {
+        if !captureManager.isRecording {
+            return completedRecordingIsAudioOnly ? "录音已保存" : "录制已保存"
+        }
         if captureManager.isPaused {
             return captureManager.isAudioOnlyRecording ? "录音已暂停" : "录制已暂停"
         }
         return captureManager.isAudioOnlyRecording ? "正在录音" : "正在录制"
+    }
+
+    private var recordingStatusColor: Color {
+        if !captureManager.isRecording {
+            return .green
+        }
+        return captureManager.isPaused ? .orange : .red
+    }
+
+    private var completedRecordingIsAudioOnly: Bool {
+        captureManager.recordingURL?.pathExtension.lowercased() == "m4a"
+    }
+
+    private var recordingModeLabel: String {
+        if captureManager.isAudioOnlyRecording || (!captureManager.isRecording && completedRecordingIsAudioOnly) {
+            return "仅录音"
+        }
+        return captureManager.captureMode.rawValue
     }
 
     private func formatDuration(_ duration: TimeInterval) -> String {

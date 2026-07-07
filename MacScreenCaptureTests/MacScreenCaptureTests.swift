@@ -451,6 +451,56 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(containsWhiteScreen)
     }
 
+    func testImageEditingSessionRendersNumberedAnnotationIntoOutputImage() throws {
+        let image = makeSolidImage(width: 90, height: 90, color: .white)
+        let session = ImageEditingSession(originalImage: image)
+
+        session.addOperation(EditingOperation(
+            type: .numbered,
+            points: [CGPoint(x: 45, y: 45)],
+            color: .systemRed,
+            lineWidth: 4,
+            text: "7",
+            fontSize: 26,
+            textOutlined: true
+        ))
+
+        let containsRedMarker = try imageContainsPixel(in: session.currentImage) { pixel in
+            pixel.red > 200 && pixel.green < 90 && pixel.blue < 90 && pixel.alpha > 240
+        }
+        let containsWhiteNumberOrBorder = try imageContainsPixel(in: session.currentImage) { pixel in
+            pixel.red > 240 && pixel.green > 240 && pixel.blue > 240 && pixel.alpha > 240
+        }
+
+        XCTAssertTrue(containsRedMarker)
+        XCTAssertTrue(containsWhiteNumberOrBorder)
+    }
+
+    func testImageEditingSessionRendersOutlinedTextIntoOutputImage() throws {
+        let image = makeSolidImage(width: 180, height: 80, color: .black)
+        let session = ImageEditingSession(originalImage: image)
+
+        session.addOperation(EditingOperation(
+            type: .text,
+            color: .systemGreen,
+            lineWidth: 2,
+            text: "iShot",
+            rect: CGRect(x: 12, y: 18, width: 150, height: 46),
+            fontSize: 34,
+            textOutlined: true
+        ))
+
+        let containsGreenText = try imageContainsPixel(in: session.currentImage) { pixel in
+            pixel.green > 140 && pixel.red < 140 && pixel.blue < 140 && pixel.alpha > 200
+        }
+        let containsWhiteOutline = try imageContainsPixel(in: session.currentImage) { pixel in
+            pixel.red > 200 && pixel.green > 200 && pixel.blue > 200 && pixel.alpha > 200
+        }
+
+        XCTAssertTrue(containsGreenText)
+        XCTAssertTrue(containsWhiteOutline)
+    }
+
     func testOCRTextOrdererSortsByVisualReadingOrder() throws {
         let boxes = [
             makeTextBox("第二行右", x: 0.55, y: 0.40),

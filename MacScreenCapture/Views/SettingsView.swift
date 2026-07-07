@@ -46,6 +46,12 @@ struct SettingsView: View {
     @AppStorage("annotationCustomColorHex") private var annotationCustomColorHex = AnnotationStylePreset.professional.colorHex
     @AppStorage("annotationCustomLineWidth") private var annotationCustomLineWidth = AnnotationStylePreset.professional.lineWidth
     @AppStorage("annotationCustomTextOutlined") private var annotationCustomTextOutlined = false
+    @AppStorage("annotationCustom2ColorHex") private var annotationCustom2ColorHex = AnnotationStylePreset.professional.colorHex
+    @AppStorage("annotationCustom2LineWidth") private var annotationCustom2LineWidth = AnnotationStylePreset.professional.lineWidth
+    @AppStorage("annotationCustom2TextOutlined") private var annotationCustom2TextOutlined = false
+    @AppStorage("annotationCustom3ColorHex") private var annotationCustom3ColorHex = AnnotationStylePreset.professional.colorHex
+    @AppStorage("annotationCustom3LineWidth") private var annotationCustom3LineWidth = AnnotationStylePreset.professional.lineWidth
+    @AppStorage("annotationCustom3TextOutlined") private var annotationCustom3TextOutlined = false
     @AppStorage("colorCodeFormat") private var colorCodeFormat = "#HEX"
     @AppStorage("customColorCodeTemplate") private var customColorCodeTemplate = "{hex}"
     @AppStorage("openAfterCaptureAppPath") private var openAfterCaptureAppPath = ""
@@ -335,8 +341,16 @@ struct SettingsView: View {
                     Toggle("文字和序号启用描边", isOn: $annotationTextOutlined)
                     HStack {
                         Spacer()
-                        Button("保存当前样式为自定义模板") {
-                            saveCustomAnnotationPreset()
+                        Button("存为自定义 1") {
+                            saveCustomAnnotationPreset(.custom)
+                        }
+                        .buttonStyle(.bordered)
+                        Button("存为自定义 2") {
+                            saveCustomAnnotationPreset(.custom2)
+                        }
+                        .buttonStyle(.bordered)
+                        Button("存为自定义 3") {
+                            saveCustomAnnotationPreset(.custom3)
                         }
                         .buttonStyle(.bordered)
                     }
@@ -680,11 +694,24 @@ struct SettingsView: View {
 
     private func applyAnnotationPreset(_ presetValue: String) {
         guard let preset = AnnotationStylePreset(rawValue: presetValue) else { return }
-        if preset == .custom {
+        switch preset {
+        case .custom:
             annotationDefaultColorHex = annotationCustomColorHex
             annotationDefaultLineWidth = annotationCustomLineWidth
             annotationTextOutlined = annotationCustomTextOutlined
             return
+        case .custom2:
+            annotationDefaultColorHex = annotationCustom2ColorHex
+            annotationDefaultLineWidth = annotationCustom2LineWidth
+            annotationTextOutlined = annotationCustom2TextOutlined
+            return
+        case .custom3:
+            annotationDefaultColorHex = annotationCustom3ColorHex
+            annotationDefaultLineWidth = annotationCustom3LineWidth
+            annotationTextOutlined = annotationCustom3TextOutlined
+            return
+        default:
+            break
         }
 
         annotationDefaultColorHex = preset.colorHex
@@ -692,11 +719,25 @@ struct SettingsView: View {
         annotationTextOutlined = preset.textOutlined
     }
 
-    private func saveCustomAnnotationPreset() {
-        annotationCustomColorHex = annotationDefaultColorHex
-        annotationCustomLineWidth = annotationDefaultLineWidth
-        annotationCustomTextOutlined = annotationTextOutlined
-        annotationStylePreset = AnnotationStylePreset.custom.rawValue
+    private func saveCustomAnnotationPreset(_ preset: AnnotationStylePreset) {
+        switch preset {
+        case .custom:
+            annotationCustomColorHex = annotationDefaultColorHex
+            annotationCustomLineWidth = annotationDefaultLineWidth
+            annotationCustomTextOutlined = annotationTextOutlined
+        case .custom2:
+            annotationCustom2ColorHex = annotationDefaultColorHex
+            annotationCustom2LineWidth = annotationDefaultLineWidth
+            annotationCustom2TextOutlined = annotationTextOutlined
+        case .custom3:
+            annotationCustom3ColorHex = annotationDefaultColorHex
+            annotationCustom3LineWidth = annotationDefaultLineWidth
+            annotationCustom3TextOutlined = annotationTextOutlined
+        default:
+            return
+        }
+
+        annotationStylePreset = preset.rawValue
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

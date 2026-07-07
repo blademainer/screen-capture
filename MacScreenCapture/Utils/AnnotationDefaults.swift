@@ -6,13 +6,17 @@ enum AnnotationStylePreset: String, CaseIterable {
     case highContrast = "high_contrast"
     case presentation = "presentation"
     case custom = "custom"
+    case custom2 = "custom_2"
+    case custom3 = "custom_3"
 
     var displayName: String {
         switch self {
         case .professional: return "专业"
         case .highContrast: return "高对比"
         case .presentation: return "演示"
-        case .custom: return "自定义"
+        case .custom: return "自定义 1"
+        case .custom2: return "自定义 2"
+        case .custom3: return "自定义 3"
         }
     }
 
@@ -21,7 +25,7 @@ enum AnnotationStylePreset: String, CaseIterable {
         case .professional: return "#FF3B30"
         case .highContrast: return "#FFD60A"
         case .presentation: return "#0A84FF"
-        case .custom: return "#FF3B30"
+        case .custom, .custom2, .custom3: return "#FF3B30"
         }
     }
 
@@ -30,7 +34,7 @@ enum AnnotationStylePreset: String, CaseIterable {
         case .professional: return 2
         case .highContrast: return 4
         case .presentation: return 5
-        case .custom: return 2
+        case .custom, .custom2, .custom3: return 2
         }
     }
 
@@ -38,7 +42,7 @@ enum AnnotationStylePreset: String, CaseIterable {
         switch self {
         case .professional: return false
         case .highContrast, .presentation: return true
-        case .custom: return false
+        case .custom, .custom2, .custom3: return false
         }
     }
 }

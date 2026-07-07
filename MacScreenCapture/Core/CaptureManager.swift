@@ -743,57 +743,29 @@ class CaptureManager: ObservableObject {
                     do {
                         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
 
-                        // 使用局部变量来避免在 MainActor.run 中调用 continuation.resume
-                        var captureError: CaptureError?
-                        var filter: SCContentFilter?
-
-                        await MainActor.run {
+                        let target = try await MainActor.run { () throws -> (filter: SCContentFilter, captureSize: CGSize) in
                             switch self.captureMode {
                             case .fullScreen:
                                 guard let display = self.selectedDisplay ?? content.displays.first else {
-                                    captureError = CaptureError.noDisplayAvailable
-                                    return
+                                    throw CaptureError.noDisplayAvailable
                                 }
-                                filter = SCContentFilter(display: display, excludingWindows: [])
+                                return (
+                                    SCContentFilter(display: display, excludingWindows: []),
+                                    CGSize(width: display.width, height: display.height)
+                                )
 
                             case .window:
                                 guard let window = self.selectedWindow else {
-                                    captureError = CaptureError.noWindowSelected
-                                    return
+                                    throw CaptureError.noWindowSelected
                                 }
-                                filter = SCContentFilter(desktopIndependentWindow: window)
+                                return (SCContentFilter(desktopIndependentWindow: window), window.frame.size)
 
                             case .region:
                                 guard let region = selectedRecordingRegion,
                                       let display = content.displays.first(where: { $0.frame.intersects(region) }) ?? content.displays.first else {
-                                    captureError = CaptureError.noDisplayAvailable
-                                    return
+                                    throw CaptureError.noDisplayAvailable
                                 }
-                                filter = SCContentFilter(display: display, excludingWindows: [])
-                            }
-                        }
-
-                        // 检查是否有错误
-                        if let error = captureError {
-                            continuation.resume(throwing: error)
-                            return
-                        }
-
-                        guard let finalFilter = filter else {
-                            continuation.resume(throwing: CaptureError.noDisplayAvailable)
-                            return
-                        }
-
-                        // 获取实际屏幕分辨率
-                        let screenSize: CGSize = await MainActor.run {
-                            if case .region = self.captureMode, let region = selectedRecordingRegion {
-                                return region.size
-                            } else if case .fullScreen = self.captureMode, let display = self.selectedDisplay ?? content.displays.first {
-                                return CGSize(width: display.width, height: display.height)
-                            } else {
-                                // 默认使用主屏幕分辨率
-                                let mainScreen = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
-                                return mainScreen
+                                return (SCContentFilter(display: display, excludingWindows: []), region.size)
                             }
                         }
 
@@ -805,7 +777,7 @@ class CaptureManager: ObservableObject {
                             self.outputDirectory.appendingPathComponent(fileName)
                         }
 
-                        continuation.resume(returning: (finalFilter, screenSize, outputURL, selectedRecordingRegion))
+                        continuation.resume(returning: (target.filter, target.captureSize, outputURL, selectedRecordingRegion))
                     } catch {
                         continuation.resume(throwing: error)
                     }
@@ -814,8 +786,8 @@ class CaptureManager: ObservableObject {
         }
 
         let configuration = SCStreamConfiguration()
-        configuration.width = Int(screenSize.width)
-        configuration.height = Int(screenSize.height)
+        configuration.width = max(1, Int(screenSize.width))
+        configuration.height = max(1, Int(screenSize.height))
         let frameRate = min(60, max(15, Int(UserDefaults.standard.double(forKey: "recordingFrameRate"))))
         let recordingQuality = UserDefaults.standard.string(forKey: "recordingQuality") ?? "高"
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(frameRate))

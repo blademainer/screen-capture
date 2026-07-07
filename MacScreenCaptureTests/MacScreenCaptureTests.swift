@@ -228,6 +228,37 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(settingsSource.contains("Toggle(\"录制麦克风\", isOn: $includeMicrophone)"))
         XCTAssertTrue(settingsSource.contains("Stepper(\"开录延时:"))
     }
+
+    func testScreenshotPreviewAndQuickOpenEntrypointsStayWired() throws {
+        let screenshotViewSource = try repositoryFileContents("MacScreenCapture/Views/ScreenshotView.swift")
+        let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")
+        let hotKeySource = try repositoryFileContents("MacScreenCapture/Core/HotKeyManager.swift")
+        let captureManagerSource = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+
+        XCTAssertTrue(screenshotViewSource.contains("Button(\"编辑\")"))
+        XCTAssertTrue(screenshotViewSource.contains("WindowManager.shared.showEditingWindow(for: image)"))
+        XCTAssertTrue(screenshotViewSource.contains("Button(\"识别文字\")"))
+        XCTAssertTrue(screenshotViewSource.contains("recognizeTextFromLastScreenshot()"))
+        XCTAssertTrue(screenshotViewSource.contains("Button(\"翻译截图\")"))
+        XCTAssertTrue(screenshotViewSource.contains("translateLastScreenshot()"))
+        XCTAssertTrue(screenshotViewSource.contains("Button(\"复制到剪贴板\")"))
+        XCTAssertTrue(screenshotViewSource.contains("NSPasteboard.general.setData"))
+        XCTAssertTrue(screenshotViewSource.contains("Button(\"在Finder中显示\")"))
+        XCTAssertTrue(screenshotViewSource.contains("NSWorkspace.shared.selectFile"))
+
+        XCTAssertTrue(settingsSource.contains("Text(\"指定 App 打开:\")"))
+        XCTAssertTrue(settingsSource.contains("selectOpenAfterCaptureApp()"))
+        XCTAssertTrue(settingsSource.contains("Toggle(\"截图保存后自动用指定 App 打开\""))
+        XCTAssertTrue(settingsSource.contains("Toggle(\"双击 ⌥ 后截图并打开指定 App\""))
+        XCTAssertTrue(settingsSource.contains("Text(\"双击判定:\")"))
+        XCTAssertTrue(settingsSource.contains("Text(\"触发冷却:\")"))
+
+        XCTAssertTrue(hotKeySource.contains("handleModifierFlagsEvent"))
+        XCTAssertTrue(hotKeySource.contains("performDoubleOptionQuickOpen()"))
+        XCTAssertTrue(hotKeySource.contains("captureRegionAndOpenInConfiguredApp()"))
+        XCTAssertTrue(captureManagerSource.contains("func captureRegionAndOpenInConfiguredApp()"))
+        XCTAssertTrue(captureManagerSource.contains("openLastScreenshotInConfiguredApp()"))
+    }
     
     func testFileManagerExtensions() throws {
         let screenshotDir = FileManager.defaultScreenshotDirectory

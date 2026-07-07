@@ -48,10 +48,12 @@ class PermissionManager: ObservableObject {
         guard !hasScreenRecordingPermission else { return }
         
         permissionCheckInProgress = true
+        _ = CGRequestScreenCaptureAccess()
         
         // 使用ScreenCaptureKit检查权限
         if #available(macOS 12.3, *) {
             Task {
+                try? await Task.sleep(nanoseconds: 500_000_000)
                 do {
                     let content = try await SCShareableContent.excludingDesktopWindows(
                         false,
@@ -67,7 +69,7 @@ class PermissionManager: ObservableObject {
                     await MainActor.run {
                         self.hasScreenRecordingPermission = false
                         self.permissionCheckInProgress = false
-                        // self.showPermissionAlert(for: .screenRecording)
+                        self.showPermissionAlert(for: .screenRecording)
                     }
                 }
             }
@@ -184,11 +186,12 @@ class PermissionManager: ObservableObject {
     func requestAccessibilityPermission() {
         guard !hasAccessibilityPermission else { return }
         
-        let trusted = AXIsProcessTrusted()
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        let trusted = AXIsProcessTrustedWithOptions(options)
         hasAccessibilityPermission = trusted
         
         if !trusted {
-            // showPermissionAlert(for: .accessibility)
+            showPermissionAlert(for: .accessibility)
         }
     }
     

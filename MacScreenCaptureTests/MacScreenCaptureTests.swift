@@ -93,6 +93,21 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(workflow.contains("x86_64"))
     }
 
+    func testPermissionButtonsOpenSystemAuthorizationEntrypoints() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Core/PermissionManager.swift")
+
+        XCTAssertTrue(source.contains("CGRequestScreenCaptureAccess()"))
+        XCTAssertTrue(source.contains("showPermissionAlert(for: .screenRecording)"))
+        XCTAssertTrue(source.contains("AXIsProcessTrustedWithOptions(options)"))
+        XCTAssertTrue(source.contains("kAXTrustedCheckOptionPrompt"))
+        XCTAssertTrue(source.contains("showPermissionAlert(for: .accessibility)"))
+        XCTAssertTrue(source.contains("Privacy_ScreenCapture"))
+        XCTAssertTrue(source.contains("Privacy_Microphone"))
+        XCTAssertTrue(source.contains("Privacy_Accessibility"))
+        XCTAssertFalse(source.contains("// self.showPermissionAlert(for: .screenRecording)"))
+        XCTAssertFalse(source.contains("// showPermissionAlert(for: .accessibility)"))
+    }
+
     func testMainScreenshotViewExposesIShotAdvancedActions() throws {
         let source = try repositoryFileContents("MacScreenCapture/Views/ScreenshotView.swift")
         let expectedActions = [

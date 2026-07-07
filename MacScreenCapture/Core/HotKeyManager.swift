@@ -534,7 +534,7 @@ class HotKeyManager: ObservableObject {
     }
     
     private func unregisterAllHotKeys() {
-        for action in registeredHotKeys.keys {
+        for action in Array(registeredHotKeys.keys) {
             unregisterHotKey(action)
         }
     }
@@ -568,7 +568,7 @@ class HotKeyManager: ObservableObject {
     
     // MARK: - Public Methods
     func registerAllHotKeys() {
-        for (action, config) in hotKeys {
+        for (action, config) in Array(hotKeys) {
             _ = registerHotKey(action, config: config)
         }
     }

@@ -212,7 +212,11 @@ struct ScreenshotView: View {
         
         Task {
             do {
-                _ = try await captureManager.captureScreenshot()
+                if captureManager.captureMode == .window {
+                    _ = try await captureManager.captureInteractiveWindowScreenshot()
+                } else {
+                    _ = try await captureManager.captureScreenshot()
+                }
                 await MainActor.run {
                     isCapturing = false
                     showingPreview = true

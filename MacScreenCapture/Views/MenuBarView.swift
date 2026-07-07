@@ -124,7 +124,7 @@ struct MenuBarView: View {
                     MenuButton(
                         title: "开始录制",
                         icon: "record.circle",
-                        shortcut: "⌘⇧R"
+                        shortcut: "⌥W"
                     ) {
                         quickRecording()
                     }

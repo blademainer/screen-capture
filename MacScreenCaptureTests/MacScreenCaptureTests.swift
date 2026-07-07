@@ -279,6 +279,40 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(source.contains("captureDisplayImageWithoutSaving("))
         XCTAssertTrue(source.contains("renderMultiWindowComposite("))
     }
+
+    func testScrollingScreenshotControlsAndExecutionStayAlignedWithIShot() throws {
+        let captureManagerSource = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+        let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")
+
+        XCTAssertTrue(settingsSource.contains("Text(\"长截图\")"))
+        XCTAssertTrue(settingsSource.contains("Stepper(\"最多截取屏数:"))
+        XCTAssertTrue(settingsSource.contains("Slider(value: $scrollingCaptureDelay, in: 0.2...2.0"))
+        XCTAssertTrue(settingsSource.contains("Stepper(\"每次滚动:"))
+        XCTAssertTrue(settingsSource.contains("Picker(\"滚动方向\""))
+        XCTAssertTrue(settingsSource.contains("Text(\"向下\").tag(\"down\")"))
+        XCTAssertTrue(settingsSource.contains("Text(\"向上\").tag(\"up\")"))
+        XCTAssertTrue(settingsSource.contains("Toggle(\"裁剪到鼠标所在窗口\""))
+        XCTAssertTrue(settingsSource.contains("Toggle(\"优先识别窗口内滚动内容区\""))
+        XCTAssertTrue(settingsSource.contains("Toggle(\"滚动到底自动停止\""))
+        XCTAssertTrue(settingsSource.contains("Toggle(\"自动裁剪重叠区域\""))
+
+        XCTAssertTrue(captureManagerSource.contains("func captureScrollingWindow()"))
+        XCTAssertTrue(captureManagerSource.contains("ScrollingCaptureSettings.fromDefaults()"))
+        XCTAssertTrue(captureManagerSource.contains("scrollingCaptureTrimOverlap"))
+        XCTAssertTrue(captureManagerSource.contains("scrollingCaptureCropToWindow"))
+        XCTAssertTrue(captureManagerSource.contains("scrollingCaptureStopWhenUnchanged"))
+        XCTAssertTrue(captureManagerSource.contains("scrollingCaptureTargetUnderMouse(from: content)"))
+        XCTAssertTrue(captureManagerSource.contains("scrollActiveView(lines: scrollLines, direction: scrollDirection)"))
+        XCTAssertTrue(captureManagerSource.contains("captureDisplayImageWithoutSaving(display: target?.display)"))
+        XCTAssertTrue(captureManagerSource.contains("cropDisplayImage(image, to: target.cropRect"))
+        XCTAssertTrue(captureManagerSource.contains("ScrollingImageStitcher.imagesAreVisuallySimilar(previous, sliceImage)"))
+        XCTAssertTrue(captureManagerSource.contains("ScrollingImageStitcher.orderedImages(images, direction: scrollDirection)"))
+        XCTAssertTrue(captureManagerSource.contains("ScrollingImageStitcher.stitchImagesVertically(orderedImages, trimOverlap: trimOverlap)"))
+        XCTAssertTrue(captureManagerSource.contains("finalizeCapturedImage(stitchedImage, showEditor: true)"))
+        XCTAssertTrue(captureManagerSource.contains("scrollingCaptureDetectContentArea"))
+        XCTAssertTrue(captureManagerSource.contains("kAXScrollAreaRole"))
+        XCTAssertTrue(captureManagerSource.contains("AXWebArea"))
+    }
     
     func testFileManagerExtensions() throws {
         let screenshotDir = FileManager.defaultScreenshotDirectory

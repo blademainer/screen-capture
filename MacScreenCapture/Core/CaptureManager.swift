@@ -2526,6 +2526,75 @@ class CaptureManager: ObservableObject {
         }
     }
 
+    func prepareAppleTranslationModels(targetLanguage: String) async -> String {
+        guard #available(macOS 26.0, *) else {
+            return "Apple 本地翻译模型准备需要 macOS 26 或更高版本；当前系统会继续使用在线翻译和网页兜底。"
+        }
+
+        let target = Locale.Language(identifier: appleLanguageCode(for: targetLanguage))
+        let sourceCodes = ["en", "zh-Hans", "ja", "ko"].filter { sourceCode in
+            let source = Locale.Language(identifier: sourceCode)
+            return source.languageCode != target.languageCode ||
+                source.script != target.script ||
+                source.region != target.region
+        }
+
+        let availability = LanguageAvailability()
+        var installedPairs: [String] = []
+        var preparedPairs: [String] = []
+        var pendingPairs: [String] = []
+        var unsupportedPairs: [String] = []
+
+        for sourceCode in sourceCodes {
+            let source = Locale.Language(identifier: sourceCode)
+            let label = "\(displayName(forAppleLanguageCode: sourceCode)) -> \(displayName(forAppleLanguageCode: targetLanguage))"
+            let status = await availability.status(from: source, to: target)
+
+            switch status {
+            case .installed:
+                installedPairs.append(label)
+            case .supported:
+                let session = TranslationSession(installedSource: source, target: target)
+                guard session.canRequestDownloads else {
+                    pendingPairs.append("\(label)（系统暂不允许自动下载）")
+                    continue
+                }
+
+                do {
+                    try await session.prepareTranslation()
+                    let refreshedStatus = await availability.status(from: source, to: target)
+                    if refreshedStatus == .installed {
+                        preparedPairs.append(label)
+                    } else {
+                        pendingPairs.append("\(label)（已请求准备，系统仍显示未安装）")
+                    }
+                } catch {
+                    pendingPairs.append("\(label)（准备失败：\(error.localizedDescription)）")
+                }
+            case .unsupported:
+                unsupportedPairs.append(label)
+            @unknown default:
+                pendingPairs.append("\(label)（系统返回未知状态）")
+            }
+        }
+
+        var lines: [String] = []
+        if !installedPairs.isEmpty {
+            lines.append("已安装：\(installedPairs.joined(separator: "，"))")
+        }
+        if !preparedPairs.isEmpty {
+            lines.append("已准备：\(preparedPairs.joined(separator: "，"))")
+        }
+        if !pendingPairs.isEmpty {
+            lines.append("需手动处理：\(pendingPairs.joined(separator: "，"))")
+        }
+        if !unsupportedPairs.isEmpty {
+            lines.append("系统不支持：\(unsupportedPairs.joined(separator: "，"))")
+        }
+
+        return lines.isEmpty ? "没有需要准备的本地翻译模型。" : lines.joined(separator: "\n")
+    }
+
     private func translateWithAppleInstalledModel(_ text: String, targetLanguage: String) async throws -> String {
         guard #available(macOS 26.0, *) else {
             throw CaptureError.failedToTranslate
@@ -2669,6 +2738,23 @@ class CaptureManager: ObservableObject {
             return "zh-Hans"
         case "zh-TW":
             return "zh-Hant"
+        default:
+            return language
+        }
+    }
+
+    private func displayName(forAppleLanguageCode language: String) -> String {
+        switch appleLanguageCode(for: language) {
+        case "zh-Hans":
+            return "简体中文"
+        case "zh-Hant":
+            return "繁体中文"
+        case "en":
+            return "English"
+        case "ja":
+            return "日本語"
+        case "ko":
+            return "한국어"
         default:
             return language
         }

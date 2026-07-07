@@ -66,6 +66,8 @@ struct SettingsView: View {
     @AppStorage("showCursor") private var showCursor = true
     @AppStorage("recordingStartDelaySeconds") private var recordingStartDelaySeconds = 0
     @AppStorage("recordingFileFormat") private var recordingFileFormat = "MOV"
+    @State private var isPreparingTranslationModels = false
+    @State private var translationModelStatusMessage = ""
 
     var body: some View {
         ScrollView {
@@ -391,6 +393,23 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.menu)
                     .frame(width: 130)
+                }
+
+                HStack {
+                    Text("本地翻译模型:")
+                    Spacer()
+                    Button(isPreparingTranslationModels ? "检查中..." : "检查并准备") {
+                        prepareLocalTranslationModels()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isPreparingTranslationModels)
+                }
+
+                if !translationModelStatusMessage.isEmpty {
+                    Text(translationModelStatusMessage)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 HStack {
@@ -738,6 +757,21 @@ struct SettingsView: View {
         }
 
         annotationStylePreset = preset.rawValue
+    }
+
+    private func prepareLocalTranslationModels() {
+        isPreparingTranslationModels = true
+        translationModelStatusMessage = "正在检查 Apple 本地翻译模型..."
+
+        Task {
+            let message = await CaptureManager.shared.prepareAppleTranslationModels(
+                targetLanguage: translationTargetLanguage
+            )
+            await MainActor.run {
+                translationModelStatusMessage = message
+                isPreparingTranslationModels = false
+            }
+        }
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

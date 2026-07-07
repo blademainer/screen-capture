@@ -29,6 +29,7 @@ struct SettingsView: View {
     @AppStorage("screenshotShadowRadius") private var screenshotShadowRadius = 24.0
     @AppStorage("colorCodeFormat") private var colorCodeFormat = "#HEX"
     @AppStorage("openAfterCaptureAppPath") private var openAfterCaptureAppPath = ""
+    @AppStorage("translationTargetLanguage") private var translationTargetLanguage = "zh-CN"
     @AppStorage("recordingFrameRate") private var recordingFrameRate = 60.0
     @AppStorage("recordingQuality") private var recordingQuality = "高"
     @AppStorage("includeSystemAudio") private var includeSystemAudio = true
@@ -210,6 +211,19 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.menu)
                     .frame(width: 120)
+                }
+
+                HStack {
+                    Text("截图翻译目标:")
+                    Spacer()
+                    Picker("截图翻译目标", selection: $translationTargetLanguage) {
+                        Text("简体中文").tag("zh-CN")
+                        Text("English").tag("en")
+                        Text("日本語").tag("ja")
+                        Text("한국어").tag("ko")
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 130)
                 }
 
                 HStack {

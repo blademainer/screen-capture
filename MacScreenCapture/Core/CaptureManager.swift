@@ -269,10 +269,32 @@ class CaptureManager: ObservableObject {
         return text
     }
 
-    /// OCR 后打开翻译页面
+    /// OCR 后翻译并显示结果
     @MainActor
-    func translateLastScreenshot() async throws {
+    func translateLastScreenshot() async throws -> ScreenshotTranslationResult {
         let text = try await recognizeTextFromLastScreenshot()
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else {
+            throw CaptureError.noRecognizedText
+        }
+
+        let targetLanguage = UserDefaults.standard.string(forKey: "translationTargetLanguage") ?? "zh-CN"
+        let translatedText = try await translateText(trimmedText, targetLanguage: targetLanguage)
+        let result = ScreenshotTranslationResult(
+            sourceText: trimmedText,
+            translatedText: translatedText,
+            targetLanguage: targetLanguage
+        )
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(translatedText, forType: .string)
+        showTranslationWindow(result)
+
+        return result
+    }
+
+    @MainActor
+    func openWebTranslation(for text: String) throws {
         guard let encoded = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: "https://translate.google.com/?sl=auto&tl=zh-CN&text=\(encoded)&op=translate") else {
             throw CaptureError.failedToTranslate
@@ -1465,6 +1487,52 @@ class CaptureManager: ObservableObject {
         }
     }
 
+    private func translateText(_ text: String, targetLanguage: String) async throws -> String {
+        var components = URLComponents(string: "https://translate.googleapis.com/translate_a/single")
+        components?.queryItems = [
+            URLQueryItem(name: "client", value: "gtx"),
+            URLQueryItem(name: "sl", value: "auto"),
+            URLQueryItem(name: "tl", value: targetLanguage),
+            URLQueryItem(name: "dt", value: "t"),
+            URLQueryItem(name: "q", value: text)
+        ]
+
+        guard let url = components?.url else {
+            throw CaptureError.failedToTranslate
+        }
+
+        let (data, response) = try await URLSession.shared.data(from: url)
+        if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+            throw CaptureError.failedToTranslate
+        }
+
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [Any],
+              let translatedParts = root.first as? [Any] else {
+            throw CaptureError.failedToTranslate
+        }
+
+        let translatedText = translatedParts.compactMap { item -> String? in
+            guard let segment = item as? [Any] else { return nil }
+            return segment.first as? String
+        }
+        .joined()
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !translatedText.isEmpty else {
+            throw CaptureError.failedToTranslate
+        }
+
+        return translatedText
+    }
+
+    @MainActor
+    private func showTranslationWindow(_ result: ScreenshotTranslationResult) {
+        let controller = ScreenshotTranslationWindowController(result: result)
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     @MainActor
     private func showAlert(title: String, message: String) {
         let alert = NSAlert()
@@ -1505,6 +1573,7 @@ enum CaptureError: LocalizedError {
     case noMicrophoneAvailable
     case microphonePermissionDenied
     case noImageAvailable
+    case noRecognizedText
     case failedToRecognizeText
     case failedToTranslate
 
@@ -1530,11 +1599,171 @@ enum CaptureError: LocalizedError {
             return "麦克风权限被拒绝"
         case .noImageAvailable:
             return "没有可识别的截图，请先截图"
+        case .noRecognizedText:
+            return "没有识别到可翻译的文字"
         case .failedToRecognizeText:
             return "OCR 识别失败"
         case .failedToTranslate:
             return "打开翻译失败"
         }
+    }
+}
+
+// MARK: - Screenshot Translation
+
+struct ScreenshotTranslationResult {
+    let sourceText: String
+    let translatedText: String
+    let targetLanguage: String
+}
+
+final class ScreenshotTranslationWindowController: NSWindowController {
+    private let result: ScreenshotTranslationResult
+
+    init(result: ScreenshotTranslationResult) {
+        self.result = result
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 520),
+            styleMask: [.titled, .closable, .resizable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "截图翻译"
+        window.minSize = NSSize(width: 560, height: 360)
+        window.center()
+
+        super.init(window: window)
+        setupContent()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setupContent() {
+        guard let window = window else { return }
+
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let titleLabel = NSTextField(labelWithString: "截图翻译")
+        titleLabel.font = NSFont.systemFont(ofSize: 20, weight: .semibold)
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let targetLabel = NSTextField(labelWithString: "目标语言：\(result.targetLanguage)")
+        targetLabel.textColor = .secondaryLabelColor
+        targetLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let sourceLabel = NSTextField(labelWithString: "OCR 原文")
+        sourceLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        sourceLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let translatedLabel = NSTextField(labelWithString: "译文")
+        translatedLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        translatedLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let sourceTextView = makeTextView(text: result.sourceText)
+        let translatedTextView = makeTextView(text: result.translatedText)
+
+        let copySourceButton = NSButton(title: "复制原文", target: self, action: #selector(copySourceText))
+        copySourceButton.bezelStyle = .rounded
+        copySourceButton.translatesAutoresizingMaskIntoConstraints = false
+
+        let copyTranslatedButton = NSButton(title: "复制译文", target: self, action: #selector(copyTranslatedText))
+        copyTranslatedButton.bezelStyle = .rounded
+        copyTranslatedButton.translatesAutoresizingMaskIntoConstraints = false
+
+        let openWebButton = NSButton(title: "网页翻译", target: self, action: #selector(openWebTranslation))
+        openWebButton.bezelStyle = .rounded
+        openWebButton.translatesAutoresizingMaskIntoConstraints = false
+
+        let closeButton = NSButton(title: "关闭", target: self, action: #selector(closeWindow))
+        closeButton.bezelStyle = .rounded
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+
+        [titleLabel, targetLabel, sourceLabel, translatedLabel, sourceTextView, translatedTextView, copySourceButton, copyTranslatedButton, openWebButton, closeButton].forEach {
+            container.addSubview($0)
+        }
+
+        window.contentView = container
+
+        NSLayoutConstraint.activate([
+            titleLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 18),
+            titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
+
+            targetLabel.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+            targetLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -20),
+
+            sourceLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 18),
+            sourceLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
+
+            translatedLabel.topAnchor.constraint(equalTo: sourceLabel.topAnchor),
+            translatedLabel.leadingAnchor.constraint(equalTo: container.centerXAnchor, constant: 8),
+
+            sourceTextView.topAnchor.constraint(equalTo: sourceLabel.bottomAnchor, constant: 8),
+            sourceTextView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
+            sourceTextView.trailingAnchor.constraint(equalTo: container.centerXAnchor, constant: -8),
+            sourceTextView.bottomAnchor.constraint(equalTo: copySourceButton.topAnchor, constant: -14),
+
+            translatedTextView.topAnchor.constraint(equalTo: translatedLabel.bottomAnchor, constant: 8),
+            translatedTextView.leadingAnchor.constraint(equalTo: container.centerXAnchor, constant: 8),
+            translatedTextView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -20),
+            translatedTextView.bottomAnchor.constraint(equalTo: copyTranslatedButton.topAnchor, constant: -14),
+
+            copySourceButton.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
+            copySourceButton.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -18),
+
+            copyTranslatedButton.leadingAnchor.constraint(equalTo: sourceTextView.trailingAnchor, constant: 16),
+            copyTranslatedButton.bottomAnchor.constraint(equalTo: copySourceButton.bottomAnchor),
+
+            closeButton.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -20),
+            closeButton.bottomAnchor.constraint(equalTo: copySourceButton.bottomAnchor),
+
+            openWebButton.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -10),
+            openWebButton.bottomAnchor.constraint(equalTo: copySourceButton.bottomAnchor)
+        ])
+    }
+
+    private func makeTextView(text: String) -> NSScrollView {
+        let textView = NSTextView()
+        textView.string = text
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.font = NSFont.systemFont(ofSize: 14)
+        textView.textContainerInset = NSSize(width: 10, height: 10)
+
+        let scrollView = NSScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .bezelBorder
+        scrollView.documentView = textView
+        return scrollView
+    }
+
+    @objc private func copySourceText() {
+        copyToPasteboard(result.sourceText)
+    }
+
+    @objc private func copyTranslatedText() {
+        copyToPasteboard(result.translatedText)
+    }
+
+    @objc private func openWebTranslation() {
+        guard let encoded = result.sourceText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "https://translate.google.com/?sl=auto&tl=\(result.targetLanguage)&text=\(encoded)&op=translate") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc private func closeWindow() {
+        close()
+    }
+
+    private func copyToPasteboard(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }
 

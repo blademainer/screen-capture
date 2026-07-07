@@ -1113,12 +1113,14 @@ class CaptureManager: ObservableObject {
             recordingStartTime = Date().addingTimeInterval(-recordingDuration)
             startRecordingTimer()
             isPaused = false
+            streamOutput?.setPaused(false)
             WindowManager.shared.updateCaptureState(.recording(startTime: recordingStartTime!))
         } else {
             // 暂停录制
             recordingTimer?.invalidate()
             recordingTimer = nil
             isPaused = true
+            streamOutput?.setPaused(true)
             WindowManager.shared.updateCaptureState(.paused(duration: recordingDuration))
         }
     }
@@ -1132,6 +1134,7 @@ class CaptureManager: ObservableObject {
         recordingStartTime = Date().addingTimeInterval(-recordingDuration)
         startRecordingTimer()
         isPaused = false
+        streamOutput?.setPaused(false)
         WindowManager.shared.updateCaptureState(.recording(startTime: recordingStartTime!))
 
         print("录制已恢复")
@@ -3736,6 +3739,10 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     private var isFinishing = false
     private var lastDiagnostics: RecordingAudioDiagnostics?
     private var finishCompletions: [(RecordingAudioDiagnostics) -> Void] = []
+    private let pauseLock = NSLock()
+    private var paused = false
+    private var pendingPauseStartTime: CMTime?
+    private var accumulatedPausedDuration = CMTime.zero
 
     init(
         outputURL: URL,
@@ -3754,6 +3761,104 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
         self.quality = quality
         self.audioOnly = audioOnly
         super.init()
+    }
+
+    func setPaused(_ paused: Bool) {
+        pauseLock.lock()
+        self.paused = paused
+        if paused {
+            pendingPauseStartTime = nil
+        }
+        pauseLock.unlock()
+    }
+
+    private func pauseAdjustedSampleBuffer(_ sampleBuffer: CMSampleBuffer) -> (sampleBuffer: CMSampleBuffer, presentationTime: CMTime)? {
+        let originalPresentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+
+        pauseLock.lock()
+
+        if paused {
+            if pendingPauseStartTime == nil {
+                pendingPauseStartTime = originalPresentationTime
+            }
+            pauseLock.unlock()
+            return nil
+        }
+
+        if let pauseStart = pendingPauseStartTime {
+            let pausedDuration = CMTimeSubtract(originalPresentationTime, pauseStart)
+            if pausedDuration.isValid && pausedDuration.seconds > 0 {
+                accumulatedPausedDuration = CMTimeAdd(accumulatedPausedDuration, pausedDuration)
+            }
+            pendingPauseStartTime = nil
+        }
+
+        let timingOffset = accumulatedPausedDuration
+        pauseLock.unlock()
+
+        guard timingOffset.isValid && timingOffset.seconds > 0 else {
+            return (sampleBuffer, originalPresentationTime)
+        }
+
+        let adjustedPresentationTime = CMTimeSubtract(originalPresentationTime, timingOffset)
+        let adjustedSampleBuffer = copySampleBuffer(sampleBuffer, subtracting: timingOffset) ?? sampleBuffer
+        return (adjustedSampleBuffer, adjustedPresentationTime)
+    }
+
+    private func copySampleBuffer(_ sampleBuffer: CMSampleBuffer, subtracting offset: CMTime) -> CMSampleBuffer? {
+        var timingEntryCount = 0
+        let countStatus = CMSampleBufferGetSampleTimingInfoArray(
+            sampleBuffer,
+            entryCount: 0,
+            arrayToFill: nil,
+            entriesNeededOut: &timingEntryCount
+        )
+        guard countStatus == noErr, timingEntryCount > 0 else {
+            return nil
+        }
+
+        var timing = Array(
+            repeating: CMSampleTimingInfo(
+                duration: .invalid,
+                presentationTimeStamp: .invalid,
+                decodeTimeStamp: .invalid
+            ),
+            count: timingEntryCount
+        )
+
+        let timingStatus = CMSampleBufferGetSampleTimingInfoArray(
+            sampleBuffer,
+            entryCount: timingEntryCount,
+            arrayToFill: &timing,
+            entriesNeededOut: nil
+        )
+        guard timingStatus == noErr else {
+            return nil
+        }
+
+        for index in timing.indices {
+            if timing[index].presentationTimeStamp.isValid {
+                timing[index].presentationTimeStamp = CMTimeSubtract(timing[index].presentationTimeStamp, offset)
+            }
+            if timing[index].decodeTimeStamp.isValid {
+                timing[index].decodeTimeStamp = CMTimeSubtract(timing[index].decodeTimeStamp, offset)
+            }
+        }
+
+        var adjustedSampleBuffer: CMSampleBuffer?
+        let copyStatus = CMSampleBufferCreateCopyWithNewTiming(
+            allocator: kCFAllocatorDefault,
+            sampleBuffer: sampleBuffer,
+            sampleTimingEntryCount: timingEntryCount,
+            sampleTimingArray: &timing,
+            sampleBufferOut: &adjustedSampleBuffer
+        )
+
+        guard copyStatus == noErr else {
+            return nil
+        }
+
+        return adjustedSampleBuffer
     }
 
     func setupAssetWriter(with sampleBuffer: CMSampleBuffer) {
@@ -3855,6 +3960,13 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
+        guard let adjustedSample = pauseAdjustedSampleBuffer(sampleBuffer) else {
+            return
+        }
+
+        let sampleBuffer = adjustedSample.sampleBuffer
+        let presentationTime = adjustedSample.presentationTime
+
         // 视频录制等待首个屏幕帧初始化；独立录音等待首个音频帧初始化。
         if assetWriter == nil && (type == .screen || (audioOnly && (type == .audio || type == .microphone))) {
             print(audioOnly ? "首次收到音频帧，设置资产写入器..." : "首次收到视频帧，设置资产写入器...")
@@ -3878,11 +3990,10 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                 logMicrophone("✗ AVAssetWriter.startWriting() 失败: \(assetWriter.error?.localizedDescription ?? "未知错误")", level: "ERROR")
                 return
             }
-            let startTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-            assetWriter.startSession(atSourceTime: startTime)
+            assetWriter.startSession(atSourceTime: presentationTime)
             isWritingStarted = true
-            print("录制会话已开始，时间戳: \(startTime), 帧类型: \(type)")
-            logMicrophone("✓ AVAssetWriter 会话已启动，起始时间: \(startTime)", level: "SUCCESS")
+            print("录制会话已开始，时间戳: \(presentationTime), 帧类型: \(type)")
+            logMicrophone("✓ AVAssetWriter 会话已启动，起始时间: \(presentationTime)", level: "SUCCESS")
         }
 
         // 检查写入状态
@@ -3903,8 +4014,6 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                     print("无法获取像素缓冲区")
                     return
                 }
-
-                let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
 
                 // 使用像素缓冲区适配器写入
                 if let adaptor = pixelBufferAdaptor, adaptor.assetWriterInput.isReadyForMoreMediaData {

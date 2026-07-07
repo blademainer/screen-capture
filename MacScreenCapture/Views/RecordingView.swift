@@ -170,7 +170,7 @@ struct RecordingView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!permissionManager.hasScreenRecordingPermission)
-                .keyboardShortcut(.init("r"), modifiers: [.command, .shift])
+                .keyboardShortcut(.init("w"), modifiers: [.option])
 
                 if !captureManager.isRecording {
                     Button(action: {

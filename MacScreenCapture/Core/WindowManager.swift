@@ -96,8 +96,9 @@ class WindowManager: ObservableObject {
         let recordingItem = NSMenuItem(
             title: "开始录制",
             action: #selector(toggleRecording),
-            keyEquivalent: ""
+            keyEquivalent: "w"
         )
+        recordingItem.keyEquivalentModifierMask = [.option]
         recordingItem.target = self
 
         // 设置和退出

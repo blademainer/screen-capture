@@ -52,7 +52,7 @@ class KeyboardShortcuts: ObservableObject {
         unregisterShortcut(identifier: identifier)
         
         var hotKeyRef: EventHotKeyRef?
-        let hotKeyID = EventHotKeyID(signature: OSType(identifier.hashValue), id: UInt32(identifier.hashValue))
+        let hotKeyID = hotKeyID(for: identifier)
         
         let status = RegisterEventHotKey(
             keyCode,
@@ -143,19 +143,16 @@ class KeyboardShortcuts: ObservableObject {
         
         // 根据热键ID执行相应的回调
         DispatchQueue.main.async {
-            switch hotKeyID.signature {
-            case OSType("screenshot_fullscreen".hashValue):
+            if self.hotKeyID(hotKeyID, matches: "screenshot_fullscreen") {
                 self.onScreenshotFullScreen?()
-            case OSType("screenshot_window".hashValue):
+            } else if self.hotKeyID(hotKeyID, matches: "screenshot_window") {
                 self.onScreenshotWindow?()
-            case OSType("screenshot_region".hashValue):
+            } else if self.hotKeyID(hotKeyID, matches: "screenshot_region") {
                 self.onScreenshotRegion?()
-            case OSType("recording_toggle".hashValue):
+            } else if self.hotKeyID(hotKeyID, matches: "recording_toggle") {
                 self.onStartStopRecording?()
-            case OSType("recording_pause".hashValue):
+            } else if self.hotKeyID(hotKeyID, matches: "recording_pause") {
                 self.onPauseResumeRecording?()
-            default:
-                break
             }
         }
         
@@ -208,6 +205,25 @@ class KeyboardShortcuts: ObservableObject {
         ) {
             // 回调将在外部设置
         }
+    }
+
+    private func hotKeyID(for identifier: String) -> EventHotKeyID {
+        let signature = stableSignature(for: identifier)
+        return EventHotKeyID(signature: OSType(signature), id: signature)
+    }
+
+    private func hotKeyID(_ hotKeyID: EventHotKeyID, matches identifier: String) -> Bool {
+        let expected = self.hotKeyID(for: identifier)
+        return hotKeyID.signature == expected.signature && hotKeyID.id == expected.id
+    }
+
+    private func stableSignature(for identifier: String) -> UInt32 {
+        var hash: UInt32 = 2_166_136_261
+        for byte in identifier.utf8 {
+            hash ^= UInt32(byte)
+            hash = hash &* 16_777_619
+        }
+        return hash == 0 ? 1 : hash
     }
 }
 

@@ -588,14 +588,12 @@ class HotKeyManager: ObservableObject {
     
     // MARK: - Helper Methods
     private func generateSignature(for action: HotKeyAction) -> UInt32 {
-        // 使用action的rawValue生成稳定的签名
-        let rawValue = action.rawValue
-        var hasher = Hasher()
-        hasher.combine(rawValue)
-        let hash = hasher.finalize()
-        // 安全地转换为 UInt32，避免溢出
-        let safeHash = UInt32(truncatingIfNeeded: abs(hash))
-        return safeHash & 0x7FFFFFFF
+        var hash: UInt32 = 2_166_136_261
+        for byte in action.rawValue.utf8 {
+            hash ^= UInt32(byte)
+            hash = hash &* 16_777_619
+        }
+        return hash == 0 ? 1 : hash
     }
     
     private func generateSignature(for config: HotKeyConfig) -> String {

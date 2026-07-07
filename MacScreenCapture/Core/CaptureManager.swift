@@ -334,12 +334,12 @@ class CaptureManager: ObservableObject {
     @MainActor
     func captureMultipleWindowsScreenshot() async throws -> NSImage {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        guard let display = preferredDisplay(from: content.displays) else {
+        let displayBounds = allDisplayBounds(from: content.displays)
+        guard !displayBounds.isNull else {
             throw CaptureError.noDisplayAvailable
         }
 
         let currentPID = Int(ProcessInfo.processInfo.processIdentifier)
-        let displayBounds = CGDisplayBounds(display.displayID)
         let candidates = content.windows.filter { window in
             window.owningApplication?.processID != pid_t(currentPID) &&
             window.title?.isEmpty == false &&
@@ -352,7 +352,7 @@ class CaptureManager: ObservableObject {
         let useDesktopBackdrop = UserDefaults.standard.object(forKey: "multiWindowDesktopBackdrop") as? Bool ?? true
         let composite = try await renderMultiWindowComposite(
             selectedWindows,
-            display: display,
+            displays: content.displays,
             allWindows: content.windows,
             useDesktopBackdrop: useDesktopBackdrop
         )
@@ -369,12 +369,12 @@ class CaptureManager: ObservableObject {
         }
 
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        guard let display = preferredDisplay(from: content.displays) else {
+        let displayBounds = allDisplayBounds(from: content.displays)
+        guard !displayBounds.isNull else {
             throw CaptureError.noDisplayAvailable
         }
 
         let currentPID = Int(ProcessInfo.processInfo.processIdentifier)
-        let displayBounds = CGDisplayBounds(display.displayID)
         let candidates = content.windows.filter { window in
             window.owningApplication?.processID != pid_t(currentPID) &&
             window.title?.isEmpty == false &&
@@ -397,7 +397,7 @@ class CaptureManager: ObservableObject {
         let useDesktopBackdrop = UserDefaults.standard.object(forKey: "multiWindowDesktopBackdrop") as? Bool ?? true
         let composite = try await renderMultiWindowComposite(
             selectedWindows,
-            display: display,
+            displays: content.displays,
             allWindows: content.windows,
             useDesktopBackdrop: useDesktopBackdrop
         )
@@ -1592,13 +1592,30 @@ class CaptureManager: ObservableObject {
         } ?? displays.first
     }
 
+    private func allDisplayBounds(from displays: [SCDisplay]) -> CGRect {
+        let displayRects = displays
+            .map { CGDisplayBounds($0.displayID) }
+            .filter { !$0.isNull && !$0.isEmpty }
+
+        guard var bounds = displayRects.first else {
+            return .null
+        }
+
+        for rect in displayRects.dropFirst() {
+            bounds = bounds.union(rect)
+        }
+
+        return bounds.integral
+    }
+
     @MainActor
     private func selectMultipleWindows(
         from windows: [SCWindow],
         displayBounds: CGRect,
         singleClickCompletes: Bool = false
     ) async throws -> [SCWindow] {
-        guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(displayBounds) }) ?? NSScreen.main else {
+        let selectionFrame = selectionOverlayFrame(for: displayBounds)
+        guard !selectionFrame.isNull && !selectionFrame.isEmpty else {
             throw CaptureError.noDisplayAvailable
         }
 
@@ -1607,7 +1624,7 @@ class CaptureManager: ObservableObject {
                 id: window.windowID,
                 title: window.title ?? window.owningApplication?.applicationName ?? "窗口",
                 window: window,
-                screenRect: window.frame.intersection(displayBounds)
+                screenRect: window.frame.intersection(selectionFrame)
             )
         }
         .filter { $0.screenRect.width > 40 && $0.screenRect.height > 40 }
@@ -1619,7 +1636,7 @@ class CaptureManager: ObservableObject {
         return try await withCheckedThrowingContinuation { continuation in
             var didResume = false
             let selectionWindow = NSWindow(
-                contentRect: screen.frame,
+                contentRect: selectionFrame,
                 styleMask: [.borderless],
                 backing: .buffered,
                 defer: false
@@ -1633,7 +1650,7 @@ class CaptureManager: ObservableObject {
             selectionWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
             let overlayView = MultiWindowSelectionView(
-                screenFrame: screen.frame,
+                screenFrame: selectionFrame,
                 candidates: candidates,
                 singleClickCompletes: singleClickCompletes
             ) { result in
@@ -1650,9 +1667,25 @@ class CaptureManager: ObservableObject {
         }
     }
 
+    private func selectionOverlayFrame(for displayBounds: CGRect) -> CGRect {
+        let matchingScreens = NSScreen.screens
+            .map(\.frame)
+            .filter { $0.intersects(displayBounds) }
+
+        guard var frame = matchingScreens.first else {
+            return displayBounds
+        }
+
+        for screenFrame in matchingScreens.dropFirst() {
+            frame = frame.union(screenFrame)
+        }
+
+        return frame.integral
+    }
+
     private func renderMultiWindowComposite(
         _ windows: [SCWindow],
-        display: SCDisplay,
+        displays: [SCDisplay],
         allWindows: [SCWindow],
         useDesktopBackdrop: Bool
     ) async throws -> NSImage {
@@ -1660,8 +1693,12 @@ class CaptureManager: ObservableObject {
             throw CaptureError.noWindowSelected
         }
 
-        let displayBounds = CGDisplayBounds(display.displayID)
-        let windowFrames = windows.map { $0.frame.intersection(displayBounds) }.filter { $0.width > 1 && $0.height > 1 }
+        let displayBounds = allDisplayBounds(from: displays)
+        guard !displayBounds.isNull else {
+            throw CaptureError.noDisplayAvailable
+        }
+
+        let windowFrames = windows.map(\.frame).filter { $0.width > 1 && $0.height > 1 }
         guard var outputRect = windowFrames.first else {
             throw CaptureError.failedToCapture
         }
@@ -1671,13 +1708,13 @@ class CaptureManager: ObservableObject {
         }
         outputRect = outputRect.insetBy(dx: -24, dy: -24).intersection(displayBounds).integral
 
-        let backdrop: NSImage?
-        if useDesktopBackdrop {
-            let desktopImage = try await captureDisplayImageWithoutSaving(display: display, excludingWindows: allWindows)
-            backdrop = cropDisplayImage(desktopImage, to: outputRect, in: display)
-        } else {
-            backdrop = nil
-        }
+        let backdropSegments = useDesktopBackdrop
+            ? try await captureDesktopBackdropSegments(
+                displays: displays,
+                outputRect: outputRect,
+                allWindows: allWindows
+            )
+            : []
 
         var capturedWindows: [(window: SCWindow, image: NSImage)] = []
         for window in windows {
@@ -1689,10 +1726,18 @@ class CaptureManager: ObservableObject {
         NSColor.clear.setFill()
         NSRect(origin: .zero, size: outputRect.size).fill()
 
-        backdrop?.draw(in: NSRect(origin: .zero, size: outputRect.size))
+        for (visibleRect, backdrop) in backdropSegments {
+            let drawRect = NSRect(
+                x: visibleRect.minX - outputRect.minX,
+                y: outputRect.height - (visibleRect.maxY - outputRect.minY),
+                width: visibleRect.width,
+                height: visibleRect.height
+            )
+            backdrop.draw(in: drawRect)
+        }
 
         for (window, image) in capturedWindows {
-            let frame = window.frame.intersection(displayBounds)
+            let frame = window.frame.intersection(outputRect)
             guard frame.width > 1, frame.height > 1 else { continue }
             let drawRect = NSRect(
                 x: frame.minX - outputRect.minX,
@@ -1705,6 +1750,29 @@ class CaptureManager: ObservableObject {
 
         output.unlockFocus()
         return output
+    }
+
+    private func captureDesktopBackdropSegments(
+        displays: [SCDisplay],
+        outputRect: CGRect,
+        allWindows: [SCWindow]
+    ) async throws -> [(visibleRect: CGRect, image: NSImage)] {
+        var segments: [(visibleRect: CGRect, image: NSImage)] = []
+
+        for display in displays {
+            let displayBounds = CGDisplayBounds(display.displayID)
+            let visibleRect = outputRect.intersection(displayBounds)
+            guard visibleRect.width > 1, visibleRect.height > 1 else { continue }
+
+            let desktopImage = try await captureDisplayImageWithoutSaving(
+                display: display,
+                excludingWindows: allWindows
+            )
+            let croppedBackdrop = cropDisplayImage(desktopImage, to: visibleRect, in: display)
+            segments.append((visibleRect, croppedBackdrop))
+        }
+
+        return segments
     }
 
     private func scrollingCaptureTargetUnderMouse(from content: SCShareableContent) -> ScrollingCaptureTarget? {

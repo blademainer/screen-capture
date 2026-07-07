@@ -20,7 +20,7 @@ struct SettingsView: View {
     @AppStorage("autoShowWindowAfterCapture") private var autoShowWindowAfterCapture = false
     @AppStorage("delayedScreenshotSeconds") private var delayedScreenshotSeconds = 5
     @AppStorage("multiWindowDesktopBackdrop") private var multiWindowDesktopBackdrop = true
-    @AppStorage("scrollingCaptureSlices") private var scrollingCaptureSlices = 5
+    @AppStorage("scrollingCaptureSlices") private var scrollingCaptureSlices = 30
     @AppStorage("scrollingCaptureDelay") private var scrollingCaptureDelay = 0.8
     @AppStorage("scrollingCaptureLines") private var scrollingCaptureLines = 12
     @AppStorage("scrollingCaptureTrimOverlap") private var scrollingCaptureTrimOverlap = true
@@ -43,6 +43,8 @@ struct SettingsView: View {
     @AppStorage("customColorCodeTemplate") private var customColorCodeTemplate = "{hex}"
     @AppStorage("openAfterCaptureAppPath") private var openAfterCaptureAppPath = ""
     @AppStorage("doubleOptionQuickOpenEnabled") private var doubleOptionQuickOpenEnabled = true
+    @AppStorage("doubleOptionQuickOpenInterval") private var doubleOptionQuickOpenInterval = 0.45
+    @AppStorage("doubleOptionQuickOpenCooldown") private var doubleOptionQuickOpenCooldown = 1.0
     @AppStorage("translationTargetLanguage") private var translationTargetLanguage = "zh-CN"
     @AppStorage("recordingFrameRate") private var recordingFrameRate = 60.0
     @AppStorage("recordingQuality") private var recordingQuality = "高"
@@ -347,6 +349,26 @@ struct SettingsView: View {
                 }
 
                 Toggle("双击 ⌥ 后截图并打开指定 App", isOn: $doubleOptionQuickOpenEnabled)
+
+                if doubleOptionQuickOpenEnabled {
+                    HStack {
+                        Text("双击判定:")
+                        Slider(value: $doubleOptionQuickOpenInterval, in: 0.25...1.2, step: 0.05)
+                            .frame(width: 140)
+                        Text(String(format: "%.2fs", doubleOptionQuickOpenInterval))
+                            .foregroundColor(.secondary)
+                            .frame(width: 48, alignment: .trailing)
+                    }
+
+                    HStack {
+                        Text("触发冷却:")
+                        Slider(value: $doubleOptionQuickOpenCooldown, in: 0.5...3.0, step: 0.1)
+                            .frame(width: 140)
+                        Text(String(format: "%.1fs", doubleOptionQuickOpenCooldown))
+                            .foregroundColor(.secondary)
+                            .frame(width: 48, alignment: .trailing)
+                    }
+                }
 
                 if doubleOptionQuickOpenEnabled && openAfterCaptureAppPath.isEmpty {
                     Text("请先选择指定 App；未选择时会用系统默认 App 打开。")

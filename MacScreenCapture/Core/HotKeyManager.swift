@@ -187,8 +187,14 @@ class HotKeyManager: ObservableObject {
     private var isOptionKeyDown = false
     private var lastOptionPressAt: Date?
     private var lastOptionActionAt: Date?
-    private let optionDoublePressInterval: TimeInterval = 0.45
-    private let optionActionCooldown: TimeInterval = 1.0
+    private var optionDoublePressInterval: TimeInterval {
+        let value = UserDefaults.standard.double(forKey: "doubleOptionQuickOpenInterval")
+        return value == 0 ? 0.45 : min(max(value, 0.25), 1.2)
+    }
+    private var optionActionCooldown: TimeInterval {
+        let value = UserDefaults.standard.double(forKey: "doubleOptionQuickOpenCooldown")
+        return value == 0 ? 1.0 : min(max(value, 0.5), 3.0)
+    }
     
     // 配置文件路径
     private let configURL: URL = {

@@ -1,0 +1,46 @@
+name: Build ScreenCapture
+
+on:
+  push:
+    branches: ["main", "master"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    name: Build macOS app
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build Swift package
+        run: swift build
+
+      - name: Build app bundle
+        id: app
+        run: |
+          chmod +x Scripts/build-app.sh
+          APP_PATH="$(./Scripts/build-app.sh | tail -n 1)"
+          echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
+          plutil -lint "$APP_PATH/Contents/Info.plist"
+          test -x "$APP_PATH/Contents/MacOS/ScreenCapture"
+          codesign --verify --deep --strict "$APP_PATH"
+
+      - name: Package app artifact
+        run: |
+          ditto -c -k --keepParent "${{ steps.app.outputs.app_path }}" ScreenCapture.app.zip
+
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScreenCapture-macOS
+          path: ScreenCapture.app.zip
+          if-no-files-found: error

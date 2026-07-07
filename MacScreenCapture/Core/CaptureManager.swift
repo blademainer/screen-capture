@@ -303,6 +303,11 @@ class CaptureManager: ObservableObject {
 
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
+        await beginScreenshotCaptureState()
+        defer {
+            endScreenshotCaptureState()
+        }
+
         do {
             var images: [NSImage] = []
             var target: ScrollingCaptureTarget?
@@ -368,6 +373,11 @@ class CaptureManager: ObservableObject {
     /// 多窗口截图 - 使用 macOS 系统交互选择窗口，按住 Shift 可连续选择多个窗口。
     @MainActor
     func captureMultipleWindowsScreenshot() async throws -> NSImage {
+        await beginScreenshotCaptureState()
+        defer {
+            endScreenshotCaptureState()
+        }
+
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         let displayBounds = allDisplayBounds(from: content.displays)
         guard !displayBounds.isNull else {
@@ -397,10 +407,9 @@ class CaptureManager: ObservableObject {
     /// 交互式窗口截图：普通点击立即截取单窗口，Shift 点击可连续选择多个窗口后合成。
     @MainActor
     func captureInteractiveWindowScreenshot() async throws -> NSImage {
-        WindowManager.shared.updateCaptureState(.screenshotting)
-
+        await beginScreenshotCaptureState()
         defer {
-            WindowManager.shared.updateCaptureState(.idle)
+            endScreenshotCaptureState()
         }
 
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
@@ -450,6 +459,11 @@ class CaptureManager: ObservableObject {
     /// 全屏带壳截图
     @MainActor
     func captureDeviceFramedFullScreen() async throws -> NSImage {
+        await beginScreenshotCaptureState()
+        defer {
+            endScreenshotCaptureState()
+        }
+
         let image = try await captureDisplayImageWithoutSaving()
         let framedImage = renderDeviceFrame(around: image)
         try await finalizeCapturedImage(framedImage, forceStyle: false, showEditor: true)
@@ -2079,6 +2093,11 @@ class CaptureManager: ObservableObject {
     /// 使用系统 screencapture 交互选择并保存结果。
     @MainActor
     private func captureInteractiveScreenshot(arguments: [String], forceStyle: Bool = true, showEditor: Bool, autoOpenAfterCapture: Bool = true) async throws -> NSImage {
+        await beginScreenshotCaptureState()
+        defer {
+            endScreenshotCaptureState()
+        }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
 
@@ -2110,6 +2129,17 @@ class CaptureManager: ObservableObject {
                 continuation.resume(throwing: CaptureError.failedToCapture)
             }
         }
+    }
+
+    @MainActor
+    private func beginScreenshotCaptureState() async {
+        WindowManager.shared.updateCaptureState(.screenshotting)
+        try? await Task.sleep(nanoseconds: 160_000_000)
+    }
+
+    @MainActor
+    private func endScreenshotCaptureState() {
+        WindowManager.shared.updateCaptureState(.idle)
     }
 
     @discardableResult

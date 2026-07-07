@@ -27,7 +27,9 @@ struct SettingsView: View {
     @AppStorage("screenshotDropShadow") private var screenshotDropShadow = false
     @AppStorage("screenshotCornerRadius") private var screenshotCornerRadius = 18.0
     @AppStorage("screenshotShadowRadius") private var screenshotShadowRadius = 24.0
+    @AppStorage("screenshotShadowColorHex") private var screenshotShadowColorHex = "#000000"
     @AppStorage("colorCodeFormat") private var colorCodeFormat = "#HEX"
+    @AppStorage("customColorCodeTemplate") private var customColorCodeTemplate = "{hex}"
     @AppStorage("openAfterCaptureAppPath") private var openAfterCaptureAppPath = ""
     @AppStorage("translationTargetLanguage") private var translationTargetLanguage = "zh-CN"
     @AppStorage("recordingFrameRate") private var recordingFrameRate = 60.0
@@ -197,6 +199,14 @@ struct SettingsView: View {
                             Text("\(Int(screenshotShadowRadius))")
                                 .foregroundColor(.secondary)
                         }
+
+                        HStack {
+                            Text("阴影颜色:")
+                            Spacer()
+                            TextField("#000000", text: $screenshotShadowColorHex)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 110)
+                        }
                     }
                 }
                 .padding(.top, 4)
@@ -208,9 +218,20 @@ struct SettingsView: View {
                         Text("#HEX").tag("#HEX")
                         Text("RGB").tag("RGB")
                         Text("SwiftUI").tag("SwiftUI")
+                        Text("自定义").tag("Custom")
                     }
                     .pickerStyle(.menu)
                     .frame(width: 120)
+                }
+
+                if colorCodeFormat == "Custom" {
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextField("自定义色码模板", text: $customColorCodeTemplate)
+                            .textFieldStyle(.roundedBorder)
+                        Text("可用占位符：{hex} {r255} {g255} {b255} {r} {g} {b}")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
 
                 HStack {

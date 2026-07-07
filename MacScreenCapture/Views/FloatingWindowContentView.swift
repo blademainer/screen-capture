@@ -305,14 +305,14 @@ struct TraditionalEditingCanvas: NSViewRepresentable {
     let selectedColor: Color
     let lineWidth: CGFloat
 
-    func makeNSView(context: Context) -> EditingCanvasView {
-        let canvasView = EditingCanvasView()
+    func makeNSView(context: Context) -> FloatingEditingCanvasView {
+        let canvasView = FloatingEditingCanvasView()
         canvasView.editingSession = editingSession
         canvasView.delegate = context.coordinator
         return canvasView
     }
 
-    func updateNSView(_ nsView: EditingCanvasView, context: Context) {
+    func updateNSView(_ nsView: FloatingEditingCanvasView, context: Context) {
         nsView.selectedTool = selectedTool
         nsView.selectedColor = NSColor(selectedColor)
         nsView.lineWidth = lineWidth
@@ -323,7 +323,7 @@ struct TraditionalEditingCanvas: NSViewRepresentable {
         Coordinator(self)
     }
 
-    class Coordinator: NSObject, EditingCanvasDelegate {
+    class Coordinator: NSObject, FloatingEditingCanvasDelegate {
         let parent: TraditionalEditingCanvas
 
         init(_ parent: TraditionalEditingCanvas) {
@@ -337,12 +337,12 @@ struct TraditionalEditingCanvas: NSViewRepresentable {
 }
 
 // MARK: - Editing Canvas View
-protocol EditingCanvasDelegate: AnyObject {
+protocol FloatingEditingCanvasDelegate: AnyObject {
     func canvasDidAddOperation(_ operation: EditingOperation)
 }
 
-class EditingCanvasView: NSView {
-    weak var delegate: EditingCanvasDelegate?
+class FloatingEditingCanvasView: NSView {
+    weak var delegate: FloatingEditingCanvasDelegate?
     var editingSession: ImageEditingSession?
     var selectedTool: EditingTool = .none
     var selectedColor: NSColor = .red

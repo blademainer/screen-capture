@@ -248,9 +248,10 @@ class CaptureManager: ObservableObject {
             Task { @MainActor in
                 guard let self = self, let color = color else { return }
                 let code = self.formattedColorCode(for: color)
+                let name = self.approximateColorName(for: color)
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(code, forType: .string)
-                self.showAlert(title: "取色完成", message: "已复制颜色值：\(code)")
+                self.showAlert(title: "取色完成", message: "颜色：\(name)\n已复制颜色值：\(code)")
                 self.colorSampler = nil
             }
         }
@@ -409,7 +410,6 @@ class CaptureManager: ObservableObject {
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.showsCursor = UserDefaults.standard.bool(forKey: "showCursor")
 
-        // 使用 ScreenCaptureKit 进行截图
         let cgImage = try await SCScreenshotManager.captureImage(
             contentFilter: filter,
             configuration: configuration
@@ -818,6 +818,7 @@ class CaptureManager: ObservableObject {
             UserDefaults.standard.set(false, forKey: "screenshotDropShadow")
             UserDefaults.standard.set(18.0, forKey: "screenshotCornerRadius")
             UserDefaults.standard.set(24.0, forKey: "screenshotShadowRadius")
+            UserDefaults.standard.set("#000000", forKey: "screenshotShadowColorHex")
             UserDefaults.standard.set(true, forKey: "hasSetupDefaultAdvancedCaptureSettings")
         }
     }
@@ -1196,7 +1197,8 @@ class CaptureManager: ObservableObject {
 
         if UserDefaults.standard.bool(forKey: "screenshotDropShadow") {
             let radius = CGFloat(UserDefaults.standard.double(forKey: "screenshotShadowRadius"))
-            currentImage = renderShadowedImage(currentImage, shadowRadius: radius)
+            let shadowColor = colorFromHex(UserDefaults.standard.string(forKey: "screenshotShadowColorHex") ?? "#000000") ?? .black
+            currentImage = renderShadowedImage(currentImage, shadowRadius: radius, shadowColor: shadowColor)
         }
 
         return currentImage
@@ -1215,7 +1217,7 @@ class CaptureManager: ObservableObject {
         return output
     }
 
-    private func renderShadowedImage(_ image: NSImage, shadowRadius: CGFloat) -> NSImage {
+    private func renderShadowedImage(_ image: NSImage, shadowRadius: CGFloat, shadowColor: NSColor) -> NSImage {
         let padding = max(24, shadowRadius * 2)
         let outputSize = NSSize(width: image.size.width + padding * 2, height: image.size.height + padding * 2)
         let output = NSImage(size: outputSize)
@@ -1227,7 +1229,7 @@ class CaptureManager: ObservableObject {
         let shadow = NSShadow()
         shadow.shadowBlurRadius = shadowRadius
         shadow.shadowOffset = NSSize(width: 0, height: -4)
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.28)
+        shadow.shadowColor = shadowColor.withAlphaComponent(0.28)
         shadow.set()
 
         let imageRect = NSRect(x: padding, y: padding, width: image.size.width, height: image.size.height)
@@ -1447,9 +1449,56 @@ class CaptureManager: ObservableObject {
             return "rgb(\(red), \(green), \(blue))"
         case "SwiftUI":
             return String(format: "Color(red: %.3f, green: %.3f, blue: %.3f)", rgb.redComponent, rgb.greenComponent, rgb.blueComponent)
+        case "Custom":
+            let template = UserDefaults.standard.string(forKey: "customColorCodeTemplate") ?? "{hex}"
+            return template
+                .replacingOccurrences(of: "{hex}", with: hex)
+                .replacingOccurrences(of: "{r255}", with: "\(red)")
+                .replacingOccurrences(of: "{g255}", with: "\(green)")
+                .replacingOccurrences(of: "{b255}", with: "\(blue)")
+                .replacingOccurrences(of: "{r}", with: String(format: "%.3f", rgb.redComponent))
+                .replacingOccurrences(of: "{g}", with: String(format: "%.3f", rgb.greenComponent))
+                .replacingOccurrences(of: "{b}", with: String(format: "%.3f", rgb.blueComponent))
         default:
             return hex
         }
+    }
+
+    private func approximateColorName(for color: NSColor) -> String {
+        let rgb = color.usingColorSpace(.sRGB) ?? color
+        let red = Int(round(rgb.redComponent * 255))
+        let green = Int(round(rgb.greenComponent * 255))
+        let blue = Int(round(rgb.blueComponent * 255))
+
+        let palette: [(name: String, r: Int, g: Int, b: Int)] = [
+            ("黑色", 0, 0, 0), ("白色", 255, 255, 255), ("灰色", 128, 128, 128),
+            ("红色", 220, 38, 38), ("橙色", 249, 115, 22), ("黄色", 234, 179, 8),
+            ("绿色", 34, 197, 94), ("青色", 6, 182, 212), ("蓝色", 59, 130, 246),
+            ("矢车菊蓝", 100, 149, 237), ("紫色", 147, 51, 234), ("粉色", 236, 72, 153),
+            ("棕色", 120, 72, 35), ("米色", 245, 245, 220), ("深蓝", 30, 64, 175)
+        ]
+
+        return palette.min { lhs, rhs in
+            colorDistanceSquared(red, green, blue, lhs) < colorDistanceSquared(red, green, blue, rhs)
+        }?.name ?? "未知颜色"
+    }
+
+    private func colorDistanceSquared(_ red: Int, _ green: Int, _ blue: Int, _ candidate: (name: String, r: Int, g: Int, b: Int)) -> Int {
+        let dr = red - candidate.r
+        let dg = green - candidate.g
+        let db = blue - candidate.b
+        return dr * dr + dg * dg + db * db
+    }
+
+    private func colorFromHex(_ hex: String) -> NSColor? {
+        let cleaned = hex.trimmingCharacters(in: CharacterSet(charactersIn: "# ").union(.whitespacesAndNewlines))
+        guard cleaned.count == 6, let value = Int(cleaned, radix: 16) else { return nil }
+        return NSColor(
+            red: CGFloat((value >> 16) & 0xFF) / 255,
+            green: CGFloat((value >> 8) & 0xFF) / 255,
+            blue: CGFloat(value & 0xFF) / 255,
+            alpha: 1
+        )
     }
 
     private func recognizeText(in image: NSImage) async throws -> String {

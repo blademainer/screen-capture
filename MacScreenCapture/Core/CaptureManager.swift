@@ -34,9 +34,13 @@ struct RecordingAudioDiagnostics: Sendable {
         requestedSystemAudio || requestedMicrophone
     }
 
+    var requestedAudioSourceCount: Int {
+        (requestedSystemAudio ? 1 : 0) + (requestedMicrophone ? 1 : 0)
+    }
+
     var hasAudioIssue: Bool {
         guard requestedAnyAudio else { return false }
-        if !assetWriterSucceeded || audioTrackCount == 0 { return true }
+        if !assetWriterSucceeded || audioTrackCount < requestedAudioSourceCount { return true }
         if requestedSystemAudio && systemAudioFrameCount == 0 { return true }
         if requestedMicrophone && microphoneFrameCount == 0 { return true }
         return false
@@ -49,6 +53,9 @@ struct RecordingAudioDiagnostics: Sendable {
         }
         if requestedMicrophone {
             parts.append("麦克风 \(microphoneFrameCount) 帧")
+        }
+        if requestedAudioSourceCount > 0 {
+            parts.append("音轨 \(audioTrackCount)/\(requestedAudioSourceCount)")
         }
         if parts.isEmpty {
             return "静音录制"
@@ -1222,8 +1229,8 @@ class CaptureManager: ObservableObject {
     private func showRecordingCompletionNotification(diagnostics: RecordingAudioDiagnostics, duration: TimeInterval, audioOnly: Bool) {
         if diagnostics.hasAudioIssue {
             let missingAudioMessage: String
-            if diagnostics.audioTrackCount == 0 {
-                missingAudioMessage = "未检测到音频轨道"
+            if diagnostics.audioTrackCount < diagnostics.requestedAudioSourceCount {
+                missingAudioMessage = "音频轨道不完整：\(diagnostics.audioTrackCount)/\(diagnostics.requestedAudioSourceCount)"
             } else {
                 missingAudioMessage = diagnostics.summaryText
             }
@@ -4419,7 +4426,7 @@ class CaptureStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
         logMicrophone("========== 录制音频验收 ==========")
         logMicrophone("请求系统音频: \(diagnostics.requestedSystemAudio)")
         logMicrophone("请求麦克风: \(diagnostics.requestedMicrophone)")
-        logMicrophone("文件音频轨道数量: \(diagnostics.audioTrackCount)", level: diagnostics.hasAudioIssue ? "ERROR" : "SUCCESS")
+        logMicrophone("文件音频轨道数量: \(diagnostics.audioTrackCount)/\(diagnostics.requestedAudioSourceCount)", level: diagnostics.hasAudioIssue ? "ERROR" : "SUCCESS")
         logMicrophone("音频摘要: \(diagnostics.summaryText)")
 
         completions.forEach { $0(diagnostics) }

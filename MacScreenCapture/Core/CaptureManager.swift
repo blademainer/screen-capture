@@ -1081,6 +1081,12 @@ class CaptureManager: ObservableObject {
             UserDefaults.standard.set(18.0, forKey: "screenshotCornerRadius")
             UserDefaults.standard.set(24.0, forKey: "screenshotShadowRadius")
             UserDefaults.standard.set("#000000", forKey: "screenshotShadowColorHex")
+            UserDefaults.standard.set(42.0, forKey: "deviceFrameBezelWidth")
+            UserDefaults.standard.set(48.0, forKey: "deviceFramePadding")
+            UserDefaults.standard.set(26.0, forKey: "deviceFrameCornerRadius")
+            UserDefaults.standard.set(28.0, forKey: "deviceFrameShadowRadius")
+            UserDefaults.standard.set("#141414", forKey: "deviceFrameBodyColorHex")
+            UserDefaults.standard.set("#000000", forKey: "deviceFrameShadowColorHex")
             UserDefaults.standard.set(true, forKey: "hasSetupDefaultAdvancedCaptureSettings")
         }
     }
@@ -1600,9 +1606,13 @@ class CaptureManager: ObservableObject {
     }
 
     private func renderDeviceFrame(around image: NSImage) -> NSImage {
-        let bezel: CGFloat = 42
-        let titleBar: CGFloat = 34
-        let padding: CGFloat = 48
+        let bezel = clampedCGFloat(UserDefaults.standard.double(forKey: "deviceFrameBezelWidth"), min: 18, max: 96, fallback: 42)
+        let titleBar = max(24, bezel * 0.8)
+        let padding = clampedCGFloat(UserDefaults.standard.double(forKey: "deviceFramePadding"), min: 16, max: 120, fallback: 48)
+        let cornerRadius = clampedCGFloat(UserDefaults.standard.double(forKey: "deviceFrameCornerRadius"), min: 8, max: 64, fallback: 26)
+        let shadowRadius = clampedCGFloat(UserDefaults.standard.double(forKey: "deviceFrameShadowRadius"), min: 0, max: 80, fallback: 28)
+        let bodyColor = colorFromHex(UserDefaults.standard.string(forKey: "deviceFrameBodyColorHex") ?? "#141414") ?? NSColor(calibratedWhite: 0.08, alpha: 1)
+        let shadowColor = colorFromHex(UserDefaults.standard.string(forKey: "deviceFrameShadowColorHex") ?? "#000000") ?? .black
         let frameSize = NSSize(
             width: image.size.width + bezel * 2 + padding * 2,
             height: image.size.height + bezel * 2 + titleBar + padding * 2
@@ -1621,13 +1631,13 @@ class CaptureManager: ObservableObject {
         )
 
         let shadow = NSShadow()
-        shadow.shadowBlurRadius = 28
-        shadow.shadowOffset = NSSize(width: 0, height: -10)
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.32)
+        shadow.shadowBlurRadius = shadowRadius
+        shadow.shadowOffset = NSSize(width: 0, height: -max(4, shadowRadius / 3))
+        shadow.shadowColor = shadowColor.withAlphaComponent(shadowRadius > 0 ? 0.32 : 0)
         shadow.set()
 
-        NSColor(calibratedWhite: 0.08, alpha: 1).setFill()
-        NSBezierPath(roundedRect: bodyRect, xRadius: 26, yRadius: 26).fill()
+        bodyColor.setFill()
+        NSBezierPath(roundedRect: bodyRect, xRadius: cornerRadius, yRadius: cornerRadius).fill()
 
         NSGraphicsContext.current?.cgContext.setShadow(offset: .zero, blur: 0, color: nil)
         let screenRect = NSRect(
@@ -1644,6 +1654,11 @@ class CaptureManager: ObservableObject {
 
         output.unlockFocus()
         return output
+    }
+
+    private func clampedCGFloat(_ value: Double, min minimum: CGFloat, max maximum: CGFloat, fallback: CGFloat) -> CGFloat {
+        guard value.isFinite else { return fallback }
+        return Swift.min(Swift.max(CGFloat(value), minimum), maximum)
     }
 
     private func stitchImagesVertically(_ images: [NSImage], trimOverlap: Bool) -> NSImage {

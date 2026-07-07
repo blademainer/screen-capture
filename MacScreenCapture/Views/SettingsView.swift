@@ -30,6 +30,12 @@ struct SettingsView: View {
     @AppStorage("screenshotCornerRadius") private var screenshotCornerRadius = 18.0
     @AppStorage("screenshotShadowRadius") private var screenshotShadowRadius = 24.0
     @AppStorage("screenshotShadowColorHex") private var screenshotShadowColorHex = "#000000"
+    @AppStorage("deviceFrameBezelWidth") private var deviceFrameBezelWidth = 42.0
+    @AppStorage("deviceFramePadding") private var deviceFramePadding = 48.0
+    @AppStorage("deviceFrameCornerRadius") private var deviceFrameCornerRadius = 26.0
+    @AppStorage("deviceFrameShadowRadius") private var deviceFrameShadowRadius = 28.0
+    @AppStorage("deviceFrameBodyColorHex") private var deviceFrameBodyColorHex = "#141414"
+    @AppStorage("deviceFrameShadowColorHex") private var deviceFrameShadowColorHex = "#000000"
     @AppStorage("numberedAnnotationStart") private var numberedAnnotationStart = 1
     @AppStorage("annotationTextOutlined") private var annotationTextOutlined = false
     @AppStorage("colorCodeFormat") private var colorCodeFormat = "#HEX"
@@ -216,6 +222,61 @@ struct SettingsView: View {
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 110)
                         }
+                    }
+                }
+                .padding(.top, 4)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("全屏带壳截图")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+
+                    HStack {
+                        Text("外壳厚度:")
+                        Slider(value: $deviceFrameBezelWidth, in: 18...96, step: 1)
+                            .frame(width: 140)
+                        Text("\(Int(deviceFrameBezelWidth))")
+                            .foregroundColor(.secondary)
+                    }
+
+                    HStack {
+                        Text("画布留白:")
+                        Slider(value: $deviceFramePadding, in: 16...120, step: 1)
+                            .frame(width: 140)
+                        Text("\(Int(deviceFramePadding))")
+                            .foregroundColor(.secondary)
+                    }
+
+                    HStack {
+                        Text("外壳圆角:")
+                        Slider(value: $deviceFrameCornerRadius, in: 8...64, step: 1)
+                            .frame(width: 140)
+                        Text("\(Int(deviceFrameCornerRadius))")
+                            .foregroundColor(.secondary)
+                    }
+
+                    HStack {
+                        Text("阴影大小:")
+                        Slider(value: $deviceFrameShadowRadius, in: 0...80, step: 1)
+                            .frame(width: 140)
+                        Text("\(Int(deviceFrameShadowRadius))")
+                            .foregroundColor(.secondary)
+                    }
+
+                    HStack {
+                        Text("外壳颜色:")
+                        Spacer()
+                        TextField("#141414", text: $deviceFrameBodyColorHex)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 110)
+                    }
+
+                    HStack {
+                        Text("阴影颜色:")
+                        Spacer()
+                        TextField("#000000", text: $deviceFrameShadowColorHex)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 110)
                     }
                 }
                 .padding(.top, 4)

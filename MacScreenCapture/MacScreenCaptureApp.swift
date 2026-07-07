@@ -27,7 +27,13 @@ struct MacScreenCaptureApp: App {
             "doubleOptionQuickOpenEnabled": true,
             "numberedAnnotationStart": 1,
             "multiWindowDesktopBackdrop": true,
-            "scrollingCaptureCropToWindow": true
+            "scrollingCaptureCropToWindow": true,
+            "deviceFrameBezelWidth": 42.0,
+            "deviceFramePadding": 48.0,
+            "deviceFrameCornerRadius": 26.0,
+            "deviceFrameShadowRadius": 28.0,
+            "deviceFrameBodyColorHex": "#141414",
+            "deviceFrameShadowColorHex": "#000000"
         ])
     }
     

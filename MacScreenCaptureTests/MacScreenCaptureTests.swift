@@ -189,6 +189,54 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertFalse(ScrollingImageStitcher.imagesAreVisuallySimilar(image, changed))
     }
 
+    func testMultiWindowCompositeLayoutKeepsRelativeWindowPositions() throws {
+        let displayBounds = CGRect(x: 0, y: 0, width: 800, height: 600)
+        let firstWindow = CGRect(x: 100, y: 120, width: 220, height: 160)
+        let secondWindow = CGRect(x: 360, y: 260, width: 180, height: 120)
+
+        let outputRect = try XCTUnwrap(MultiWindowCompositeLayout.outputRect(
+            for: [firstWindow, secondWindow],
+            displayBounds: displayBounds
+        ))
+        let firstDrawRect = try XCTUnwrap(MultiWindowCompositeLayout.drawRect(for: firstWindow, in: outputRect))
+        let secondDrawRect = try XCTUnwrap(MultiWindowCompositeLayout.drawRect(for: secondWindow, in: outputRect))
+
+        XCTAssertEqual(outputRect, CGRect(x: 76, y: 96, width: 488, height: 308))
+        XCTAssertEqual(firstDrawRect, CGRect(x: 24, y: 124, width: 220, height: 160))
+        XCTAssertEqual(secondDrawRect, CGRect(x: 284, y: 24, width: 180, height: 120))
+    }
+
+    func testMultiWindowCompositeLayoutClipsToDisplayBounds() throws {
+        let displayBounds = CGRect(x: 0, y: 0, width: 500, height: 400)
+        let window = CGRect(x: 430, y: 330, width: 120, height: 100)
+
+        let outputRect = try XCTUnwrap(MultiWindowCompositeLayout.outputRect(
+            for: [window],
+            displayBounds: displayBounds
+        ))
+        let drawRect = try XCTUnwrap(MultiWindowCompositeLayout.drawRect(for: window, in: outputRect))
+
+        XCTAssertEqual(outputRect, CGRect(x: 406, y: 306, width: 94, height: 94))
+        XCTAssertEqual(drawRect, CGRect(x: 24, y: 0, width: 70, height: 70))
+    }
+
+    func testMultiWindowCompositeLayoutCreatesBackdropSegmentsAcrossDisplays() throws {
+        let outputRect = CGRect(x: 450, y: 100, width: 220, height: 160)
+        let segments = MultiWindowCompositeLayout.backdropSegments(
+            for: [
+                CGRect(x: 0, y: 0, width: 500, height: 400),
+                CGRect(x: 500, y: 0, width: 500, height: 400)
+            ],
+            outputRect: outputRect
+        )
+
+        XCTAssertEqual(segments.count, 2)
+        XCTAssertEqual(segments[0].visibleRect, CGRect(x: 450, y: 100, width: 50, height: 160))
+        XCTAssertEqual(segments[0].drawRect, CGRect(x: 0, y: 0, width: 50, height: 160))
+        XCTAssertEqual(segments[1].visibleRect, CGRect(x: 500, y: 100, width: 170, height: 160))
+        XCTAssertEqual(segments[1].drawRect, CGRect(x: 50, y: 0, width: 170, height: 160))
+    }
+
     func testScreenshotStyleRendererRoundsCornersToTransparentPixels() throws {
         let image = makeSolidImage(width: 40, height: 40, color: .systemRed)
         let rounded = ScreenshotStyleRenderer.renderRoundedImage(image, radius: 16)

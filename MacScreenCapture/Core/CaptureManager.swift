@@ -1697,15 +1697,13 @@ class CaptureManager: ObservableObject {
             throw CaptureError.noDisplayAvailable
         }
 
-        let windowFrames = windows.map(\.frame).filter { $0.width > 1 && $0.height > 1 }
-        guard var outputRect = windowFrames.first else {
+        let windowFrames = windows.map(\.frame)
+        guard let outputRect = MultiWindowCompositeLayout.outputRect(
+            for: windowFrames,
+            displayBounds: displayBounds
+        ) else {
             throw CaptureError.failedToCapture
         }
-
-        for frame in windowFrames.dropFirst() {
-            outputRect = outputRect.union(frame)
-        }
-        outputRect = outputRect.insetBy(dx: -24, dy: -24).intersection(displayBounds).integral
 
         let backdropSegments = useDesktopBackdrop
             ? try await captureDesktopBackdropSegments(
@@ -1726,24 +1724,12 @@ class CaptureManager: ObservableObject {
         NSRect(origin: .zero, size: outputRect.size).fill()
 
         for (visibleRect, backdrop) in backdropSegments {
-            let drawRect = NSRect(
-                x: visibleRect.minX - outputRect.minX,
-                y: outputRect.height - (visibleRect.maxY - outputRect.minY),
-                width: visibleRect.width,
-                height: visibleRect.height
-            )
+            guard let drawRect = MultiWindowCompositeLayout.drawRect(for: visibleRect, in: outputRect) else { continue }
             backdrop.draw(in: drawRect)
         }
 
         for (window, image) in capturedWindows {
-            let frame = window.frame.intersection(outputRect)
-            guard frame.width > 1, frame.height > 1 else { continue }
-            let drawRect = NSRect(
-                x: frame.minX - outputRect.minX,
-                y: outputRect.height - (frame.maxY - outputRect.minY),
-                width: frame.width,
-                height: frame.height
-            )
+            guard let drawRect = MultiWindowCompositeLayout.drawRect(for: window.frame, in: outputRect) else { continue }
             image.draw(in: drawRect)
         }
 

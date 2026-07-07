@@ -241,6 +241,7 @@ struct HotKeyRow: View {
         case .regionScreenshot: return "rectangle.dashed.badge.record"
         case .windowScreenshot: return "macwindow"
         case .startRecording: return "record.circle"
+        case .startAudioRecording: return "waveform.circle"
         case .stopRecording: return "stop.circle"
         case .scrollScreenshot: return "scroll"
         }

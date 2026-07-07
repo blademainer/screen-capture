@@ -104,6 +104,7 @@ enum HotKeyAction: String, CaseIterable, Codable {
     case regionScreenshot = "region_screenshot"
     case windowScreenshot = "window_screenshot"
     case startRecording = "start_recording"
+    case startAudioRecording = "start_audio_recording"
     case stopRecording = "stop_recording"
     case scrollScreenshot = "scroll_screenshot"
     
@@ -117,6 +118,8 @@ enum HotKeyAction: String, CaseIterable, Codable {
             return HotKeyConfig(keyCode: 3, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "窗口截图")
         case .startRecording:
             return HotKeyConfig(keyCode: 13, modifiers: UInt32(optionKey), isEnabled: true, description: "开始录制")
+        case .startAudioRecording:
+            return HotKeyConfig(keyCode: 46, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "开始录音")
         case .stopRecording:
             return HotKeyConfig(keyCode: 15, modifiers: UInt32(cmdKey | shiftKey), isEnabled: true, description: "停止录制")
         case .scrollScreenshot:
@@ -130,6 +133,7 @@ enum HotKeyAction: String, CaseIterable, Codable {
         case .regionScreenshot: return "区域截图"
         case .windowScreenshot: return "窗口截图"
         case .startRecording: return "开始录制"
+        case .startAudioRecording: return "开始录音"
         case .stopRecording: return "停止录制"
         case .scrollScreenshot: return "滚动截图"
         }
@@ -372,6 +376,14 @@ class HotKeyManager: ObservableObject {
                         try await captureManager.startRecording()
                     } catch {
                         print("开始录制失败: \(error)")
+                    }
+                }
+            case .startAudioRecording:
+                if !captureManager.isRecording {
+                    do {
+                        try await captureManager.startAudioRecording()
+                    } catch {
+                        print("开始录音失败: \(error)")
                     }
                 }
             case .stopRecording:

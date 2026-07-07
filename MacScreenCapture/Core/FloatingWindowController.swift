@@ -183,27 +183,54 @@ class ImageEditingSession: ObservableObject {
     }
 
     private func renderImageWithOperations(_ baseImage: NSImage, operations: [EditingOperation]) -> NSImage {
+        var renderedImage = baseImage
+
+        for operation in operations {
+            if operation.type == .crop {
+                renderedImage = cropImage(renderedImage, to: operation.rect) ?? renderedImage
+            } else {
+                renderedImage = renderImage(renderedImage, applying: operation)
+            }
+        }
+
+        return renderedImage
+    }
+
+    private func renderImage(_ baseImage: NSImage, applying operation: EditingOperation) -> NSImage {
         let size = baseImage.size
         let image = NSImage(size: size)
 
         image.lockFocus()
 
-        // 绘制原始图片
         baseImage.draw(in: NSRect(origin: .zero, size: size))
-
-        // 应用所有编辑操作
-        for operation in operations {
-            applyOperation(operation, in: NSRect(origin: .zero, size: size))
-        }
+        applyOperation(operation, in: NSRect(origin: .zero, size: size))
 
         image.unlockFocus()
 
         return image
     }
 
-    private func applyOperation(_ operation: EditingOperation, in rect: NSRect) {
-        let context = NSGraphicsContext.current?.cgContext
+    private func cropImage(_ image: NSImage, to rect: CGRect?) -> NSImage? {
+        guard let rect else { return nil }
 
+        let imageBounds = CGRect(origin: .zero, size: image.size)
+        let cropRect = rect.intersection(imageBounds).integral
+        guard cropRect.width >= 2, cropRect.height >= 2 else { return nil }
+
+        let croppedImage = NSImage(size: cropRect.size)
+        croppedImage.lockFocus()
+        image.draw(
+            in: NSRect(origin: .zero, size: cropRect.size),
+            from: cropRect,
+            operation: .copy,
+            fraction: 1.0
+        )
+        croppedImage.unlockFocus()
+
+        return croppedImage
+    }
+
+    private func applyOperation(_ operation: EditingOperation, in rect: NSRect) {
         switch operation.type {
         case .pen, .highlighter:
             drawStroke(operation, in: rect)
@@ -369,7 +396,6 @@ class ImageEditingSession: ObservableObject {
         guard let drawRect = operation.rect else { return }
 
         let mosaicSize: CGFloat = 10
-        let context = NSGraphicsContext.current?.cgContext
 
         for x in stride(from: drawRect.minX, to: drawRect.maxX, by: mosaicSize) {
             for y in stride(from: drawRect.minY, to: drawRect.maxY, by: mosaicSize) {

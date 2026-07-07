@@ -118,7 +118,7 @@ struct FloatingWindowContentView: View {
         GeometryReader { geometry in
             ZStack {
                 // 背景图片
-                Image(nsImage: screenshot)
+                Image(nsImage: editingSession.currentImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -179,139 +179,7 @@ struct FloatingWindowContentView: View {
     }
 
     private func generateFinalImage() -> NSImage {
-        // 合成最终图片（原图 + 编辑内容）
-        let finalSize = screenshot.size
-        let finalImage = NSImage(size: finalSize)
-
-        finalImage.lockFocus()
-
-        // 绘制原始截图
-        screenshot.draw(in: NSRect(origin: .zero, size: finalSize))
-
-        // 绘制编辑内容
-        for operation in editingSession.operations {
-            drawOperation(operation, in: NSRect(origin: .zero, size: finalSize))
-        }
-
-        finalImage.unlockFocus()
-
-        return finalImage
-    }
-
-    private func drawOperation(_ operation: EditingOperation, in rect: NSRect) {
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
-
-        context.setStrokeColor(operation.color.nsColor.cgColor)
-        context.setLineWidth(operation.lineWidth)
-        context.setLineCap(.round)
-        context.setLineJoin(.round)
-
-        switch operation.type {
-        case .pen, .highlighter:
-            guard operation.points.count > 1 else { return }
-            context.beginPath()
-            context.move(to: operation.points[0])
-
-            for point in operation.points.dropFirst() {
-                context.addLine(to: point)
-            }
-
-            if operation.type == .highlighter {
-                context.setStrokeColor(operation.color.nsColor.withAlphaComponent(0.5).cgColor)
-            }
-            context.strokePath()
-        case .rectangle:
-            guard let drawRect = operation.rect else { return }
-            context.stroke(drawRect)
-        case .circle:
-            guard let drawRect = operation.rect else { return }
-            context.strokeEllipse(in: drawRect)
-        case .arrow:
-            drawArrow(operation)
-        case .text:
-            drawText(operation)
-        case .numbered:
-            drawNumberedMarker(operation)
-        case .mosaic:
-            drawMosaic(operation)
-        case .none, .crop:
-            break
-        }
-    }
-
-    private func drawArrow(_ operation: EditingOperation) {
-        guard operation.points.count >= 2 else { return }
-        let start = operation.points[0]
-        let end = operation.points[1]
-        let path = NSBezierPath()
-        path.move(to: start)
-        path.line(to: end)
-        path.lineWidth = operation.lineWidth
-        operation.color.nsColor.setStroke()
-        path.stroke()
-
-        let angle = atan2(end.y - start.y, end.x - start.x)
-        let arrowLength: CGFloat = 15
-        let arrowAngle: CGFloat = .pi / 6
-        let arrowPath = NSBezierPath()
-        arrowPath.move(to: end)
-        arrowPath.line(to: CGPoint(x: end.x - arrowLength * cos(angle - arrowAngle), y: end.y - arrowLength * sin(angle - arrowAngle)))
-        arrowPath.move(to: end)
-        arrowPath.line(to: CGPoint(x: end.x - arrowLength * cos(angle + arrowAngle), y: end.y - arrowLength * sin(angle + arrowAngle)))
-        arrowPath.lineWidth = operation.lineWidth
-        arrowPath.stroke()
-    }
-
-    private func drawText(_ operation: EditingOperation) {
-        guard let text = operation.text, let drawRect = operation.rect else { return }
-        var attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: max(14, operation.lineWidth * 8)),
-            .foregroundColor: operation.color.nsColor
-        ]
-        if operation.textOutlined {
-            attributes[.strokeColor] = NSColor.white
-            attributes[.strokeWidth] = -3.0
-        }
-        NSAttributedString(string: text, attributes: attributes).draw(in: drawRect)
-    }
-
-    private func drawNumberedMarker(_ operation: EditingOperation) {
-        guard let text = operation.text else { return }
-        let center = operation.points.first ?? CGPoint(x: operation.rect?.midX ?? 0, y: operation.rect?.midY ?? 0)
-        let diameter = max(24, operation.lineWidth * 9)
-        let markerRect = NSRect(x: center.x - diameter / 2, y: center.y - diameter / 2, width: diameter, height: diameter)
-        let path = NSBezierPath(ovalIn: markerRect)
-        operation.color.nsColor.setFill()
-        path.fill()
-        NSColor.white.setStroke()
-        path.lineWidth = max(1.5, operation.lineWidth / 2)
-        path.stroke()
-
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = .center
-        var attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: diameter * 0.52, weight: .bold),
-            .foregroundColor: NSColor.white,
-            .paragraphStyle: paragraphStyle
-        ]
-        if operation.textOutlined {
-            attributes[.strokeColor] = NSColor.black
-            attributes[.strokeWidth] = -4.0
-        }
-        let attributedString = NSAttributedString(string: text, attributes: attributes)
-        let textRect = markerRect.insetBy(dx: 2, dy: (diameter - attributedString.size().height) / 2)
-        attributedString.draw(in: textRect)
-    }
-
-    private func drawMosaic(_ operation: EditingOperation) {
-        guard let drawRect = operation.rect else { return }
-        let mosaicSize: CGFloat = 10
-        for x in stride(from: drawRect.minX, to: drawRect.maxX, by: mosaicSize) {
-            for y in stride(from: drawRect.minY, to: drawRect.maxY, by: mosaicSize) {
-                NSColor(white: CGFloat.random(in: 0.3...0.7), alpha: 1.0).setFill()
-                NSRect(x: x, y: y, width: mosaicSize, height: mosaicSize).fill()
-            }
-        }
+        editingSession.currentImage
     }
 }
 
@@ -331,6 +199,7 @@ struct TraditionalEditingCanvas: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: FloatingEditingCanvasView, context: Context) {
+        nsView.imageSize = editingSession.currentImage.size
         nsView.selectedTool = selectedTool
         nsView.selectedColor = NSColor(selectedColor)
         nsView.lineWidth = lineWidth
@@ -367,6 +236,7 @@ class FloatingEditingCanvasView: NSView {
     var selectedColor: NSColor = .red
     var lineWidth: CGFloat = 2.0
     var textOutlined = false
+    var imageSize: CGSize = .zero
 
     private var currentPoints: [CGPoint] = []
     private var isDrawing = false
@@ -397,9 +267,6 @@ class FloatingEditingCanvasView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        editingSession?.operations.forEach { drawCommittedOperation($0) }
-
-        // 绘制当前正在绘制的内容
         if !currentPoints.isEmpty && isDrawing {
             drawCurrentStroke()
         }
@@ -409,43 +276,49 @@ class FloatingEditingCanvasView: NSView {
         guard !currentPoints.isEmpty else { return }
         guard let firstPoint = currentPoints.first, let lastPoint = currentPoints.last else { return }
 
-        if [.rectangle, .circle, .mosaic, .text].contains(selectedTool), currentPoints.count >= 2 {
-            let rect = normalizedRect(from: firstPoint, to: lastPoint)
+        if [.rectangle, .circle, .mosaic, .text, .crop].contains(selectedTool), currentPoints.count >= 2 {
+            let rect = viewRect(fromImageRect: normalizedRect(from: firstPoint, to: lastPoint))
             let path = selectedTool == .circle ? NSBezierPath(ovalIn: rect) : NSBezierPath(rect: rect)
-            path.lineWidth = lineWidth
+            path.lineWidth = scaledLineWidth
             selectedColor.setStroke()
             path.stroke()
             return
         }
 
         if selectedTool == .arrow, currentPoints.count >= 2 {
-            let operation = EditingOperation(type: .arrow, points: [firstPoint, lastPoint], color: selectedColor, lineWidth: lineWidth)
+            let operation = EditingOperation(
+                type: .arrow,
+                points: [viewPoint(fromImagePoint: firstPoint), viewPoint(fromImagePoint: lastPoint)],
+                color: selectedColor,
+                lineWidth: scaledLineWidth
+            )
             drawPreviewArrow(operation)
             return
         }
 
         let path = NSBezierPath()
+        let viewPoints = currentPoints.map { viewPoint(fromImagePoint: $0) }
 
-        if currentPoints.count == 1 {
+        if viewPoints.count == 1 {
             // 单点绘制
-            let point = currentPoints[0]
+            let point = viewPoints[0]
             let rect = CGRect(
-                x: point.x - lineWidth/2,
-                y: point.y - lineWidth/2,
-                width: lineWidth,
-                height: lineWidth
+                x: point.x - scaledLineWidth / 2,
+                y: point.y - scaledLineWidth / 2,
+                width: scaledLineWidth,
+                height: scaledLineWidth
             )
             path.appendOval(in: rect)
             selectedColor.setFill()
             path.fill()
         } else {
             // 多点连线
-            path.move(to: currentPoints[0])
-            for point in currentPoints.dropFirst() {
+            path.move(to: viewPoints[0])
+            for point in viewPoints.dropFirst() {
                 path.line(to: point)
             }
 
-            path.lineWidth = lineWidth
+            path.lineWidth = scaledLineWidth
             path.lineCapStyle = .round
             path.lineJoinStyle = .round
 
@@ -460,7 +333,7 @@ class FloatingEditingCanvasView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        let location = convert(event.locationInWindow, from: nil)
+        guard let location = imagePoint(fromViewPoint: convert(event.locationInWindow, from: nil)) else { return }
 
         if selectedTool == .none, let operation = hitTestMovableOperation(at: location) {
             movingOperationID = operation.id
@@ -480,8 +353,8 @@ class FloatingEditingCanvasView: NSView {
         if let movingOperationID,
            let movingStartPoint,
            let originalMovingOperation,
-           originalMovingOperation.id == movingOperationID {
-            let location = convert(event.locationInWindow, from: nil)
+            originalMovingOperation.id == movingOperationID {
+            guard let location = imagePoint(fromViewPoint: convert(event.locationInWindow, from: nil)) else { return }
             let offset = CGSize(
                 width: location.x - movingStartPoint.x,
                 height: location.y - movingStartPoint.y
@@ -493,7 +366,7 @@ class FloatingEditingCanvasView: NSView {
 
         guard selectedTool != .none, selectedTool != .numbered, isDrawing else { return }
 
-        let location = convert(event.locationInWindow, from: nil)
+        guard let location = imagePoint(fromViewPoint: convert(event.locationInWindow, from: nil)) else { return }
         currentPoints.append(location)
         needsDisplay = true
     }
@@ -512,7 +385,7 @@ class FloatingEditingCanvasView: NSView {
             return
         }
 
-        let endLocation = convert(event.locationInWindow, from: nil)
+        let endLocation = imagePoint(fromViewPoint: convert(event.locationInWindow, from: nil)) ?? currentPoints.last!
         if currentPoints.last != endLocation {
             currentPoints.append(endLocation)
         }
@@ -545,6 +418,10 @@ class FloatingEditingCanvasView: NSView {
             return EditingOperation(type: selectedTool, points: currentPoints, color: selectedColor, lineWidth: lineWidth)
         case .rectangle, .circle, .mosaic:
             return EditingOperation(type: selectedTool, color: selectedColor, lineWidth: lineWidth, rect: normalizedRect(from: firstPoint, to: lastPoint))
+        case .crop:
+            let cropRect = normalizedRect(from: firstPoint, to: lastPoint)
+            guard cropRect.width >= 8, cropRect.height >= 8 else { return nil }
+            return EditingOperation(type: .crop, color: selectedColor, lineWidth: lineWidth, rect: cropRect)
         case .arrow:
             return EditingOperation(type: selectedTool, points: [firstPoint, lastPoint], color: selectedColor, lineWidth: lineWidth)
         case .text:
@@ -558,7 +435,7 @@ class FloatingEditingCanvasView: NSView {
             let text = "\(nextNumber)"
             nextNumber += 1
             return EditingOperation(type: .numbered, points: [firstPoint], color: selectedColor, lineWidth: lineWidth, text: text, rect: nil, textOutlined: textOutlined)
-        case .none, .crop:
+        case .none:
             return nil
         }
     }
@@ -569,6 +446,60 @@ class FloatingEditingCanvasView: NSView {
             y: min(start.y, end.y),
             width: abs(end.x - start.x),
             height: abs(end.y - start.y)
+        )
+    }
+
+    private var imageDisplayRect: CGRect {
+        guard imageSize.width > 0, imageSize.height > 0, bounds.width > 0, bounds.height > 0 else {
+            return bounds
+        }
+
+        let scale = min(bounds.width / imageSize.width, bounds.height / imageSize.height)
+        let width = imageSize.width * scale
+        let height = imageSize.height * scale
+
+        return CGRect(
+            x: bounds.midX - width / 2,
+            y: bounds.midY - height / 2,
+            width: width,
+            height: height
+        )
+    }
+
+    private var imageScale: CGFloat {
+        guard imageSize.width > 0, imageSize.height > 0 else { return 1 }
+        return min(bounds.width / imageSize.width, bounds.height / imageSize.height)
+    }
+
+    private var scaledLineWidth: CGFloat {
+        max(1, lineWidth * imageScale)
+    }
+
+    private func imagePoint(fromViewPoint point: CGPoint) -> CGPoint? {
+        let rect = imageDisplayRect
+        guard rect.contains(point), imageScale > 0 else { return nil }
+
+        return CGPoint(
+            x: (point.x - rect.minX) / imageScale,
+            y: (point.y - rect.minY) / imageScale
+        )
+    }
+
+    private func viewPoint(fromImagePoint point: CGPoint) -> CGPoint {
+        let rect = imageDisplayRect
+        return CGPoint(
+            x: rect.minX + point.x * imageScale,
+            y: rect.minY + point.y * imageScale
+        )
+    }
+
+    private func viewRect(fromImageRect rect: CGRect) -> CGRect {
+        let origin = viewPoint(fromImagePoint: rect.origin)
+        return CGRect(
+            x: origin.x,
+            y: origin.y,
+            width: rect.width * imageScale,
+            height: rect.height * imageScale
         )
     }
 

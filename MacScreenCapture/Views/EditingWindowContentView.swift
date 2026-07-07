@@ -117,7 +117,7 @@ struct EditingWindowContentView: View {
         GeometryReader { geometry in
             ZStack {
                 // 背景图片
-                Image(nsImage: screenshot)
+                Image(nsImage: editingSession.currentImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

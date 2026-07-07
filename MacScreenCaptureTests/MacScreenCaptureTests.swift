@@ -235,6 +235,17 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(source.contains("close()"))
     }
 
+    func testEditingWindowOpensFloatingAndFocused() throws {
+        let controllerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowController.swift")
+        let managerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowManager.swift")
+
+        XCTAssertTrue(controllerSource.contains("window.level = .floating"))
+        XCTAssertFalse(controllerSource.contains("window.level = .normal"))
+        XCTAssertTrue(managerSource.contains("NSApp.activate(ignoringOtherApps: true)"))
+        XCTAssertTrue(managerSource.contains("editingWindow.window?.makeKeyAndOrderFront(nil)"))
+        XCTAssertTrue(managerSource.contains("editingWindow.window?.orderFrontRegardless()"))
+    }
+
     func testRecordingPreflightExposesIShotAudioAndExportControls() throws {
         let captureManagerSource = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
         let recordingViewSource = try repositoryFileContents("MacScreenCapture/Views/RecordingView.swift")

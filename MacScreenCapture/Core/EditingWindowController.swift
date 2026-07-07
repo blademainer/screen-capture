@@ -53,9 +53,9 @@ class EditingWindowController: NSWindowController {
     private func setupWindow() {
         guard let window = window else { return }
         
-        // 窗口属性设置 - 标准窗口，不置顶
+        // 窗口属性设置 - 截图后默认置顶，确保 Esc 可以直接关闭编辑窗口
         window.title = "图片编辑"
-        window.level = .normal  // 标准窗口级别，不置顶
+        window.level = .floating
         window.backgroundColor = NSColor.windowBackgroundColor
         window.titlebarAppearsTransparent = false
         window.titleVisibility = .visible

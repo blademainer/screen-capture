@@ -24,7 +24,9 @@ class EditingWindowManager: ObservableObject {
             }
             
             editingWindow.showWindow(nil)
+            NSApp.activate(ignoringOtherApps: true)
             editingWindow.window?.makeKeyAndOrderFront(nil)
+            editingWindow.window?.orderFrontRegardless()
             
             // 添加到活动窗口列表
             self?.activeWindows.append(editingWindow)

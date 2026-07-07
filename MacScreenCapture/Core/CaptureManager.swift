@@ -574,6 +574,13 @@ class CaptureManager: ObservableObject {
         try openWebTranslation(for: text, targetLanguage: targetLanguage)
     }
 
+    @MainActor
+    func markScreenshotSaved(_ image: NSImage, at fileURL: URL) {
+        lastCapturedImage = image
+        lastSavedImageURL = fileURL
+        NotificationCenter.default.post(name: .screenshotDidSave, object: fileURL)
+    }
+
     /// 使用用户指定的 App 打开最近一次保存的截图。
     @MainActor
     func openLastScreenshotInConfiguredApp() throws {
@@ -1425,13 +1432,9 @@ class CaptureManager: ObservableObject {
 
         try finalData.write(to: fileURL)
 
-        // 更新最后保存的文件URL
         await MainActor.run {
-            lastSavedImageURL = fileURL
+            markScreenshotSaved(image, at: fileURL)
         }
-
-        // 发送通知
-        NotificationCenter.default.post(name: .screenshotDidSave, object: fileURL)
     }
 
     /// 区域截图 - 使用系统截图工具

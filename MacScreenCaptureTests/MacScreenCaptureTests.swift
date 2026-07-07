@@ -96,6 +96,29 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(uniqueName.hasPrefix("test"))
     }
 
+    @MainActor
+    func testCaptureManagerTracksSavedEditedScreenshot() throws {
+        let captureManager = CaptureManager()
+        let image = makeSolidImage(width: 16, height: 12, color: .systemPurple)
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edited-\(UUID().uuidString).png")
+        var observedURL: URL?
+        let observer = NotificationCenter.default.addObserver(
+            forName: .screenshotDidSave,
+            object: nil,
+            queue: nil
+        ) { notification in
+            observedURL = notification.object as? URL
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        captureManager.markScreenshotSaved(image, at: url)
+
+        XCTAssertEqual(observedURL, url)
+        XCTAssertEqual(captureManager.lastSavedImageURL, url)
+        XCTAssertEqual(captureManager.lastCapturedImage?.size, image.size)
+    }
+
     func testRegisteredDefaultsCoverIShotAndProCapabilities() throws {
         let defaults = UserDefaults.macScreenCaptureDefaults
 

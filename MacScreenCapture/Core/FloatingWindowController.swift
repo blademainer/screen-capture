@@ -640,6 +640,7 @@ class FloatingWindowController: NSWindowController {
 
                 // 回到主线程更新UI
                 DispatchQueue.main.async {
+                    CaptureManager.shared.markScreenshotSaved(image, at: url)
                     self.showNotification("保存成功：\(url.lastPathComponent)")
                     if FloatingWindowConfiguration.fromDefaults().closeAfterSave {
                         self.close()

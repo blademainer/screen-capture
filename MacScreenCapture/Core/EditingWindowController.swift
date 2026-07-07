@@ -195,6 +195,7 @@ class EditingWindowController: NSWindowController {
                 try data.write(to: url)
                 
                 DispatchQueue.main.async {
+                    CaptureManager.shared.markScreenshotSaved(image, at: url)
                     self.showNotification("保存成功：\(url.lastPathComponent)")
                     
                     if UserDefaults.standard.bool(forKey: "showInFinderAfterSave") {

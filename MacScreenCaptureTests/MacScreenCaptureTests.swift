@@ -314,6 +314,48 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(captureManagerSource.contains("AXWebArea"))
     }
 
+    func testScreenshotStyleAndDeviceFrameControlsStayAlignedWithIShotPro() throws {
+        let captureManagerSource = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+        let rendererSource = try repositoryFileContents("MacScreenCapture/Utils/ScreenshotStyleRenderer.swift")
+        let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")
+
+        XCTAssertTrue(settingsSource.contains("Text(\"截图美化\")"))
+        XCTAssertTrue(settingsSource.contains("Toggle(\"截图带圆角\""))
+        XCTAssertTrue(settingsSource.contains("Text(\"圆角半径:\")"))
+        XCTAssertTrue(settingsSource.contains("Toggle(\"截图带阴影\""))
+        XCTAssertTrue(settingsSource.contains("Text(\"阴影大小:\")"))
+        XCTAssertTrue(settingsSource.contains("Text(\"阴影颜色:\")"))
+        XCTAssertTrue(settingsSource.contains("Text(\"全屏带壳截图\")"))
+        XCTAssertTrue(settingsSource.contains("Text(\"外壳厚度:\")"))
+        XCTAssertTrue(settingsSource.contains("Text(\"画布留白:\")"))
+        XCTAssertTrue(settingsSource.contains("Text(\"外壳圆角:\")"))
+        XCTAssertTrue(settingsSource.contains("Text(\"外壳颜色:\")"))
+        XCTAssertTrue(settingsSource.contains("TextField(\"#141414\", text: $deviceFrameBodyColorHex)"))
+        XCTAssertTrue(settingsSource.contains("TextField(\"#000000\", text: $deviceFrameShadowColorHex)"))
+
+        XCTAssertTrue(captureManagerSource.contains("func captureDeviceFramedFullScreen()"))
+        XCTAssertTrue(captureManagerSource.contains("let image = try await captureDisplayImageWithoutSaving()"))
+        XCTAssertTrue(captureManagerSource.contains("let framedImage = renderDeviceFrame(around: image)"))
+        XCTAssertTrue(captureManagerSource.contains("finalizeCapturedImage(framedImage, forceStyle: false, showEditor: true)"))
+        XCTAssertTrue(captureManagerSource.contains("private func applyOutputStyle(to image: NSImage)"))
+        XCTAssertTrue(captureManagerSource.contains("screenshotRoundedCorners"))
+        XCTAssertTrue(captureManagerSource.contains("screenshotDropShadow"))
+        XCTAssertTrue(captureManagerSource.contains("private func renderDeviceFrame(around image: NSImage)"))
+        XCTAssertTrue(captureManagerSource.contains("deviceFrameBezelWidth"))
+        XCTAssertTrue(captureManagerSource.contains("deviceFramePadding"))
+        XCTAssertTrue(captureManagerSource.contains("deviceFrameCornerRadius"))
+        XCTAssertTrue(captureManagerSource.contains("deviceFrameShadowRadius"))
+        XCTAssertTrue(captureManagerSource.contains("deviceFrameBodyColorHex"))
+        XCTAssertTrue(captureManagerSource.contains("deviceFrameShadowColorHex"))
+
+        XCTAssertTrue(rendererSource.contains("static func applyOutputStyle(to image: NSImage, style: OutputStyle) -> NSImage"))
+        XCTAssertTrue(rendererSource.contains("renderRoundedImage(currentImage, radius: style.cornerRadius)"))
+        XCTAssertTrue(rendererSource.contains("renderShadowedImage("))
+        XCTAssertTrue(rendererSource.contains("static func renderDeviceFrame(around image: NSImage, style: DeviceFrameStyle) -> NSImage"))
+        XCTAssertTrue(rendererSource.contains("style.bodyColor.setFill()"))
+        XCTAssertFalse(rendererSource.localizedCaseInsensitiveContains("watermark"))
+    }
+
     func testOCRAndTranslationEntrypointsStayAlignedWithIShotPro() throws {
         let captureManagerSource = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
         let screenshotViewSource = try repositoryFileContents("MacScreenCapture/Views/ScreenshotView.swift")

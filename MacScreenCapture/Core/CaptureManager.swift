@@ -15,6 +15,22 @@ import ApplicationServices
 @preconcurrency import Vision
 import Translation
 
+private struct DisplayCoordinateSpace {
+    let displayID: CGDirectDisplayID
+    let captureFrame: CGRect
+    let screenFrame: CGRect
+}
+
+private extension CGRect {
+    func distanceSquared(to point: CGPoint) -> CGFloat {
+        let clampedX = min(max(point.x, minX), maxX)
+        let clampedY = min(max(point.y, minY), maxY)
+        let dx = point.x - clampedX
+        let dy = point.y - clampedY
+        return dx * dx + dy * dy
+    }
+}
+
 struct RecordingAudioDiagnostics: Sendable {
     let outputURL: URL
     let requestedSystemAudio: Bool
@@ -1608,6 +1624,22 @@ class CaptureManager: ObservableObject {
         return bounds.integral
     }
 
+    private func selectionOverlayFrame(for displayBounds: CGRect) -> CGRect {
+        let matchingScreens = NSScreen.screens
+            .map(\.frame)
+            .filter { $0.intersects(displayBounds) }
+
+        guard var frame = matchingScreens.first else {
+            return displayBounds
+        }
+
+        for screenFrame in matchingScreens.dropFirst() {
+            frame = frame.union(screenFrame)
+        }
+
+        return frame.integral
+    }
+
     @MainActor
     private func selectMultipleWindows(
         from windows: [SCWindow],
@@ -1667,13 +1699,13 @@ class CaptureManager: ObservableObject {
         }
     }
 
-    private func selectionOverlayFrame(for displayBounds: CGRect) -> CGRect {
-        let matchingScreens = NSScreen.screens
-            .map(\.frame)
-            .filter { $0.intersects(displayBounds) }
+    private func selectionOverlayFrame(for coordinateSpaces: [DisplayCoordinateSpace]) -> CGRect {
+        let matchingScreens = coordinateSpaces.map(\.screenFrame)
 
         guard var frame = matchingScreens.first else {
-            return displayBounds
+            return NSScreen.screens.map(\.frame).reduce(CGRect.null) { partial, screenFrame in
+                partial.isNull ? screenFrame : partial.union(screenFrame)
+            }.integral
         }
 
         for screenFrame in matchingScreens.dropFirst() {
@@ -1689,68 +1721,8 @@ class CaptureManager: ObservableObject {
     }
 
     private func magneticRegionForCurrentContext(in displayBounds: CGRect) -> CGRect? {
-        focusedAccessibilityWindowRegion(in: displayBounds)
+        frontmostWindowRegion(in: displayBounds)
             ?? magneticRegionUnderMouse(in: displayBounds)
-            ?? frontmostWindowRegion(in: displayBounds)
-    }
-
-    private func focusedAccessibilityWindowRegion(in displayBounds: CGRect) -> CGRect? {
-        guard AXIsProcessTrusted(),
-              let frontmostApplication = NSWorkspace.shared.frontmostApplication else {
-            return nil
-        }
-
-        let currentPID = Int(ProcessInfo.processInfo.processIdentifier)
-        let frontmostPID = Int(frontmostApplication.processIdentifier)
-        guard frontmostPID > 0, frontmostPID != currentPID else { return nil }
-
-        let appElement = AXUIElementCreateApplication(pid_t(frontmostPID))
-        if let focusedRegion = accessibilityWindowRegion(
-            from: appElement,
-            attribute: kAXFocusedWindowAttribute as String,
-            in: displayBounds
-        ) {
-            return focusedRegion
-        }
-
-        return accessibilityWindowRegion(
-            from: appElement,
-            attribute: kAXMainWindowAttribute as String,
-            in: displayBounds
-        )
-    }
-
-    private func accessibilityWindowRegion(from appElement: AXUIElement, attribute: String, in displayBounds: CGRect) -> CGRect? {
-        var windowValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(appElement, attribute as CFString, &windowValue) == .success,
-              let window = windowValue,
-              CFGetTypeID(window) == AXUIElementGetTypeID() else {
-            return nil
-        }
-
-        return accessibilityFrame(for: window as! AXUIElement, in: displayBounds)
-    }
-
-    private func accessibilityFrame(for window: AXUIElement, in displayBounds: CGRect) -> CGRect? {
-        var positionValue: CFTypeRef?
-        var sizeValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &positionValue) == .success,
-              AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &sizeValue) == .success,
-              let positionAXValue = positionValue,
-              let sizeAXValue = sizeValue,
-              CFGetTypeID(positionAXValue) == AXValueGetTypeID(),
-              CFGetTypeID(sizeAXValue) == AXValueGetTypeID() else {
-            return nil
-        }
-
-        var position = CGPoint.zero
-        var size = CGSize.zero
-        guard AXValueGetValue(positionAXValue as! AXValue, .cgPoint, &position),
-              AXValueGetValue(sizeAXValue as! AXValue, .cgSize, &size) else {
-            return nil
-        }
-
-        return clippedMagneticRegion(CGRect(origin: position, size: size), in: displayBounds)
     }
 
     private func magneticRegionUnderMouse(in displayBounds: CGRect) -> CGRect? {
@@ -1812,8 +1784,12 @@ class CaptureManager: ObservableObject {
     }
 
     @MainActor
-    private func selectScreenshotRegion(displayBounds: CGRect, initialSelection: CGRect?) async throws -> CGRect {
-        let selectionFrame = selectionOverlayFrame(for: displayBounds)
+    private func selectScreenshotRegion(
+        displayBounds: CGRect,
+        coordinateSpaces: [DisplayCoordinateSpace],
+        initialSelection: CGRect?
+    ) async throws -> CGRect {
+        let selectionFrame = selectionOverlayFrame(for: coordinateSpaces)
         guard !selectionFrame.isNull && !selectionFrame.isEmpty else {
             throw CaptureError.noDisplayAvailable
         }
@@ -1841,7 +1817,8 @@ class CaptureManager: ObservableObject {
             selectionWindow.isReleasedWhenClosed = false
 
             let overlayView = MagneticRegionSelectionView(
-                screenFrame: selectionFrame,
+                overlayFrame: selectionFrame,
+                coordinateSpaces: coordinateSpaces,
                 initialSelection: clippedInitialSelection
             ) { result in
                 guard !didResume else { return }
@@ -2280,7 +2257,8 @@ class CaptureManager: ObservableObject {
 
     @MainActor
     private func captureSelectedRegionImage(preferWindowUnderMouse: Bool) async throws -> NSImage {
-        let displayBounds = activeDisplayBounds()
+        let coordinateSpaces = activeDisplayCoordinateSpaces()
+        let displayBounds = activeDisplayBounds(from: coordinateSpaces)
         guard !displayBounds.isNull && !displayBounds.isEmpty else {
             throw CaptureError.noDisplayAvailable
         }
@@ -2288,6 +2266,7 @@ class CaptureManager: ObservableObject {
         let initialSelection = preferWindowUnderMouse ? magneticRegionForCurrentContext(in: displayBounds) : nil
         let selectedRect = try await selectScreenshotRegion(
             displayBounds: displayBounds,
+            coordinateSpaces: coordinateSpaces,
             initialSelection: initialSelection
         )
         guard selectedRect.width >= 2, selectedRect.height >= 2 else {
@@ -2295,6 +2274,45 @@ class CaptureManager: ObservableObject {
         }
 
         return try await captureFixedRegionWithScreencapture(selectedRect)
+    }
+
+    private func activeDisplayCoordinateSpaces() -> [DisplayCoordinateSpace] {
+        let screensByDisplayID: [CGDirectDisplayID: NSScreen] = Dictionary(uniqueKeysWithValues: NSScreen.screens.compactMap { screen in
+            guard let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+                return nil
+            }
+            return (displayID.uint32Value, screen)
+        })
+
+        var displayCount: UInt32 = 0
+        guard CGGetActiveDisplayList(0, nil, &displayCount) == .success, displayCount > 0 else {
+            return NSScreen.screens.enumerated().map { index, screen in
+                DisplayCoordinateSpace(displayID: CGDirectDisplayID(index), captureFrame: screen.frame, screenFrame: screen.frame)
+            }
+        }
+
+        var displayIDs = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
+        guard CGGetActiveDisplayList(displayCount, &displayIDs, &displayCount) == .success else {
+            return []
+        }
+
+        return displayIDs.compactMap { displayID in
+            let captureFrame = CGDisplayBounds(displayID)
+            guard !captureFrame.isNull && !captureFrame.isEmpty else { return nil }
+
+            let screenFrame = screensByDisplayID[displayID]?.frame ?? captureFrame
+            return DisplayCoordinateSpace(displayID: displayID, captureFrame: captureFrame.integral, screenFrame: screenFrame.integral)
+        }
+    }
+
+    private func activeDisplayBounds(from coordinateSpaces: [DisplayCoordinateSpace]) -> CGRect {
+        coordinateSpaces
+            .map(\.captureFrame)
+            .filter { !$0.isNull && !$0.isEmpty }
+            .reduce(CGRect.null) { partial, displayFrame in
+                partial.isNull ? displayFrame : partial.union(displayFrame)
+            }
+            .integral
     }
 
     private func activeDisplayBounds() -> CGRect {
@@ -3132,7 +3150,8 @@ final class ScreenshotTranslationWindowController: NSWindowController {
 
 @available(macOS 12.3, *)
 final class MagneticRegionSelectionView: NSView {
-    private let screenFrame: CGRect
+    private let overlayFrame: CGRect
+    private let coordinateSpaces: [DisplayCoordinateSpace]
     private let completion: (Result<CGRect, Error>) -> Void
     private var selectedQuartzRect: CGRect?
     private var startPoint: CGPoint?
@@ -3141,15 +3160,17 @@ final class MagneticRegionSelectionView: NSView {
     private var mouseDownStartedInSelection = false
     private var didComplete = false
 
-    init(
-        screenFrame: CGRect,
+    fileprivate init(
+        overlayFrame: CGRect,
+        coordinateSpaces: [DisplayCoordinateSpace],
         initialSelection: CGRect?,
         completion: @escaping (Result<CGRect, Error>) -> Void
     ) {
-        self.screenFrame = screenFrame
+        self.overlayFrame = overlayFrame
+        self.coordinateSpaces = coordinateSpaces
         self.selectedQuartzRect = initialSelection
         self.completion = completion
-        super.init(frame: NSRect(origin: .zero, size: screenFrame.size))
+        super.init(frame: NSRect(origin: .zero, size: overlayFrame.size))
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
         addTrackingArea(NSTrackingArea(
@@ -3271,23 +3292,76 @@ final class MagneticRegionSelectionView: NSView {
             y: min(start.y, end.y),
             width: abs(end.x - start.x),
             height: abs(end.y - start.y)
-        ).intersection(screenFrame).integral
+        )
+        .intersection(captureFrame)
+        .integral
     }
 
     private func quartzPoint(fromViewPoint point: CGPoint) -> CGPoint {
-        CGPoint(
-            x: screenFrame.minX + point.x,
-            y: screenFrame.minY + (screenFrame.height - point.y)
+        let screenPoint = CGPoint(x: overlayFrame.minX + point.x, y: overlayFrame.minY + point.y)
+        guard let coordinateSpace = coordinateSpace(containingScreenPoint: screenPoint) else {
+            return CGPoint(
+                x: captureFrame.minX + point.x,
+                y: captureFrame.minY + (overlayFrame.height - point.y)
+            )
+        }
+
+        return CGPoint(
+            x: coordinateSpace.captureFrame.minX + (screenPoint.x - coordinateSpace.screenFrame.minX),
+            y: coordinateSpace.captureFrame.minY + (coordinateSpace.screenFrame.maxY - screenPoint.y)
         )
     }
 
     private func viewRect(for quartzRect: CGRect) -> CGRect {
-        CGRect(
-            x: quartzRect.minX - screenFrame.minX,
-            y: screenFrame.height - (quartzRect.maxY - screenFrame.minY),
-            width: quartzRect.width,
-            height: quartzRect.height
+        guard let coordinateSpace = coordinateSpace(forCaptureRect: quartzRect) else {
+            return CGRect(
+                x: quartzRect.minX - captureFrame.minX,
+                y: overlayFrame.height - (quartzRect.maxY - captureFrame.minY),
+                width: quartzRect.width,
+                height: quartzRect.height
+            )
+        }
+
+        let rect = quartzRect.intersection(coordinateSpace.captureFrame)
+        let screenRect = CGRect(
+            x: coordinateSpace.screenFrame.minX + (rect.minX - coordinateSpace.captureFrame.minX),
+            y: coordinateSpace.screenFrame.maxY - (rect.maxY - coordinateSpace.captureFrame.minY),
+            width: rect.width,
+            height: rect.height
         )
+
+        return CGRect(
+            x: screenRect.minX - overlayFrame.minX,
+            y: screenRect.minY - overlayFrame.minY,
+            width: screenRect.width,
+            height: screenRect.height
+        )
+    }
+
+    private var captureFrame: CGRect {
+        coordinateSpaces
+            .map(\.captureFrame)
+            .reduce(CGRect.null) { partial, displayFrame in
+                partial.isNull ? displayFrame : partial.union(displayFrame)
+            }
+    }
+
+    private func coordinateSpace(containingScreenPoint point: CGPoint) -> DisplayCoordinateSpace? {
+        coordinateSpaces.first { $0.screenFrame.contains(point) }
+            ?? coordinateSpaces.min { left, right in
+                left.screenFrame.distanceSquared(to: point) < right.screenFrame.distanceSquared(to: point)
+            }
+    }
+
+    private func coordinateSpace(forCaptureRect rect: CGRect) -> DisplayCoordinateSpace? {
+        coordinateSpaces
+            .compactMap { coordinateSpace -> (space: DisplayCoordinateSpace, area: CGFloat)? in
+                let intersection = rect.intersection(coordinateSpace.captureFrame)
+                guard intersection.width > 0, intersection.height > 0 else { return nil }
+                return (coordinateSpace, intersection.width * intersection.height)
+            }
+            .max(by: { $0.area < $1.area })?
+            .space
     }
 
     private func drawInstruction(hasMagneticSelection: Bool) {

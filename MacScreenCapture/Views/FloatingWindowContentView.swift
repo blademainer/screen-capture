@@ -206,6 +206,8 @@ struct TraditionalEditingCanvas: NSViewRepresentable {
 
     func updateNSView(_ nsView: FloatingEditingCanvasView, context: Context) {
         nsView.imageSize = editingSession.currentImage.size
+        nsView.editingSession = editingSession
+        nsView.syncResetRevision(editingSession.resetRevision)
         nsView.selectedTool = selectedTool
         nsView.selectedColor = NSColor(selectedColor)
         nsView.lineWidth = lineWidth
@@ -252,6 +254,7 @@ class FloatingEditingCanvasView: NSView {
     private var movingOperationID: UUID?
     private var movingStartPoint: CGPoint?
     private var originalMovingOperation: EditingOperation?
+    private var observedResetRevision = 0
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -270,6 +273,21 @@ class FloatingEditingCanvasView: NSView {
 
     private static func defaultNumberStart() -> Int {
         max(1, UserDefaults.standard.integer(forKey: "numberedAnnotationStart"))
+    }
+
+    func syncResetRevision(_ revision: Int) {
+        guard revision != observedResetRevision else { return }
+        observedResetRevision = revision
+        cancelActiveInteraction()
+        needsDisplay = true
+    }
+
+    private func cancelActiveInteraction() {
+        currentPoints.removeAll()
+        isDrawing = false
+        movingOperationID = nil
+        movingStartPoint = nil
+        originalMovingOperation = nil
     }
 
     override func draw(_ dirtyRect: NSRect) {

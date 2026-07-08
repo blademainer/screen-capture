@@ -8,6 +8,7 @@ struct EditingWindowContentView: View {
     let onSave: (NSImage) -> Void
     let onCopy: (NSImage) -> Void
     let onShare: (NSImage) -> Void
+    let onClear: () -> Void
     let onClose: () -> Void
     
     @State private var selectedTool: EditingTool = .none
@@ -171,15 +172,13 @@ struct EditingWindowContentView: View {
             Button("分享", action: { onShare(generateFinalImage()) })
                 .buttonStyle(.bordered)
             
-            Button("清除所有", action: {
-                editingSession.clear()
-            })
+            Button("清除", action: clearAllEdits)
                 .buttonStyle(.bordered)
                 .foregroundColor(.red)
             
             Spacer()
             
-            Button("关闭", action: onClose)
+            Button("退出", action: onClose)
                 .buttonStyle(.bordered)
                 .keyboardShortcut("w", modifiers: .command)
         }
@@ -191,6 +190,12 @@ struct EditingWindowContentView: View {
             isToolbarVisible.toggle()
             isActionBarVisible.toggle()
         }
+    }
+
+    private func clearAllEdits() {
+        selectedTool = .none
+        isEditing = false
+        onClear()
     }
     
     private func generateFinalImage() -> NSImage {
@@ -206,6 +211,7 @@ struct EditingWindowContentView: View {
         onSave: { _ in },
         onCopy: { _ in },
         onShare: { _ in },
+        onClear: { },
         onClose: { }
     )
     .frame(width: 700, height: 600)

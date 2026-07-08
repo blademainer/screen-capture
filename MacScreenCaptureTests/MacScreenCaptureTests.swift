@@ -275,6 +275,32 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(source.contains("TraditionalEditingCanvas("))
     }
 
+    func testEditingWindowClearAndCloseActionsAreControllerBacked() throws {
+        let contentSource = try repositoryFileContents("MacScreenCapture/Views/EditingWindowContentView.swift")
+        let controllerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowController.swift")
+        let canvasSource = try repositoryFileContents("MacScreenCapture/Views/FloatingWindowContentView.swift")
+        let sessionSource = try repositoryFileContents("MacScreenCapture/Core/FloatingWindowController.swift")
+
+        XCTAssertTrue(contentSource.contains("let onClear: () -> Void"))
+        XCTAssertTrue(contentSource.contains("Button(\"清除\", action: clearAllEdits)"))
+        XCTAssertTrue(contentSource.contains("Button(\"退出\", action: onClose)"))
+        XCTAssertTrue(contentSource.contains("private func clearAllEdits()"))
+        XCTAssertTrue(contentSource.contains("selectedTool = .none"))
+        XCTAssertTrue(contentSource.contains("onClear()"))
+        XCTAssertTrue(controllerSource.contains("onClear: { [weak self] in"))
+        XCTAssertTrue(controllerSource.contains("self?.clearEditing()"))
+        XCTAssertTrue(controllerSource.contains("private func clearEditing()"))
+        XCTAssertTrue(controllerSource.contains("self?.editingSession.clear()"))
+        XCTAssertTrue(controllerSource.contains("private func closeEditingWindow()"))
+        XCTAssertTrue(controllerSource.contains("window.performClose(nil)"))
+        XCTAssertTrue(controllerSource.contains("window.close()"))
+        XCTAssertTrue(canvasSource.contains("nsView.syncResetRevision(editingSession.resetRevision)"))
+        XCTAssertTrue(canvasSource.contains("func syncResetRevision(_ revision: Int)"))
+        XCTAssertTrue(canvasSource.contains("private func cancelActiveInteraction()"))
+        XCTAssertTrue(sessionSource.contains("@Published var resetRevision = 0"))
+        XCTAssertTrue(sessionSource.contains("resetRevision += 1"))
+    }
+
     func testRecordingPreflightExposesIShotAudioAndExportControls() throws {
         let captureManagerSource = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
         let recordingViewSource = try repositoryFileContents("MacScreenCapture/Views/RecordingView.swift")
@@ -1011,6 +1037,30 @@ final class MacScreenCaptureTests: XCTestCase {
 
         XCTAssertTrue(containsRedMarker)
         XCTAssertTrue(containsWhiteNumberOrBorder)
+    }
+
+    func testImageEditingSessionClearResetsImageAndInteractionRevision() throws {
+        let image = makeSolidImage(width: 90, height: 90, color: .white)
+        let session = ImageEditingSession(originalImage: image)
+
+        session.addOperation(EditingOperation(
+            type: .rectangle,
+            color: .systemRed,
+            lineWidth: 6,
+            rect: CGRect(x: 10, y: 10, width: 50, height: 40)
+        ))
+
+        XCTAssertEqual(session.operations.count, 1)
+        XCTAssertTrue(session.canUndo)
+        XCTAssertEqual(session.resetRevision, 0)
+
+        session.clear()
+
+        XCTAssertTrue(session.operations.isEmpty)
+        XCTAssertFalse(session.canUndo)
+        XCTAssertFalse(session.canRedo)
+        XCTAssertTrue(session.currentImage === image)
+        XCTAssertEqual(session.resetRevision, 1)
     }
 
     func testImageEditingSessionRendersOutlinedTextIntoOutputImage() throws {

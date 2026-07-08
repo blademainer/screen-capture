@@ -101,8 +101,11 @@ class EditingWindowController: NSWindowController {
             onShare: { [weak self] editedImage in
                 self?.shareImage(editedImage)
             },
+            onClear: { [weak self] in
+                self?.clearEditing()
+            },
             onClose: { [weak self] in
-                self?.close()
+                self?.closeEditingWindow()
             }
         )
         
@@ -145,6 +148,27 @@ class EditingWindowController: NSWindowController {
         
         let sharingService = NSSharingServicePicker(items: [image])
         sharingService.show(relativeTo: .zero, of: window.contentView!, preferredEdge: .minY)
+    }
+
+    private func clearEditing() {
+        DispatchQueue.main.async { [weak self] in
+            self?.editingSession.clear()
+        }
+    }
+
+    private func closeEditingWindow() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+
+            if let window = self.window {
+                window.performClose(nil)
+                if window.isVisible {
+                    window.close()
+                }
+            } else {
+                self.close()
+            }
+        }
     }
     
     private func writeImage(_ image: NSImage, to url: URL) {

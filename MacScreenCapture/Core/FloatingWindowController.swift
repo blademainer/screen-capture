@@ -166,6 +166,7 @@ struct CodableColor: Codable {
 class ImageEditingSession: ObservableObject {
     @Published var operations: [EditingOperation] = []
     @Published var currentImage: NSImage
+    @Published var resetRevision = 0
 
     private let originalImage: NSImage
     private var undoStack: [EditingOperation] = []
@@ -218,6 +219,7 @@ class ImageEditingSession: ObservableObject {
         undoStack.removeAll()
         redoStack.removeAll()
         currentImage = originalImage
+        resetRevision += 1
     }
 
     private func updateCurrentImage() {

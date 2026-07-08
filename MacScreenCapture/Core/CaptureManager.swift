@@ -137,7 +137,7 @@ class CaptureManager: ObservableObject {
     private var recordingStartTime: Date?
     private var securityScopedURL: URL?
     private var colorSampler: NSColorSampler?
-    private var activeRegionSelectionWindow: NSWindow?
+    private var activeRegionSelectionWindows: [NSWindow] = []
 
     private struct ScrollingCaptureTarget {
         let display: SCDisplay
@@ -1789,56 +1789,71 @@ class CaptureManager: ObservableObject {
         magneticCandidates: [MagneticWindowCandidate],
         initialSelection: CGRect?
     ) async throws -> CGRect {
-        let selectionFrame = selectionOverlayFrame(for: coordinateSpaces)
-        guard !selectionFrame.isNull && !selectionFrame.isEmpty else {
+        let selectionFrames = coordinateSpaces
+            .map(\.screenFrame)
+            .filter { !$0.isNull && !$0.isEmpty }
+
+        guard !selectionFrames.isEmpty else {
             throw CaptureError.noDisplayAvailable
         }
 
         let clippedInitialSelection = initialSelection?
             .intersection(displayBounds)
-            .intersection(selectionFrame)
             .integral
 
         return try await withCheckedThrowingContinuation { continuation in
             var didResume = false
-            let selectionWindow = NSWindow(
-                contentRect: selectionFrame,
-                styleMask: [.borderless],
-                backing: .buffered,
-                defer: false
-            )
+            var selectionWindows: [NSWindow] = []
 
-            selectionWindow.level = .screenSaver
-            selectionWindow.backgroundColor = .clear
-            selectionWindow.isOpaque = false
-            selectionWindow.hasShadow = false
-            selectionWindow.ignoresMouseEvents = false
-            selectionWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            selectionWindow.isReleasedWhenClosed = false
-
-            let overlayView = MagneticRegionSelectionView(
-                overlayFrame: selectionFrame,
-                coordinateSpaces: coordinateSpaces,
-                magneticCandidates: magneticCandidates,
-                initialSelection: clippedInitialSelection
-            ) { result in
+            let completeSelection: (Result<CGRect, Error>) -> Void = { result in
                 guard !didResume else { return }
                 didResume = true
-                selectionWindow.orderOut(nil)
+                selectionWindows.forEach { $0.orderOut(nil) }
                 continuation.resume(with: result)
 
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self, selectionWindow] in
-                    selectionWindow.contentView = nil
-                    selectionWindow.close()
-                    if self?.activeRegionSelectionWindow === selectionWindow {
-                        self?.activeRegionSelectionWindow = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self, selectionWindows] in
+                    selectionWindows.forEach { window in
+                        window.contentView = nil
+                        window.close()
+                    }
+                    self?.activeRegionSelectionWindows.removeAll { activeWindow in
+                        selectionWindows.contains { $0 === activeWindow }
                     }
                 }
             }
 
-            selectionWindow.contentView = overlayView
-            activeRegionSelectionWindow = selectionWindow
-            selectionWindow.makeKeyAndOrderFront(nil)
+            for selectionFrame in selectionFrames {
+                let selectionWindow = RegionSelectionWindow(
+                    contentRect: selectionFrame,
+                    styleMask: [.borderless],
+                    backing: .buffered,
+                    defer: false
+                )
+
+                selectionWindow.level = .screenSaver
+                selectionWindow.backgroundColor = .clear
+                selectionWindow.isOpaque = false
+                selectionWindow.hasShadow = false
+                selectionWindow.ignoresMouseEvents = false
+                selectionWindow.acceptsMouseMovedEvents = true
+                selectionWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+                selectionWindow.isReleasedWhenClosed = false
+
+                let overlayView = MagneticRegionSelectionView(
+                    overlayFrame: selectionFrame,
+                    coordinateSpaces: coordinateSpaces,
+                    magneticCandidates: magneticCandidates,
+                    initialSelection: clippedInitialSelection,
+                    completion: completeSelection
+                )
+
+                selectionWindow.contentView = overlayView
+                selectionWindows.append(selectionWindow)
+            }
+
+            activeRegionSelectionWindows = selectionWindows
+            selectionWindows.forEach { $0.orderFrontRegardless() }
+            selectionWindows.last?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         }
     }
@@ -3152,6 +3167,12 @@ final class ScreenshotTranslationWindowController: NSWindowController {
 // MARK: - Magnetic Region Selection
 
 @available(macOS 12.3, *)
+private final class RegionSelectionWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
+@available(macOS 12.3, *)
 final class MagneticRegionSelectionView: NSView {
     private let overlayFrame: CGRect
     private let coordinateSpaces: [DisplayCoordinateSpace]
@@ -3163,6 +3184,7 @@ final class MagneticRegionSelectionView: NSView {
     private var didDrag = false
     private var mouseDownStartedInSelection = false
     private var didComplete = false
+    private var localEventMonitor: Any?
 
     fileprivate init(
         overlayFrame: CGRect,
@@ -3190,11 +3212,20 @@ final class MagneticRegionSelectionView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    deinit {
+        stopEventMonitoring()
+    }
+
     override var acceptsFirstResponder: Bool { true }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        window?.makeFirstResponder(self)
+        if window == nil {
+            stopEventMonitoring()
+        } else {
+            window?.makeFirstResponder(self)
+            startEventMonitoring()
+        }
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -3291,9 +3322,39 @@ final class MagneticRegionSelectionView: NSView {
     private func complete(_ result: Result<CGRect, Error>) {
         guard !didComplete else { return }
         didComplete = true
+        stopEventMonitoring()
 
         DispatchQueue.main.async { [completion] in
             completion(result)
+        }
+    }
+
+    private func startEventMonitoring() {
+        guard localEventMonitor == nil else { return }
+
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .mouseMoved, .leftMouseDown]) { [weak self] event in
+            guard let self else { return event }
+
+            switch event.type {
+            case .keyDown where event.keyCode == 53:
+                self.complete(.failure(CaptureError.regionSelectionCancelled))
+                return nil
+            case .mouseMoved:
+                self.updateMagneticSelection(atScreenPoint: NSEvent.mouseLocation)
+                return event
+            case .leftMouseDown:
+                self.updateMagneticSelection(atScreenPoint: NSEvent.mouseLocation)
+                return event
+            default:
+                return event
+            }
+        }
+    }
+
+    private func stopEventMonitoring() {
+        if let localEventMonitor {
+            NSEvent.removeMonitor(localEventMonitor)
+            self.localEventMonitor = nil
         }
     }
 
@@ -3310,6 +3371,11 @@ final class MagneticRegionSelectionView: NSView {
 
         selectedQuartzRect = newSelection
         needsDisplay = true
+    }
+
+    private func updateMagneticSelection(atScreenPoint screenPoint: CGPoint) {
+        let localPoint = CGPoint(x: screenPoint.x - overlayFrame.minX, y: screenPoint.y - overlayFrame.minY)
+        updateMagneticSelection(at: localPoint)
     }
 
     private func normalizedQuartzRect(from startPoint: CGPoint, to endPoint: CGPoint) -> CGRect {

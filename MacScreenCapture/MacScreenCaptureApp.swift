@@ -21,7 +21,7 @@ struct MacScreenCaptureApp: App {
     }
     
     var body: some Scene {
-        WindowGroup {
+        WindowGroup("Mac Screen Capture") {
             ContentView()
                 .environmentObject(permissionManager)
                 .environmentObject(captureManager)
@@ -37,7 +37,6 @@ struct MacScreenCaptureApp: App {
                     }
                 }
         }
-        .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         
         // 菜单栏应用

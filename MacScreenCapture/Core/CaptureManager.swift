@@ -155,20 +155,8 @@ class CaptureManager: ObservableObject {
 
     // MARK: - Configuration
     private var outputDirectory: URL {
-        // 首先尝试使用安全作用域书签
-        if let bookmarkData = UserDefaults.standard.data(forKey: "defaultSaveLocationBookmark") {
-            do {
-                var isStale = false
-                let url = try URL(resolvingBookmarkData: bookmarkData, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale)
-
-                if !isStale {
-                    // 确保目录存在
-                    try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-                    return url
-                }
-            } catch {
-                print("解析书签失败: \(error)")
-            }
+        if let bookmark = resolveDefaultSaveLocationBookmark() {
+            return bookmark.url
         }
 
         // 回退到字符串路径（用于向后兼容）
@@ -190,26 +178,41 @@ class CaptureManager: ObservableObject {
 
     /// 获取安全作用域访问的输出目录
     private func getSecureOutputDirectory() -> URL? {
-        // 首先尝试使用安全作用域书签
-        if let bookmarkData = UserDefaults.standard.data(forKey: "defaultSaveLocationBookmark") {
+        if let bookmark = resolveDefaultSaveLocationBookmark(startAccessingSecurityScope: true) {
+            return bookmark.url
+        }
+        return nil
+    }
+
+    private func resolveDefaultSaveLocationBookmark(startAccessingSecurityScope: Bool = false) -> (url: URL, needsSecurityScope: Bool)? {
+        guard let bookmarkData = UserDefaults.standard.data(forKey: "defaultSaveLocationBookmark") else {
+            return nil
+        }
+
+        let resolutionOptions: [URL.BookmarkResolutionOptions] = [.withSecurityScope, []]
+        for options in resolutionOptions {
             do {
                 var isStale = false
-                let url = try URL(resolvingBookmarkData: bookmarkData, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale)
+                let url = try URL(resolvingBookmarkData: bookmarkData, options: options, relativeTo: nil, bookmarkDataIsStale: &isStale)
+                guard !isStale else { continue }
 
-                if !isStale {
-                    // 开始访问安全作用域资源
-                    if url.startAccessingSecurityScopedResource() {
-                        // 确保目录存在
-                        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-                        return url
-                    } else {
-                        print("无法访问安全作用域资源: \(url.path)")
+                let isSecurityScoped = options.contains(.withSecurityScope)
+                var needsSecurityScope = false
+                if startAccessingSecurityScope && isSecurityScoped {
+                    needsSecurityScope = url.startAccessingSecurityScopedResource()
+                    if !needsSecurityScope {
+                        continue
                     }
                 }
+
+                try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+                return (url, needsSecurityScope)
             } catch {
-                print("解析书签失败: \(error)")
+                continue
             }
         }
+
+        print("解析保存位置书签失败")
         return nil
     }
 
@@ -1402,31 +1405,20 @@ class CaptureManager: ObservableObject {
 
         let fileName = "Screenshot_\(DateFormatter.fileNameFormatter.string(from: Date())).\(fileExtension)"
 
-        // 使用安全作用域资源访问
-        var securityScopedURL: URL?
+        var bookmarkedURL: URL?
         var needsSecurityScope = false
 
-        // 检查是否有安全作用域书签
-        if let bookmarkData = UserDefaults.standard.data(forKey: "defaultSaveLocationBookmark") {
-            do {
-                var isStale = false
-                let url = try URL(resolvingBookmarkData: bookmarkData, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale)
-
-                if !isStale && url.startAccessingSecurityScopedResource() {
-                    securityScopedURL = url
-                    needsSecurityScope = true
-                }
-            } catch {
-                print("解析书签失败: \(error)")
-            }
+        if let bookmark = resolveDefaultSaveLocationBookmark(startAccessingSecurityScope: true) {
+            bookmarkedURL = bookmark.url
+            needsSecurityScope = bookmark.needsSecurityScope
         }
 
-        let baseDirectory = securityScopedURL ?? outputDirectory
+        let baseDirectory = bookmarkedURL ?? outputDirectory
         let fileURL = baseDirectory.appendingPathComponent(fileName)
 
         defer {
             // 确保在方法结束时停止访问安全作用域资源
-            if needsSecurityScope, let scopedURL = securityScopedURL {
+            if needsSecurityScope, let scopedURL = bookmarkedURL {
                 scopedURL.stopAccessingSecurityScopedResource()
             }
         }

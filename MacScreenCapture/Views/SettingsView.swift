@@ -85,6 +85,7 @@ struct SettingsView: View {
     @State private var translationModelStatusMessage = ""
     @State private var annotationTemplateTransferMessage = ""
     @State private var generalSettingsMessage = ""
+    @State private var settingsWindow: NSWindow?
 
     var body: some View {
         ScrollView {
@@ -129,6 +130,12 @@ struct SettingsView: View {
             }
             .padding()
         }
+        .background(
+            WindowAccessor { window in
+                settingsWindow = window
+            }
+            .frame(width: 0, height: 0)
+        )
     }
 
     @ViewBuilder
@@ -193,10 +200,9 @@ struct SettingsView: View {
                 HStack {
                     Text("保存位置:")
                     Spacer()
-                    Button(defaultSaveLocation.isEmpty ? "选择文件夹" : URL(fileURLWithPath: defaultSaveLocation).lastPathComponent) {
+                    SettingsActionButton(title: defaultSaveLocation.isEmpty ? "选择文件夹" : URL(fileURLWithPath: defaultSaveLocation).lastPathComponent) {
                         selectSaveLocation()
                     }
-                    .buttonStyle(.bordered)
                 }
 
                 Stepper("延时截图: \(delayedScreenshotSeconds) 秒", value: $delayedScreenshotSeconds, in: 1...30)
@@ -471,10 +477,9 @@ struct SettingsView: View {
                 HStack {
                     Text("指定 App 打开:")
                     Spacer()
-                    Button(openAfterCaptureAppPath.isEmpty ? "选择 App" : URL(fileURLWithPath: openAfterCaptureAppPath).deletingPathExtension().lastPathComponent) {
+                    SettingsActionButton(title: openAfterCaptureAppPath.isEmpty ? "选择 App" : URL(fileURLWithPath: openAfterCaptureAppPath).deletingPathExtension().lastPathComponent) {
                         selectOpenAfterCaptureApp()
                     }
-                    .buttonStyle(.bordered)
 
                     if !openAfterCaptureAppPath.isEmpty {
                         Button("清除") {
@@ -748,26 +753,9 @@ struct SettingsView: View {
         panel.message = "选择截图保存位置"
         panel.prompt = "选择"
 
-        if runSettingsPanel(panel) == .OK {
-            if let url = panel.url {
-                let didAccessSecurityScope = url.startAccessingSecurityScopedResource()
-                defer {
-                    if didAccessSecurityScope {
-                        url.stopAccessingSecurityScopedResource()
-                    }
-                }
-
-                do {
-                    let bookmarkData = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
-                    UserDefaults.standard.set(bookmarkData, forKey: "defaultSaveLocationBookmark")
-                    print("成功保存文件夹权限书签: \(url.path)")
-                } catch {
-                    print("创建书签失败: \(error)")
-                }
-
-                UserDefaults.standard.set(url.path, forKey: "defaultSaveLocation")
-                defaultSaveLocation = url.path
-            }
+        presentSettingsPanel(panel) { response in
+            guard response == .OK, let url = panel.url else { return }
+            persistDefaultSaveLocation(url)
         }
     }
 
@@ -781,7 +769,8 @@ struct SettingsView: View {
         panel.message = "选择用于打开截图的应用"
         panel.prompt = "选择"
 
-        if runSettingsPanel(panel) == .OK, let url = panel.url {
+        presentSettingsPanel(panel) { response in
+            guard response == .OK, let url = panel.url else { return }
             openAfterCaptureAppPath = url.path
         }
     }
@@ -848,23 +837,25 @@ struct SettingsView: View {
         panel.message = "导出 3 套自定义标注模板"
         panel.prompt = "导出"
 
-        guard runSettingsPanel(panel) == .OK, let url = panel.url else { return }
+        presentSettingsPanel(panel) { response in
+            guard response == .OK, let url = panel.url else { return }
 
-        let payload = AnnotationTemplateExport(
-            version: 1,
-            templates: [
-                annotationTemplatePayload(name: "自定义 1", colorHex: annotationCustomColorHex, lineWidth: annotationCustomLineWidth, fontSize: annotationCustomFontSize, textOutlined: annotationCustomTextOutlined),
-                annotationTemplatePayload(name: "自定义 2", colorHex: annotationCustom2ColorHex, lineWidth: annotationCustom2LineWidth, fontSize: annotationCustom2FontSize, textOutlined: annotationCustom2TextOutlined),
-                annotationTemplatePayload(name: "自定义 3", colorHex: annotationCustom3ColorHex, lineWidth: annotationCustom3LineWidth, fontSize: annotationCustom3FontSize, textOutlined: annotationCustom3TextOutlined)
-            ]
-        )
+            let payload = AnnotationTemplateExport(
+                version: 1,
+                templates: [
+                    annotationTemplatePayload(name: "自定义 1", colorHex: annotationCustomColorHex, lineWidth: annotationCustomLineWidth, fontSize: annotationCustomFontSize, textOutlined: annotationCustomTextOutlined),
+                    annotationTemplatePayload(name: "自定义 2", colorHex: annotationCustom2ColorHex, lineWidth: annotationCustom2LineWidth, fontSize: annotationCustom2FontSize, textOutlined: annotationCustom2TextOutlined),
+                    annotationTemplatePayload(name: "自定义 3", colorHex: annotationCustom3ColorHex, lineWidth: annotationCustom3LineWidth, fontSize: annotationCustom3FontSize, textOutlined: annotationCustom3TextOutlined)
+                ]
+            )
 
-        do {
-            let data = try JSONEncoder().encode(payload)
-            try data.write(to: url, options: .atomic)
-            annotationTemplateTransferMessage = "已导出标注模板。"
-        } catch {
-            annotationTemplateTransferMessage = "导出失败：\(error.localizedDescription)"
+            do {
+                let data = try JSONEncoder().encode(payload)
+                try data.write(to: url, options: .atomic)
+                annotationTemplateTransferMessage = "已导出标注模板。"
+            } catch {
+                annotationTemplateTransferMessage = "导出失败：\(error.localizedDescription)"
+            }
         }
     }
 
@@ -877,23 +868,25 @@ struct SettingsView: View {
         panel.message = "导入自定义标注模板"
         panel.prompt = "导入"
 
-        guard runSettingsPanel(panel) == .OK, let url = panel.url else { return }
+        presentSettingsPanel(panel) { response in
+            guard response == .OK, let url = panel.url else { return }
 
-        do {
-            let data = try Data(contentsOf: url)
-            let payload = try JSONDecoder().decode(AnnotationTemplateExport.self, from: data)
-            guard payload.templates.count >= 3 else {
-                annotationTemplateTransferMessage = "导入失败：模板文件至少需要 3 套模板。"
-                return
+            do {
+                let data = try Data(contentsOf: url)
+                let payload = try JSONDecoder().decode(AnnotationTemplateExport.self, from: data)
+                guard payload.templates.count >= 3 else {
+                    annotationTemplateTransferMessage = "导入失败：模板文件至少需要 3 套模板。"
+                    return
+                }
+
+                applyAnnotationTemplate(payload.templates[0], to: .custom)
+                applyAnnotationTemplate(payload.templates[1], to: .custom2)
+                applyAnnotationTemplate(payload.templates[2], to: .custom3)
+                applyAnnotationPreset(annotationStylePreset)
+                annotationTemplateTransferMessage = "已导入标注模板。"
+            } catch {
+                annotationTemplateTransferMessage = "导入失败：\(error.localizedDescription)"
             }
-
-            applyAnnotationTemplate(payload.templates[0], to: .custom)
-            applyAnnotationTemplate(payload.templates[1], to: .custom2)
-            applyAnnotationTemplate(payload.templates[2], to: .custom3)
-            applyAnnotationPreset(annotationStylePreset)
-            annotationTemplateTransferMessage = "已导入标注模板。"
-        } catch {
-            annotationTemplateTransferMessage = "导入失败：\(error.localizedDescription)"
         }
     }
 
@@ -980,11 +973,30 @@ struct SettingsView: View {
         }
     }
 
-    private func runSettingsPanel(_ panel: NSSavePanel) -> NSApplication.ModalResponse {
+    private func persistDefaultSaveLocation(_ url: URL) {
+        do {
+            let bookmarkData = try url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+            UserDefaults.standard.set(bookmarkData, forKey: "defaultSaveLocationBookmark")
+            print("成功保存文件夹书签: \(url.path)")
+        } catch {
+            print("创建书签失败: \(error)")
+        }
+
+        UserDefaults.standard.set(url.path, forKey: "defaultSaveLocation")
+        defaultSaveLocation = url.path
+    }
+
+    private func presentSettingsPanel(_ panel: NSSavePanel, completion: @escaping (NSApplication.ModalResponse) -> Void) {
         NSApp.activate(ignoringOtherApps: true)
-        panel.level = .floating
-        panel.orderFrontRegardless()
-        return panel.runModal()
+
+        if let window = settingsWindow ?? NSApp.keyWindow ?? NSApp.mainWindow {
+            NSApp.setActivationPolicy(.regular)
+            window.makeKeyAndOrderFront(nil)
+            panel.beginSheetModal(for: window, completionHandler: completion)
+        } else {
+            panel.level = .modalPanel
+            completion(panel.runModal())
+        }
     }
 
     private func openExternalURL(_ urlString: String) {
@@ -1004,6 +1016,41 @@ private struct AnnotationTemplatePayload: Codable {
     let lineWidth: Double
     let fontSize: Double?
     let textOutlined: Bool
+}
+
+private struct SettingsActionButton: NSViewRepresentable {
+    let title: String
+    let action: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(action: action)
+    }
+
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton(title: title, target: context.coordinator, action: #selector(Coordinator.performAction))
+        button.bezelStyle = .rounded
+        button.setButtonType(.momentaryPushIn)
+        button.controlSize = .regular
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        return button
+    }
+
+    func updateNSView(_ nsView: NSButton, context: Context) {
+        nsView.title = title
+        context.coordinator.action = action
+    }
+
+    final class Coordinator: NSObject {
+        var action: () -> Void
+
+        init(action: @escaping () -> Void) {
+            self.action = action
+        }
+
+        @objc func performAction() {
+            action()
+        }
+    }
 }
 
 struct PermissionStatusRow: View {

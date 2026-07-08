@@ -52,6 +52,7 @@ extension UserDefaults {
             "scrollingCaptureStopWhenUnchanged": true,
             "screenshotRoundedCorners": false,
             "screenshotDropShadow": false,
+            "showCursorInScreenshots": false,
             "screenshotCornerRadius": 18.0,
             "screenshotShadowRadius": 24.0,
             "screenshotShadowColorHex": "#000000",

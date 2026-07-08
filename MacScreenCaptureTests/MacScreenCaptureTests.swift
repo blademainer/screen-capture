@@ -354,6 +354,7 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(settingsSource.contains("Picker(\"质量\", selection: $recordingQuality)"))
         XCTAssertTrue(settingsSource.contains("Toggle(\"录制系统音频\", isOn: $includeSystemAudio)"))
         XCTAssertTrue(settingsSource.contains("Toggle(\"录制麦克风\", isOn: $includeMicrophone)"))
+        XCTAssertTrue(settingsSource.contains("Toggle(\"录屏显示鼠标指针\", isOn: $showCursor)"))
         XCTAssertTrue(settingsSource.contains("Stepper(\"开录延时:"))
     }
 
@@ -517,6 +518,9 @@ final class MacScreenCaptureTests: XCTestCase {
         let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")
 
         XCTAssertTrue(settingsSource.contains("Text(\"截图美化\")"))
+        XCTAssertTrue(settingsSource.contains("@AppStorage(\"showCursorInScreenshots\")"))
+        XCTAssertTrue(settingsSource.contains("Toggle(\"截图包含鼠标指针\", isOn: $showCursorInScreenshots)"))
+        XCTAssertTrue(captureManagerSource.contains("configuration.showsCursor = UserDefaults.standard.bool(forKey: \"showCursorInScreenshots\")"))
         XCTAssertTrue(settingsSource.contains("Toggle(\"截图带圆角\""))
         XCTAssertTrue(settingsSource.contains("Text(\"圆角半径:\")"))
         XCTAssertTrue(settingsSource.contains("Toggle(\"截图带阴影\""))
@@ -647,6 +651,7 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(defaults["recordingQuality"] as? String, "高")
         XCTAssertEqual(defaults["recordingFileFormat"] as? String, "MOV")
         XCTAssertEqual(defaults["showCursor"] as? Bool, true)
+        XCTAssertEqual(defaults["showCursorInScreenshots"] as? Bool, false)
         XCTAssertEqual(defaults["delayedScreenshotSeconds"] as? Int, 5)
         XCTAssertEqual(defaults["multiWindowDesktopBackdrop"] as? Bool, true)
         XCTAssertEqual(defaults["scrollingCaptureSlices"] as? Int, 30)

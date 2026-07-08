@@ -724,7 +724,7 @@ class CaptureManager: ObservableObject {
         configuration.width = max(1, Int(captureSize.width))
         configuration.height = max(1, Int(captureSize.height))
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
-        configuration.showsCursor = UserDefaults.standard.bool(forKey: "showCursor")
+        configuration.showsCursor = UserDefaults.standard.bool(forKey: "showCursorInScreenshots")
 
         let cgImage = try await SCScreenshotManager.captureImage(
             contentFilter: filter,
@@ -1293,6 +1293,7 @@ class CaptureManager: ObservableObject {
             UserDefaults.standard.set("#HEX", forKey: "colorCodeFormat")
             UserDefaults.standard.set(false, forKey: "screenshotRoundedCorners")
             UserDefaults.standard.set(false, forKey: "screenshotDropShadow")
+            UserDefaults.standard.set(false, forKey: "showCursorInScreenshots")
             UserDefaults.standard.set(18.0, forKey: "screenshotCornerRadius")
             UserDefaults.standard.set(24.0, forKey: "screenshotShadowRadius")
             UserDefaults.standard.set("#000000", forKey: "screenshotShadowColorHex")
@@ -1490,7 +1491,7 @@ class CaptureManager: ObservableObject {
         configuration.width = Int(rect.width)
         configuration.height = Int(rect.height)
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
-        configuration.showsCursor = true
+        configuration.showsCursor = UserDefaults.standard.bool(forKey: "showCursorInScreenshots")
 
         // 设置源区域
         configuration.sourceRect = rect
@@ -1512,6 +1513,7 @@ class CaptureManager: ObservableObject {
         configuration.width = Int(display.width)
         configuration.height = Int(display.height)
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
+        configuration.showsCursor = UserDefaults.standard.bool(forKey: "showCursorInScreenshots")
 
         let cgImage = try await SCScreenshotManager.captureImage(
             contentFilter: filter,
@@ -1572,7 +1574,7 @@ class CaptureManager: ObservableObject {
         configuration.width = Int(display.width)
         configuration.height = Int(display.height)
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
-        configuration.showsCursor = true
+        configuration.showsCursor = UserDefaults.standard.bool(forKey: "showCursorInScreenshots")
 
         let cgImage = try await SCScreenshotManager.captureImage(
             contentFilter: filter,

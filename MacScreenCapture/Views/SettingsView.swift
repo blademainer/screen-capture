@@ -31,6 +31,7 @@ struct SettingsView: View {
     @AppStorage("scrollingCaptureStopWhenUnchanged") private var scrollingCaptureStopWhenUnchanged = true
     @AppStorage("screenshotRoundedCorners") private var screenshotRoundedCorners = false
     @AppStorage("screenshotDropShadow") private var screenshotDropShadow = false
+    @AppStorage("showCursorInScreenshots") private var showCursorInScreenshots = false
     @AppStorage("screenshotCornerRadius") private var screenshotCornerRadius = 18.0
     @AppStorage("screenshotShadowRadius") private var screenshotShadowRadius = 24.0
     @AppStorage("screenshotShadowColorHex") private var screenshotShadowColorHex = "#000000"
@@ -172,6 +173,8 @@ struct SettingsView: View {
                 Toggle("自动保存截图", isOn: $autoSaveScreenshots)
                 Toggle("截图后自动复制到剪贴板", isOn: $copyScreenshotToClipboard)
                     .help("截图完成后默认将最终图片写入系统剪贴板")
+                Toggle("截图包含鼠标指针", isOn: $showCursorInScreenshots)
+                    .help("关闭后截图不会包含系统当前鼠标样式，避免把圆形指针截进图片")
 
                 HStack {
                     Text("图片格式:")
@@ -561,7 +564,7 @@ struct SettingsView: View {
                 Stepper("开录延时: \(recordingStartDelaySeconds) 秒", value: $recordingStartDelaySeconds, in: 0...30)
                 Toggle("录制系统音频", isOn: $includeSystemAudio)
                 Toggle("录制麦克风", isOn: $includeMicrophone)
-                Toggle("显示鼠标指针", isOn: $showCursor)
+                Toggle("录屏显示鼠标指针", isOn: $showCursor)
             }
         }
     }

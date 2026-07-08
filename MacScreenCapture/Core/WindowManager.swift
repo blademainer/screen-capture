@@ -286,6 +286,7 @@ class WindowManager: ObservableObject {
 
     // MARK: - Window Management
     func setMainWindow(_ window: NSWindow) {
+        guard !(window is EditingWindow), !(window is NSPanel) else { return }
         mainWindow = window
     }
 

@@ -28,14 +28,6 @@ struct MacScreenCaptureApp: App {
                 .onAppear {
                     setupApplication()
                 }
-                .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
-                    // 当窗口成为关键窗口时，设置主窗口引用到WindowManager
-                    if let window = notification.object as? NSWindow {
-                        if #available(macOS 12.3, *) {
-                            WindowManager.shared.setMainWindow(window)
-                        }
-                    }
-                }
         }
         .windowResizability(.contentSize)
         

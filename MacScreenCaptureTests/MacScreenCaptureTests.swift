@@ -305,6 +305,9 @@ final class MacScreenCaptureTests: XCTestCase {
     func testEditingWindowClearAndCloseActionsAreControllerBacked() throws {
         let contentSource = try repositoryFileContents("MacScreenCapture/Views/EditingWindowContentView.swift")
         let controllerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowController.swift")
+        let appSource = try repositoryFileContents("MacScreenCapture/MacScreenCaptureApp.swift")
+        let mainContentSource = try repositoryFileContents("MacScreenCapture/ContentView.swift")
+        let windowManagerSource = try repositoryFileContents("MacScreenCapture/Core/WindowManager.swift")
         let canvasSource = try repositoryFileContents("MacScreenCapture/Views/FloatingWindowContentView.swift")
         let sessionSource = try repositoryFileContents("MacScreenCapture/Core/FloatingWindowController.swift")
 
@@ -319,8 +322,12 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(controllerSource.contains("private func clearEditing()"))
         XCTAssertTrue(controllerSource.contains("self?.editingSession.clear()"))
         XCTAssertTrue(controllerSource.contains("private func closeEditingWindow()"))
-        XCTAssertTrue(controllerSource.contains("window.performClose(nil)"))
         XCTAssertTrue(controllerSource.contains("window.close()"))
+        XCTAssertFalse(controllerSource.contains("window.performClose(nil)"))
+        XCTAssertTrue(mainContentSource.contains("WindowAccessor { window in"))
+        XCTAssertTrue(mainContentSource.contains("WindowManager.shared.setMainWindow(window)"))
+        XCTAssertFalse(appSource.contains("NSWindow.didBecomeKeyNotification"))
+        XCTAssertTrue(windowManagerSource.contains("guard !(window is EditingWindow), !(window is NSPanel) else { return }"))
         XCTAssertTrue(canvasSource.contains("nsView.syncResetRevision(editingSession.resetRevision)"))
         XCTAssertTrue(canvasSource.contains("func syncResetRevision(_ revision: Int)"))
         XCTAssertTrue(canvasSource.contains("private func cancelActiveInteraction()"))

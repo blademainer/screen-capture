@@ -161,10 +161,7 @@ class EditingWindowController: NSWindowController {
             guard let self else { return }
 
             if let window = self.window {
-                window.performClose(nil)
-                if window.isVisible {
-                    window.close()
-                }
+                window.close()
             } else {
                 self.close()
             }

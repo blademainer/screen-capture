@@ -38,6 +38,12 @@ struct ContentView: View {
         }
         .frame(width: 600, height: 400)
         .background(Color(.windowBackgroundColor))
+        .background(
+            WindowAccessor { window in
+                WindowManager.shared.setMainWindow(window)
+            }
+            .frame(width: 0, height: 0)
+        )
         .onAppear {
             checkPermissions()
         }

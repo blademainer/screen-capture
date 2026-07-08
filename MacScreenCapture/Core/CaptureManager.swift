@@ -1683,37 +1683,132 @@ class CaptureManager: ObservableObject {
         return frame.integral
     }
 
-    private func magneticRegionUnderMouse(in displayBounds: CGRect) -> CGRect? {
-        guard let mouseLocation = CGEvent(source: nil)?.location,
-              let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+    private struct MagneticWindowCandidate {
+        let ownerPID: Int
+        let bounds: CGRect
+    }
+
+    private func magneticRegionForCurrentContext(in displayBounds: CGRect) -> CGRect? {
+        focusedAccessibilityWindowRegion(in: displayBounds)
+            ?? magneticRegionUnderMouse(in: displayBounds)
+            ?? frontmostWindowRegion(in: displayBounds)
+    }
+
+    private func focusedAccessibilityWindowRegion(in displayBounds: CGRect) -> CGRect? {
+        guard AXIsProcessTrusted(),
+              let frontmostApplication = NSWorkspace.shared.frontmostApplication else {
             return nil
         }
 
         let currentPID = Int(ProcessInfo.processInfo.processIdentifier)
-        for windowInfo in windowList {
+        let frontmostPID = Int(frontmostApplication.processIdentifier)
+        guard frontmostPID > 0, frontmostPID != currentPID else { return nil }
+
+        let appElement = AXUIElementCreateApplication(pid_t(frontmostPID))
+        if let focusedRegion = accessibilityWindowRegion(
+            from: appElement,
+            attribute: kAXFocusedWindowAttribute as String,
+            in: displayBounds
+        ) {
+            return focusedRegion
+        }
+
+        return accessibilityWindowRegion(
+            from: appElement,
+            attribute: kAXMainWindowAttribute as String,
+            in: displayBounds
+        )
+    }
+
+    private func accessibilityWindowRegion(from appElement: AXUIElement, attribute: String, in displayBounds: CGRect) -> CGRect? {
+        var windowValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(appElement, attribute as CFString, &windowValue) == .success,
+              let window = windowValue,
+              CFGetTypeID(window) == AXUIElementGetTypeID() else {
+            return nil
+        }
+
+        return accessibilityFrame(for: window as! AXUIElement, in: displayBounds)
+    }
+
+    private func accessibilityFrame(for window: AXUIElement, in displayBounds: CGRect) -> CGRect? {
+        var positionValue: CFTypeRef?
+        var sizeValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &positionValue) == .success,
+              AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &sizeValue) == .success,
+              let positionAXValue = positionValue,
+              let sizeAXValue = sizeValue,
+              CFGetTypeID(positionAXValue) == AXValueGetTypeID(),
+              CFGetTypeID(sizeAXValue) == AXValueGetTypeID() else {
+            return nil
+        }
+
+        var position = CGPoint.zero
+        var size = CGSize.zero
+        guard AXValueGetValue(positionAXValue as! AXValue, .cgPoint, &position),
+              AXValueGetValue(sizeAXValue as! AXValue, .cgSize, &size) else {
+            return nil
+        }
+
+        return clippedMagneticRegion(CGRect(origin: position, size: size), in: displayBounds)
+    }
+
+    private func magneticRegionUnderMouse(in displayBounds: CGRect) -> CGRect? {
+        guard let mouseLocation = CGEvent(source: nil)?.location else {
+            return nil
+        }
+
+        return magneticWindowCandidates(in: displayBounds)
+            .first { $0.bounds.contains(mouseLocation) }?
+            .bounds
+    }
+
+    private func frontmostWindowRegion(in displayBounds: CGRect) -> CGRect? {
+        let candidates = magneticWindowCandidates(in: displayBounds)
+        guard !candidates.isEmpty else { return nil }
+
+        let currentPID = Int(ProcessInfo.processInfo.processIdentifier)
+        if let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier,
+           Int(frontmostPID) != currentPID,
+           let frontmostWindow = candidates.first(where: { $0.ownerPID == Int(frontmostPID) }) {
+            return frontmostWindow.bounds
+        }
+
+        return candidates.first?.bounds
+    }
+
+    private func magneticWindowCandidates(in displayBounds: CGRect) -> [MagneticWindowCandidate] {
+        guard let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return []
+        }
+
+        let currentPID = Int(ProcessInfo.processInfo.processIdentifier)
+        return windowList.compactMap { windowInfo in
             let layer = windowInfo[kCGWindowLayer as String] as? Int ?? Int.max
-            guard layer == 0 else { continue }
+            guard layer == 0 else { return nil }
 
             let ownerPID = windowInfo[kCGWindowOwnerPID as String] as? Int ?? 0
-            guard ownerPID != currentPID else { continue }
+            guard ownerPID != currentPID else { return nil }
 
             let alpha = windowInfo[kCGWindowAlpha as String] as? Double ?? 1
-            guard alpha > 0 else { continue }
+            guard alpha > 0 else { return nil }
 
             guard let boundsDictionary = windowInfo[kCGWindowBounds as String] as? [String: Any],
                   let windowBounds = CGRect(dictionaryRepresentation: boundsDictionary as CFDictionary),
                   windowBounds.width > 40,
                   windowBounds.height > 40,
-                  windowBounds.contains(mouseLocation) else {
-                continue
+                  let clippedWindow = clippedMagneticRegion(windowBounds, in: displayBounds) else {
+                return nil
             }
 
-            let clippedWindow = windowBounds.intersection(displayBounds).integral
-            guard clippedWindow.width >= 40, clippedWindow.height >= 40 else { continue }
-            return clippedWindow
+            return MagneticWindowCandidate(ownerPID: ownerPID, bounds: clippedWindow)
         }
+    }
 
-        return nil
+    private func clippedMagneticRegion(_ rect: CGRect, in displayBounds: CGRect) -> CGRect? {
+        let clippedRect = rect.intersection(displayBounds).integral
+        guard clippedRect.width >= 40, clippedRect.height >= 40 else { return nil }
+        return clippedRect
     }
 
     @MainActor
@@ -2190,7 +2285,7 @@ class CaptureManager: ObservableObject {
             throw CaptureError.noDisplayAvailable
         }
 
-        let initialSelection = preferWindowUnderMouse ? magneticRegionUnderMouse(in: displayBounds) : nil
+        let initialSelection = preferWindowUnderMouse ? magneticRegionForCurrentContext(in: displayBounds) : nil
         let selectedRect = try await selectScreenshotRegion(
             displayBounds: displayBounds,
             initialSelection: initialSelection

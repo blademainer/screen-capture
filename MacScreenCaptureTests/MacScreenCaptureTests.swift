@@ -336,6 +336,24 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(captureManagerSource.contains("NSPasteboard.general.setData(tiffData, forType: .tiff)"))
     }
 
+    func testRegionScreenshotUsesMagneticWindowSelection() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+
+        XCTAssertTrue(source.contains("captureSelectedRegionImage(preferWindowUnderMouse: true)"))
+        XCTAssertTrue(source.contains("magneticRegionUnderMouse(from: content)"))
+        XCTAssertTrue(source.contains("CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements]"))
+        XCTAssertTrue(source.contains("windowBounds.contains(mouseLocation)"))
+        XCTAssertTrue(source.contains("selectScreenshotRegion("))
+        XCTAssertTrue(source.contains("MagneticRegionSelectionView("))
+        XCTAssertTrue(source.contains("已吸附当前窗口；点击或按 Enter 截图，拖拽可重新选择，Esc 取消"))
+        XCTAssertTrue(source.contains("case 36, 76:"))
+        XCTAssertTrue(source.contains("case 53:"))
+        XCTAssertTrue(source.contains("normalizedQuartzRect(from: startPoint, to: point)"))
+        XCTAssertTrue(source.contains("mouseDownStartedInSelection"))
+        XCTAssertTrue(source.contains("captureDisplayImageWithoutSaving(display: display)"))
+        XCTAssertTrue(source.contains("cropDisplayImage(displayImage, to: cropRect, in: display)"))
+    }
+
     func testMultiWindowSelectionSupportsShiftAndDesktopBackdrop() throws {
         let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
 
@@ -446,6 +464,8 @@ final class MacScreenCaptureTests: XCTestCase {
 
         XCTAssertTrue(captureManagerSource.contains("func captureRegionAndRecognizeText()"))
         XCTAssertTrue(captureManagerSource.contains("captureInteractiveScreenshot(arguments: [\"-i\", \"-r\"], forceStyle: false, showEditor: false, autoOpenAfterCapture: false)"))
+        XCTAssertTrue(captureManagerSource.contains("if arguments == [\"-i\", \"-r\"]"))
+        XCTAssertTrue(captureManagerSource.contains("captureSelectedRegionImage(preferWindowUnderMouse: true)"))
         XCTAssertTrue(captureManagerSource.contains("NSPasteboard.general.setString(text, forType: .string)"))
         XCTAssertTrue(captureManagerSource.contains("VNRecognizeTextRequest"))
         XCTAssertTrue(captureManagerSource.contains("request.recognitionLevel = .accurate"))

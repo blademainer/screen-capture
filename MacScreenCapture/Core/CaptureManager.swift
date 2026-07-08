@@ -1438,66 +1438,16 @@ class CaptureManager: ObservableObject {
         }
     }
 
-    /// 区域截图 - 使用系统截图工具
+    /// 区域截图 - 默认磁吸到当前指针所在窗口，仍支持手动拖拽框选。
     private func captureRegionScreenshot(autoOpenAfterCapture: Bool = true, forceSave: Bool = false) async throws -> NSImage {
-        // 通知WindowManager开始截图
-        await MainActor.run {
-            WindowManager.shared.updateCaptureState(.screenshotting)
-        }
-
-        defer {
-            // 截图完成后恢复状态
-            Task { @MainActor in
-                WindowManager.shared.updateCaptureState(.idle)
-            }
-        }
-
-        // 使用系统的截图工具进行区域选择
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-
-        // 创建临时文件
-        let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("temp_region_capture_\(UUID().uuidString).png")
-
-        // 设置参数：-i 表示交互式选择区域，-r 表示只捕获选定区域
-        process.arguments = ["-i", "-r", tempURL.path]
-
-        return try await withCheckedThrowingContinuation { continuation in
-            process.terminationHandler = { process in
-                Task { @MainActor in
-                    if process.terminationStatus == 0 {
-                        // 截图成功，读取图片
-                        if let image = NSImage(contentsOf: tempURL) {
-                            do {
-                                let finalImage = try await self.finalizeCapturedImage(
-                                    image,
-                                    showEditor: true,
-                                    autoOpenAfterCapture: autoOpenAfterCapture,
-                                    forceSave: forceSave
-                                )
-                                try? FileManager.default.removeItem(at: tempURL)
-                                continuation.resume(returning: finalImage)
-                            } catch {
-                                continuation.resume(throwing: error)
-                            }
-                        } else {
-                            continuation.resume(throwing: CaptureError.failedToCapture)
-                        }
-                    } else {
-                        // 用户取消了截图
-                        try? FileManager.default.removeItem(at: tempURL)
-                        continuation.resume(throwing: CaptureError.regionSelectionCancelled)
-                    }
-                }
-            }
-
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: CaptureError.failedToCapture)
-            }
-        }
+        try? await Task.sleep(nanoseconds: 160_000_000)
+        let image = try await captureSelectedRegionImage(preferWindowUnderMouse: true)
+        return try await finalizeCapturedImage(
+            image,
+            showEditor: true,
+            autoOpenAfterCapture: autoOpenAfterCapture,
+            forceSave: forceSave
+        )
     }
 
     /// 捕获指定区域
@@ -1730,6 +1680,104 @@ class CaptureManager: ObservableObject {
         }
 
         return frame.integral
+    }
+
+    private func magneticRegionUnderMouse(from content: SCShareableContent) -> CGRect? {
+        guard let mouseLocation = CGEvent(source: nil)?.location,
+              let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return nil
+        }
+
+        let currentPID = Int(ProcessInfo.processInfo.processIdentifier)
+        for windowInfo in windowList {
+            let layer = windowInfo[kCGWindowLayer as String] as? Int ?? Int.max
+            guard layer == 0 else { continue }
+
+            let ownerPID = windowInfo[kCGWindowOwnerPID as String] as? Int ?? 0
+            guard ownerPID != currentPID else { continue }
+
+            let alpha = windowInfo[kCGWindowAlpha as String] as? Double ?? 1
+            guard alpha > 0 else { continue }
+
+            guard let boundsDictionary = windowInfo[kCGWindowBounds as String] as? [String: Any],
+                  let windowBounds = CGRect(dictionaryRepresentation: boundsDictionary as CFDictionary),
+                  windowBounds.width > 40,
+                  windowBounds.height > 40,
+                  windowBounds.contains(mouseLocation) else {
+                continue
+            }
+
+            guard let display = content.displays.first(where: { display in
+                CGDisplayBounds(display.displayID).intersects(windowBounds)
+            }) else {
+                continue
+            }
+
+            let clippedWindow = windowBounds.intersection(CGDisplayBounds(display.displayID)).integral
+            guard clippedWindow.width >= 40, clippedWindow.height >= 40 else { continue }
+            return clippedWindow
+        }
+
+        return nil
+    }
+
+    private func displayForRegion(_ region: CGRect, from displays: [SCDisplay]) throws -> SCDisplay {
+        let rankedDisplays = displays.compactMap { display -> (display: SCDisplay, area: CGFloat)? in
+            let intersection = region.intersection(CGDisplayBounds(display.displayID))
+            guard intersection.width > 0, intersection.height > 0 else { return nil }
+            return (display, intersection.width * intersection.height)
+        }
+
+        guard let bestDisplay = rankedDisplays.max(by: { $0.area < $1.area })?.display else {
+            throw CaptureError.noDisplayAvailable
+        }
+
+        return bestDisplay
+    }
+
+    @MainActor
+    private func selectScreenshotRegion(displayBounds: CGRect, initialSelection: CGRect?) async throws -> CGRect {
+        let selectionFrame = selectionOverlayFrame(for: displayBounds)
+        guard !selectionFrame.isNull && !selectionFrame.isEmpty else {
+            throw CaptureError.noDisplayAvailable
+        }
+
+        let clippedInitialSelection = initialSelection?
+            .intersection(displayBounds)
+            .intersection(selectionFrame)
+            .integral
+
+        return try await withCheckedThrowingContinuation { continuation in
+            var didResume = false
+            let selectionWindow = NSWindow(
+                contentRect: selectionFrame,
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+
+            selectionWindow.level = .screenSaver
+            selectionWindow.backgroundColor = .clear
+            selectionWindow.isOpaque = false
+            selectionWindow.hasShadow = false
+            selectionWindow.ignoresMouseEvents = false
+            selectionWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+            let overlayView = MagneticRegionSelectionView(
+                screenFrame: selectionFrame,
+                initialSelection: clippedInitialSelection
+            ) { result in
+                guard !didResume else { return }
+                didResume = true
+                selectionWindow.contentView = nil
+                selectionWindow.close()
+                continuation.resume(with: result)
+            }
+
+            selectionWindow.contentView = overlayView
+            selectionWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     private func renderMultiWindowComposite(
@@ -2102,6 +2150,16 @@ class CaptureManager: ObservableObject {
             endScreenshotCaptureState()
         }
 
+        if arguments == ["-i", "-r"] {
+            let image = try await captureSelectedRegionImage(preferWindowUnderMouse: true)
+            return try await finalizeCapturedImage(
+                image,
+                forceStyle: forceStyle,
+                showEditor: showEditor,
+                autoOpenAfterCapture: autoOpenAfterCapture
+            )
+        }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
 
@@ -2133,6 +2191,30 @@ class CaptureManager: ObservableObject {
                 continuation.resume(throwing: CaptureError.failedToCapture)
             }
         }
+    }
+
+    @MainActor
+    private func captureSelectedRegionImage(preferWindowUnderMouse: Bool) async throws -> NSImage {
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        let displayBounds = allDisplayBounds(from: content.displays)
+        guard !displayBounds.isNull && !displayBounds.isEmpty else {
+            throw CaptureError.noDisplayAvailable
+        }
+
+        let initialSelection = preferWindowUnderMouse ? magneticRegionUnderMouse(from: content) : nil
+        let selectedRect = try await selectScreenshotRegion(
+            displayBounds: displayBounds,
+            initialSelection: initialSelection
+        )
+        let display = try displayForRegion(selectedRect, from: content.displays)
+        let displayBoundsForCrop = CGDisplayBounds(display.displayID)
+        let cropRect = selectedRect.intersection(displayBoundsForCrop).integral
+        guard cropRect.width >= 2, cropRect.height >= 2 else {
+            throw CaptureError.regionSelectionCancelled
+        }
+
+        let displayImage = try await captureDisplayImageWithoutSaving(display: display)
+        return cropDisplayImage(displayImage, to: cropRect, in: display)
     }
 
     @MainActor
@@ -2904,6 +2986,197 @@ final class ScreenshotTranslationWindowController: NSWindowController {
     private func copyToPasteboard(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
+// MARK: - Magnetic Region Selection
+
+@available(macOS 12.3, *)
+final class MagneticRegionSelectionView: NSView {
+    private let screenFrame: CGRect
+    private let completion: (Result<CGRect, Error>) -> Void
+    private var selectedQuartzRect: CGRect?
+    private var startPoint: CGPoint?
+    private var currentPoint: CGPoint?
+    private var didDrag = false
+    private var mouseDownStartedInSelection = false
+
+    init(
+        screenFrame: CGRect,
+        initialSelection: CGRect?,
+        completion: @escaping (Result<CGRect, Error>) -> Void
+    ) {
+        self.screenFrame = screenFrame
+        self.selectedQuartzRect = initialSelection
+        self.completion = completion
+        super.init(frame: NSRect(origin: .zero, size: screenFrame.size))
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.activeAlways, .mouseMoved, .inVisibleRect],
+            owner: self
+        ))
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.makeFirstResponder(self)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        NSColor.black.withAlphaComponent(0.36).setFill()
+        bounds.fill()
+
+        guard let selectedQuartzRect, selectedQuartzRect.width >= 2, selectedQuartzRect.height >= 2 else {
+            drawInstruction(hasMagneticSelection: false)
+            return
+        }
+
+        let rect = viewRect(for: selectedQuartzRect)
+        NSColor.clear.setFill()
+        rect.fill(using: .clear)
+
+        NSColor.systemBlue.withAlphaComponent(didDrag ? 0.16 : 0.24).setFill()
+        rect.fill()
+
+        let border = NSBezierPath(rect: rect)
+        border.lineWidth = didDrag ? 2 : 3
+        NSColor.systemBlue.setStroke()
+        border.stroke()
+
+        drawSizeLabel(for: rect, quartzRect: selectedQuartzRect)
+        drawInstruction(hasMagneticSelection: !didDrag)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        startPoint = point
+        currentPoint = point
+        didDrag = false
+        mouseDownStartedInSelection = selectedQuartzRect.map { viewRect(for: $0).contains(point) } ?? false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        currentPoint = point
+
+        guard let startPoint else { return }
+        let distance = hypot(point.x - startPoint.x, point.y - startPoint.y)
+        guard distance >= 3 else { return }
+
+        didDrag = true
+        selectedQuartzRect = normalizedQuartzRect(from: startPoint, to: point)
+        needsDisplay = true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        currentPoint = point
+
+        if didDrag {
+            selectedQuartzRect = normalizedQuartzRect(from: startPoint ?? point, to: point)
+        }
+
+        guard let rect = selectedQuartzRect, rect.width >= 16, rect.height >= 16 else {
+            NSSound.beep()
+            return
+        }
+
+        guard didDrag || mouseDownStartedInSelection else {
+            NSSound.beep()
+            return
+        }
+
+        completion(.success(rect.integral))
+    }
+
+    override func keyDown(with event: NSEvent) {
+        switch event.keyCode {
+        case 36, 76:
+            guard let rect = selectedQuartzRect, rect.width >= 16, rect.height >= 16 else {
+                NSSound.beep()
+                return
+            }
+            completion(.success(rect.integral))
+        case 53:
+            completion(.failure(CaptureError.regionSelectionCancelled))
+        default:
+            super.keyDown(with: event)
+        }
+    }
+
+    private func normalizedQuartzRect(from startPoint: CGPoint, to endPoint: CGPoint) -> CGRect {
+        let start = quartzPoint(fromViewPoint: startPoint)
+        let end = quartzPoint(fromViewPoint: endPoint)
+        return CGRect(
+            x: min(start.x, end.x),
+            y: min(start.y, end.y),
+            width: abs(end.x - start.x),
+            height: abs(end.y - start.y)
+        ).intersection(screenFrame).integral
+    }
+
+    private func quartzPoint(fromViewPoint point: CGPoint) -> CGPoint {
+        CGPoint(
+            x: screenFrame.minX + point.x,
+            y: screenFrame.minY + (screenFrame.height - point.y)
+        )
+    }
+
+    private func viewRect(for quartzRect: CGRect) -> CGRect {
+        CGRect(
+            x: quartzRect.minX - screenFrame.minX,
+            y: screenFrame.height - (quartzRect.maxY - screenFrame.minY),
+            width: quartzRect.width,
+            height: quartzRect.height
+        )
+    }
+
+    private func drawInstruction(hasMagneticSelection: Bool) {
+        let text = hasMagneticSelection
+            ? "已吸附当前窗口；点击或按 Enter 截图，拖拽可重新选择，Esc 取消"
+            : "拖拽选择截图区域，按 Esc 取消"
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 16, weight: .medium),
+            .foregroundColor: NSColor.white
+        ]
+        let size = text.size(withAttributes: attributes)
+        let rect = NSRect(
+            x: bounds.midX - size.width / 2 - 14,
+            y: bounds.maxY - size.height - 36,
+            width: size.width + 28,
+            height: size.height + 14
+        )
+        NSColor.black.withAlphaComponent(0.58).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
+        text.draw(at: CGPoint(x: rect.minX + 14, y: rect.minY + 7), withAttributes: attributes)
+    }
+
+    private func drawSizeLabel(for rect: CGRect, quartzRect: CGRect) {
+        let text = "\(Int(quartzRect.width)) x \(Int(quartzRect.height))"
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold),
+            .foregroundColor: NSColor.white
+        ]
+        let size = text.size(withAttributes: attributes)
+        let labelRect = NSRect(
+            x: rect.minX,
+            y: max(8, rect.minY - size.height - 12),
+            width: size.width + 16,
+            height: size.height + 8
+        )
+        NSColor.systemBlue.setFill()
+        NSBezierPath(roundedRect: labelRect, xRadius: 5, yRadius: 5).fill()
+        text.draw(at: CGPoint(x: labelRect.minX + 8, y: labelRect.minY + 4), withAttributes: attributes)
     }
 }
 

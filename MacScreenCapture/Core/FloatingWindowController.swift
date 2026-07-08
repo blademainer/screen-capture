@@ -526,6 +526,13 @@ class FloatingWindowController: NSWindowController {
         }
     }
 
+    func applyFloatingWindowConfiguration(_ configuration: FloatingWindowConfiguration = .fromDefaults()) {
+        guard let window else { return }
+        window.level = configuration.windowLevel
+        window.hasShadow = configuration.showShadow
+        window.alphaValue = configuration.opacity
+    }
+
     private func setupContent() {
         let contentView = FloatingWindowContentView(
             screenshot: screenshot,

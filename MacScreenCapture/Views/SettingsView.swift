@@ -614,9 +614,15 @@ struct SettingsView: View {
 
                 Toggle("始终置顶显示", isOn: $floatingWindowAlwaysOnTop)
                     .help("浮窗始终显示在其他窗口之上")
+                    .onChange(of: floatingWindowAlwaysOnTop) { _ in
+                        floatingWindowManager.applyCurrentConfigurationToAllWindows()
+                    }
 
                 Toggle("显示窗口阴影", isOn: $floatingWindowShowShadow)
                     .help("为浮窗添加阴影效果")
+                    .onChange(of: floatingWindowShowShadow) { _ in
+                        floatingWindowManager.applyCurrentConfigurationToAllWindows()
+                    }
 
                 Toggle("保存后自动关闭浮窗", isOn: $floatingWindowCloseAfterSave)
                     .help("保存贴图后自动关闭对应浮窗")
@@ -631,6 +637,9 @@ struct SettingsView: View {
                         .foregroundColor(.secondary)
                 }
                 .help("调整浮窗的透明度")
+                .onChange(of: floatingWindowOpacity) { _ in
+                    floatingWindowManager.applyCurrentConfigurationToAllWindows()
+                }
 
                 HStack {
                     Button("关闭所有浮窗") {

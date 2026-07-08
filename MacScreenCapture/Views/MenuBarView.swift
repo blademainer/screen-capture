@@ -382,6 +382,8 @@ struct MenuBarView: View {
     }
 
     private func showNotification(title: String, message: String) {
+        guard UserDefaults.standard.bool(forKey: "showNotifications") else { return }
+
         guard Bundle.main.bundleURL.pathExtension == "app" else {
             print("\(title): \(message)")
             return

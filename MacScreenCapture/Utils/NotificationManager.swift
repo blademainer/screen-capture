@@ -18,7 +18,7 @@ class NotificationManager: NSObject, ObservableObject {
     
     // MARK: - Published Properties
     @Published var hasNotificationPermission = false
-    @Published var notificationsEnabled = true
+    @Published var notificationsEnabled = UserDefaults.standard.bool(forKey: "showNotifications")
     
     // MARK: - Private Properties
     private let notificationCenter: UNUserNotificationCenter?
@@ -59,7 +59,7 @@ class NotificationManager: NSObject, ObservableObject {
     
     /// 显示截图成功通知
     func showScreenshotSuccessNotification(filePath: URL) {
-        guard let notificationCenter, notificationsEnabled && hasNotificationPermission else { return }
+        guard canShowNotifications, let notificationCenter, hasNotificationPermission else { return }
         
         let content = UNMutableNotificationContent()
         content.title = "截图成功"
@@ -105,7 +105,7 @@ class NotificationManager: NSObject, ObservableObject {
     
     /// 显示录制开始通知
     func showRecordingStartNotification() {
-        guard let notificationCenter, notificationsEnabled && hasNotificationPermission else { return }
+        guard canShowNotifications, let notificationCenter, hasNotificationPermission else { return }
         
         let content = UNMutableNotificationContent()
         content.title = "录制开始"
@@ -127,7 +127,7 @@ class NotificationManager: NSObject, ObservableObject {
     
     /// 显示录制完成通知
     func showRecordingCompleteNotification(filePath: URL, duration: TimeInterval, audioDiagnostics: RecordingAudioDiagnostics? = nil, audioOnly: Bool = false) {
-        guard let notificationCenter, notificationsEnabled && hasNotificationPermission else { return }
+        guard canShowNotifications, let notificationCenter, hasNotificationPermission else { return }
         
         let content = UNMutableNotificationContent()
         content.title = audioOnly ? "录音完成" : "录制完成"
@@ -178,7 +178,7 @@ class NotificationManager: NSObject, ObservableObject {
     
     /// 显示错误通知
     func showErrorNotification(title: String, message: String) {
-        guard let notificationCenter, notificationsEnabled && hasNotificationPermission else {
+        guard canShowNotifications, let notificationCenter, hasNotificationPermission else {
             print("\(title): \(message)")
             return
         }
@@ -203,7 +203,7 @@ class NotificationManager: NSObject, ObservableObject {
     
     /// 显示权限提醒通知
     func showPermissionReminderNotification() {
-        guard let notificationCenter, notificationsEnabled && hasNotificationPermission else { return }
+        guard canShowNotifications, let notificationCenter, hasNotificationPermission else { return }
         
         let content = UNMutableNotificationContent()
         content.title = "需要权限"
@@ -252,6 +252,10 @@ class NotificationManager: NSObject, ObservableObject {
                 self?.hasNotificationPermission = settings.authorizationStatus == .authorized
             }
         }
+    }
+
+    private var canShowNotifications: Bool {
+        notificationsEnabled && UserDefaults.standard.bool(forKey: "showNotifications")
     }
     
     /// 格式化时长

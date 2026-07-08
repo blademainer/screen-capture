@@ -5,7 +5,7 @@ struct FloatingWindowSettingsView: View {
     @AppStorage("autoCopyToClipboard") private var autoCopyToClipboard = false
     @AppStorage("floatingWindowAlwaysOnTop") private var alwaysOnTop = true
     @AppStorage("floatingWindowShowShadow") private var showShadow = true
-    @AppStorage("floatingWindowOpacity") private var opacity = 1.0
+    @AppStorage("floatingWindowOpacity") private var opacity = 0.95
     @AppStorage("floatingWindowCloseAfterSave") private var closeAfterSave = false
     @ObservedObject private var floatingWindowManager = FloatingWindowManager.shared
     
@@ -33,9 +33,15 @@ struct FloatingWindowSettingsView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Toggle("始终置顶显示", isOn: $alwaysOnTop)
                             .help("浮窗始终显示在其他窗口之上")
+                            .onChange(of: alwaysOnTop) { _ in
+                                floatingWindowManager.applyCurrentConfigurationToAllWindows()
+                            }
                         
                         Toggle("显示窗口阴影", isOn: $showShadow)
                             .help("为浮窗添加阴影效果")
+                            .onChange(of: showShadow) { _ in
+                                floatingWindowManager.applyCurrentConfigurationToAllWindows()
+                            }
                         
                         HStack {
                             Text("窗口透明度:")
@@ -46,6 +52,9 @@ struct FloatingWindowSettingsView: View {
                                 .foregroundColor(.secondary)
                         }
                         .help("调整浮窗的透明度")
+                        .onChange(of: opacity) { _ in
+                            floatingWindowManager.applyCurrentConfigurationToAllWindows()
+                        }
                     }
                     .padding(.vertical, 8)
                 }

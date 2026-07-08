@@ -145,7 +145,10 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(notificationSource.contains("private let notificationCenter: UNUserNotificationCenter?"))
         XCTAssertTrue(notificationSource.contains("Bundle.main.bundleURL.pathExtension == \"app\""))
         XCTAssertTrue(notificationSource.contains("notificationCenter = nil"))
-        XCTAssertTrue(notificationSource.contains("guard let notificationCenter, notificationsEnabled && hasNotificationPermission else"))
+        XCTAssertTrue(notificationSource.contains("private var canShowNotifications: Bool"))
+        XCTAssertTrue(notificationSource.contains("guard canShowNotifications, let notificationCenter, hasNotificationPermission else"))
+        XCTAssertTrue(menuSource.contains("UserDefaults.standard.bool(forKey: \"showNotifications\")"))
+        XCTAssertTrue(presenterSource.contains("UserDefaults.standard.bool(forKey: \"showNotifications\")"))
         XCTAssertTrue(presenterSource.contains("Bundle.main.bundleURL.pathExtension == \"app\""))
         XCTAssertTrue(presenterSource.contains("print(\"\\(title): \\(message)\")"))
         XCTAssertTrue(presenterSource.contains("NSUserNotificationCenter.default.deliver(notification)"))
@@ -418,6 +421,24 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(windowManagerSource.contains("NSStatusBar.system.removeStatusItem(statusBarItem)"))
     }
 
+    func testGeneralSettingsAreConsumedByRuntimeCode() throws {
+        let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")
+        let menuBarSource = try repositoryFileContents("MacScreenCapture/Views/MenuBarView.swift")
+        let notificationManagerSource = try repositoryFileContents("MacScreenCapture/Utils/NotificationManager.swift")
+        let legacyNotificationSource = try repositoryFileContents("MacScreenCapture/Utils/SystemNotificationPresenter.swift")
+        let windowManagerSource = try repositoryFileContents("MacScreenCapture/Core/WindowManager.swift")
+
+        XCTAssertTrue(settingsSource.contains("Toggle(\"显示通知\", isOn: $showNotifications)"))
+        XCTAssertTrue(menuBarSource.contains("UserDefaults.standard.bool(forKey: \"showNotifications\")"))
+        XCTAssertTrue(notificationManagerSource.contains("private var canShowNotifications: Bool"))
+        XCTAssertTrue(notificationManagerSource.contains("UserDefaults.standard.bool(forKey: \"showNotifications\")"))
+        XCTAssertTrue(legacyNotificationSource.contains("UserDefaults.standard.bool(forKey: \"showNotifications\")"))
+
+        XCTAssertTrue(settingsSource.contains("Toggle(\"隐藏菜单栏图标\", isOn: $hideMenuBarIcon)"))
+        XCTAssertTrue(windowManagerSource.contains("UserDefaults.standard.bool(forKey: \"hideMenuBarIcon\")"))
+        XCTAssertTrue(windowManagerSource.contains("func setStatusBarIconHidden(_ hidden: Bool)"))
+    }
+
     func testScreenshotsCopyFinalImageToClipboardByDefault() throws {
         let captureManagerSource = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
         let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")
@@ -673,7 +694,14 @@ final class MacScreenCaptureTests: XCTestCase {
     func testRegisteredDefaultsCoverIShotAndProCapabilities() throws {
         let defaults = UserDefaults.macScreenCaptureDefaults
 
+        XCTAssertEqual(defaults["autoSaveScreenshots"] as? Bool, true)
+        XCTAssertEqual(defaults["screenshotFormat"] as? String, "PNG")
         XCTAssertEqual(defaults["copyScreenshotToClipboard"] as? Bool, true)
+        XCTAssertEqual(defaults["showNotifications"] as? Bool, true)
+        XCTAssertEqual(defaults["launchAtLogin"] as? Bool, false)
+        XCTAssertEqual(defaults["hideMenuBarIcon"] as? Bool, false)
+        XCTAssertEqual(defaults["autoHideWindowDuringCapture"] as? Bool, true)
+        XCTAssertEqual(defaults["autoShowWindowAfterCapture"] as? Bool, false)
         XCTAssertEqual(defaults["includeSystemAudio"] as? Bool, true)
         XCTAssertEqual(defaults["includeMicrophone"] as? Bool, true)
         XCTAssertEqual(defaults["recordingFrameRate"] as? Double, 60.0)
@@ -763,6 +791,23 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(FloatingWindowConfiguration.normalizedOpacity(-1), 0.95)
         XCTAssertEqual(FloatingWindowConfiguration.normalizedOpacity(0.1), 0.3)
         XCTAssertEqual(FloatingWindowConfiguration.normalizedOpacity(0.7), 0.7)
+    }
+
+    func testFloatingWindowAppearanceSettingsApplyToOpenWindows() throws {
+        let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")
+        let standaloneSettingsSource = try repositoryFileContents("MacScreenCapture/Views/FloatingWindowSettingsView.swift")
+        let managerSource = try repositoryFileContents("MacScreenCapture/Core/FloatingWindowManager.swift")
+        let controllerSource = try repositoryFileContents("MacScreenCapture/Core/FloatingWindowController.swift")
+
+        XCTAssertTrue(settingsSource.contains("floatingWindowManager.applyCurrentConfigurationToAllWindows()"))
+        XCTAssertTrue(standaloneSettingsSource.contains("@AppStorage(\"floatingWindowOpacity\") private var opacity = 0.95"))
+        XCTAssertTrue(standaloneSettingsSource.contains("floatingWindowManager.applyCurrentConfigurationToAllWindows()"))
+        XCTAssertTrue(managerSource.contains("func applyCurrentConfigurationToAllWindows()"))
+        XCTAssertTrue(managerSource.contains("controller.applyFloatingWindowConfiguration(configuration)"))
+        XCTAssertTrue(controllerSource.contains("func applyFloatingWindowConfiguration(_ configuration: FloatingWindowConfiguration = .fromDefaults())"))
+        XCTAssertTrue(controllerSource.contains("window.level = configuration.windowLevel"))
+        XCTAssertTrue(controllerSource.contains("window.hasShadow = configuration.showShadow"))
+        XCTAssertTrue(controllerSource.contains("window.alphaValue = configuration.opacity"))
     }
 
     func testFloatingWindowConfigurationSizesPreviewWindows() throws {

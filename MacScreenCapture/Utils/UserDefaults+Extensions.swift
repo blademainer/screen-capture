@@ -6,6 +6,12 @@ extension UserDefaults {
         [
             "autoSaveScreenshots": true,
             "copyScreenshotToClipboard": true,
+            "screenshotFormat": "PNG",
+            "showNotifications": true,
+            "launchAtLogin": false,
+            "hideMenuBarIcon": false,
+            "autoHideWindowDuringCapture": true,
+            "autoShowWindowAfterCapture": false,
             "floatingWindowAlwaysOnTop": true,
             "floatingWindowAutoHide": false,
             "floatingWindowAutoHideDelay": 3.0,

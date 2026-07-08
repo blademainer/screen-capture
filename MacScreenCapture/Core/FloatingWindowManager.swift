@@ -90,4 +90,11 @@ class FloatingWindowManager: ObservableObject {
             }
         }
     }
+
+    func applyCurrentConfigurationToAllWindows() {
+        let configuration = FloatingWindowConfiguration.fromDefaults()
+        for controller in activeWindows {
+            controller.applyFloatingWindowConfiguration(configuration)
+        }
+    }
 }

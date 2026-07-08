@@ -6,6 +6,8 @@ enum SystemNotificationPresenter {
     }
 
     static func deliverLegacy(title: String = "MacScreenCapture", message: String) {
+        guard UserDefaults.standard.bool(forKey: "showNotifications") else { return }
+
         guard canDeliverSystemNotification else {
             print("\(title): \(message)")
             return

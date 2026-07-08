@@ -21,6 +21,11 @@ private struct DisplayCoordinateSpace {
     let screenFrame: CGRect
 }
 
+private struct MagneticWindowCandidate {
+    let ownerPID: Int
+    let bounds: CGRect
+}
+
 private extension CGRect {
     func distanceSquared(to point: CGPoint) -> CGFloat {
         let clampedX = min(max(point.x, minX), maxX)
@@ -1715,28 +1720,22 @@ class CaptureManager: ObservableObject {
         return frame.integral
     }
 
-    private struct MagneticWindowCandidate {
-        let ownerPID: Int
-        let bounds: CGRect
+    private func magneticRegionForCurrentContext(candidates: [MagneticWindowCandidate]) -> CGRect? {
+        magneticRegionUnderMouse(candidates: candidates)
+            ?? frontmostWindowRegion(candidates: candidates)
     }
 
-    private func magneticRegionForCurrentContext(in displayBounds: CGRect) -> CGRect? {
-        frontmostWindowRegion(in: displayBounds)
-            ?? magneticRegionUnderMouse(in: displayBounds)
-    }
-
-    private func magneticRegionUnderMouse(in displayBounds: CGRect) -> CGRect? {
+    private func magneticRegionUnderMouse(candidates: [MagneticWindowCandidate]) -> CGRect? {
         guard let mouseLocation = CGEvent(source: nil)?.location else {
             return nil
         }
 
-        return magneticWindowCandidates(in: displayBounds)
+        return candidates
             .first { $0.bounds.contains(mouseLocation) }?
             .bounds
     }
 
-    private func frontmostWindowRegion(in displayBounds: CGRect) -> CGRect? {
-        let candidates = magneticWindowCandidates(in: displayBounds)
+    private func frontmostWindowRegion(candidates: [MagneticWindowCandidate]) -> CGRect? {
         guard !candidates.isEmpty else { return nil }
 
         let currentPID = Int(ProcessInfo.processInfo.processIdentifier)
@@ -1787,6 +1786,7 @@ class CaptureManager: ObservableObject {
     private func selectScreenshotRegion(
         displayBounds: CGRect,
         coordinateSpaces: [DisplayCoordinateSpace],
+        magneticCandidates: [MagneticWindowCandidate],
         initialSelection: CGRect?
     ) async throws -> CGRect {
         let selectionFrame = selectionOverlayFrame(for: coordinateSpaces)
@@ -1819,6 +1819,7 @@ class CaptureManager: ObservableObject {
             let overlayView = MagneticRegionSelectionView(
                 overlayFrame: selectionFrame,
                 coordinateSpaces: coordinateSpaces,
+                magneticCandidates: magneticCandidates,
                 initialSelection: clippedInitialSelection
             ) { result in
                 guard !didResume else { return }
@@ -2263,10 +2264,12 @@ class CaptureManager: ObservableObject {
             throw CaptureError.noDisplayAvailable
         }
 
-        let initialSelection = preferWindowUnderMouse ? magneticRegionForCurrentContext(in: displayBounds) : nil
+        let magneticCandidates = preferWindowUnderMouse ? magneticWindowCandidates(in: displayBounds) : []
+        let initialSelection = preferWindowUnderMouse ? magneticRegionForCurrentContext(candidates: magneticCandidates) : nil
         let selectedRect = try await selectScreenshotRegion(
             displayBounds: displayBounds,
             coordinateSpaces: coordinateSpaces,
+            magneticCandidates: magneticCandidates,
             initialSelection: initialSelection
         )
         guard selectedRect.width >= 2, selectedRect.height >= 2 else {
@@ -3152,6 +3155,7 @@ final class ScreenshotTranslationWindowController: NSWindowController {
 final class MagneticRegionSelectionView: NSView {
     private let overlayFrame: CGRect
     private let coordinateSpaces: [DisplayCoordinateSpace]
+    private let magneticCandidates: [MagneticWindowCandidate]
     private let completion: (Result<CGRect, Error>) -> Void
     private var selectedQuartzRect: CGRect?
     private var startPoint: CGPoint?
@@ -3163,11 +3167,13 @@ final class MagneticRegionSelectionView: NSView {
     fileprivate init(
         overlayFrame: CGRect,
         coordinateSpaces: [DisplayCoordinateSpace],
+        magneticCandidates: [MagneticWindowCandidate],
         initialSelection: CGRect?,
         completion: @escaping (Result<CGRect, Error>) -> Void
     ) {
         self.overlayFrame = overlayFrame
         self.coordinateSpaces = coordinateSpaces
+        self.magneticCandidates = magneticCandidates
         self.selectedQuartzRect = initialSelection
         self.completion = completion
         super.init(frame: NSRect(origin: .zero, size: overlayFrame.size))
@@ -3218,8 +3224,15 @@ final class MagneticRegionSelectionView: NSView {
         drawInstruction(hasMagneticSelection: !didDrag)
     }
 
+    override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        currentPoint = point
+        updateMagneticSelection(at: point)
+    }
+
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        updateMagneticSelection(at: point)
         startPoint = point
         currentPoint = point
         didDrag = false
@@ -3282,6 +3295,21 @@ final class MagneticRegionSelectionView: NSView {
         DispatchQueue.main.async { [completion] in
             completion(result)
         }
+    }
+
+    private func updateMagneticSelection(at point: CGPoint) {
+        guard !didDrag, !didComplete, !magneticCandidates.isEmpty else { return }
+
+        let capturePoint = quartzPoint(fromViewPoint: point)
+        guard let candidate = magneticCandidates.first(where: { $0.bounds.contains(capturePoint) }) else {
+            return
+        }
+
+        let newSelection = candidate.bounds.integral
+        guard selectedQuartzRect?.integral != newSelection else { return }
+
+        selectedQuartzRect = newSelection
+        needsDisplay = true
     }
 
     private func normalizedQuartzRect(from startPoint: CGPoint, to endPoint: CGPoint) -> CGRect {

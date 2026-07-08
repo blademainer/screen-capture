@@ -244,6 +244,7 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(settingsSource.contains("Toggle(\"文字和序号启用描边\""))
         XCTAssertTrue(settingsSource.contains("Button(\"导出模板\")"))
         XCTAssertTrue(settingsSource.contains("Button(\"导入模板\")"))
+        XCTAssertTrue(settingsSource.contains("guard runSettingsPanel(panel) == .OK, let url = panel.url else { return }"))
         XCTAssertTrue(settingsSource.contains("saveCustomAnnotationPreset(.custom)"))
         XCTAssertTrue(settingsSource.contains("saveCustomAnnotationPreset(.custom2)"))
         XCTAssertTrue(settingsSource.contains("saveCustomAnnotationPreset(.custom3)"))
@@ -387,6 +388,34 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(hotKeySource.contains("captureRegionAndOpenInConfiguredApp()"))
         XCTAssertTrue(captureManagerSource.contains("func captureRegionAndOpenInConfiguredApp()"))
         XCTAssertTrue(captureManagerSource.contains("openLastScreenshotInConfiguredApp()"))
+    }
+
+    func testSettingsPanelButtonsAreBackedByVisibleActions() throws {
+        let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")
+        let windowManagerSource = try repositoryFileContents("MacScreenCapture/Core/WindowManager.swift")
+
+        XCTAssertTrue(settingsSource.contains("Button(defaultSaveLocation.isEmpty ? \"选择文件夹\""))
+        XCTAssertTrue(settingsSource.contains("selectSaveLocation()"))
+        XCTAssertTrue(settingsSource.contains("panel.canCreateDirectories = true"))
+        XCTAssertTrue(settingsSource.contains("if runSettingsPanel(panel) == .OK"))
+        XCTAssertTrue(settingsSource.contains("let didAccessSecurityScope = url.startAccessingSecurityScopedResource()"))
+        XCTAssertFalse(settingsSource.contains("guard url.startAccessingSecurityScopedResource()"))
+        XCTAssertTrue(settingsSource.contains("UserDefaults.standard.set(url.path, forKey: \"defaultSaveLocation\")"))
+        XCTAssertTrue(settingsSource.contains("defaultSaveLocation = url.path"))
+
+        XCTAssertTrue(settingsSource.contains("Button(openAfterCaptureAppPath.isEmpty ? \"选择 App\""))
+        XCTAssertTrue(settingsSource.contains("if runSettingsPanel(panel) == .OK, let url = panel.url"))
+        XCTAssertTrue(settingsSource.contains("NSApp.activate(ignoringOtherApps: true)"))
+        XCTAssertTrue(settingsSource.contains("panel.level = .floating"))
+        XCTAssertTrue(settingsSource.contains("panel.orderFrontRegardless()"))
+
+        XCTAssertTrue(settingsSource.contains("openExternalURL(\"https://github.com/blademainer/screen-capture/releases\")"))
+        XCTAssertTrue(settingsSource.contains("openExternalURL(\"https://github.com/blademainer/screen-capture/issues\")"))
+        XCTAssertTrue(settingsSource.contains("SMAppService.mainApp.register()"))
+        XCTAssertTrue(settingsSource.contains("SMAppService.mainApp.unregister()"))
+        XCTAssertTrue(settingsSource.contains("WindowManager.shared.setStatusBarIconHidden(newValue)"))
+        XCTAssertTrue(windowManagerSource.contains("func setStatusBarIconHidden(_ hidden: Bool)"))
+        XCTAssertTrue(windowManagerSource.contains("NSStatusBar.system.removeStatusItem(statusBarItem)"))
     }
 
     func testScreenshotsCopyFinalImageToClipboardByDefault() throws {

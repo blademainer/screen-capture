@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+import ServiceManagement
 
 struct SettingsView: View {
     @EnvironmentObject var permissionManager: PermissionManager
@@ -83,6 +84,7 @@ struct SettingsView: View {
     @State private var isPreparingTranslationModels = false
     @State private var translationModelStatusMessage = ""
     @State private var annotationTemplateTransferMessage = ""
+    @State private var generalSettingsMessage = ""
 
     var body: some View {
         ScrollView {
@@ -666,6 +668,15 @@ struct SettingsView: View {
                         setLaunchAtLogin(newValue)
                     }
                 Toggle("隐藏菜单栏图标", isOn: $hideMenuBarIcon)
+                    .onChange(of: hideMenuBarIcon) { newValue in
+                        WindowManager.shared.setStatusBarIconHidden(newValue)
+                    }
+
+                if !generalSettingsMessage.isEmpty {
+                    Text(generalSettingsMessage)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
         }
     }
@@ -704,14 +715,14 @@ struct SettingsView: View {
 
                 HStack {
                     Button("检查更新") {
-                        // TODO: 实现更新检查
+                        openExternalURL("https://github.com/blademainer/screen-capture/releases")
                     }
                     .buttonStyle(.bordered)
 
                     Spacer()
 
                     Button("反馈问题") {
-                        // TODO: 打开反馈页面
+                        openExternalURL("https://github.com/blademainer/screen-capture/issues")
                     }
                     .buttonStyle(.bordered)
                 }
@@ -724,31 +735,29 @@ struct SettingsView: View {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
         panel.message = "选择截图保存位置"
         panel.prompt = "选择"
 
-        if panel.runModal() == .OK {
+        if runSettingsPanel(panel) == .OK {
             if let url = panel.url {
-                // 开始访问安全作用域资源
-                guard url.startAccessingSecurityScopedResource() else {
-                    print("无法访问选择的文件夹")
-                    return
+                let didAccessSecurityScope = url.startAccessingSecurityScopedResource()
+                defer {
+                    if didAccessSecurityScope {
+                        url.stopAccessingSecurityScopedResource()
+                    }
                 }
 
-                // 创建安全作用域书签
                 do {
                     let bookmarkData = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
                     UserDefaults.standard.set(bookmarkData, forKey: "defaultSaveLocationBookmark")
-                    // 同时保存路径字符串用于显示
-                    UserDefaults.standard.set(url.path, forKey: "defaultSaveLocation")
-                    defaultSaveLocation = url.path
                     print("成功保存文件夹权限书签: \(url.path)")
                 } catch {
                     print("创建书签失败: \(error)")
                 }
 
-                // 停止访问安全作用域资源（书签已创建）
-                url.stopAccessingSecurityScopedResource()
+                UserDefaults.standard.set(url.path, forKey: "defaultSaveLocation")
+                defaultSaveLocation = url.path
             }
         }
     }
@@ -763,7 +772,7 @@ struct SettingsView: View {
         panel.message = "选择用于打开截图的应用"
         panel.prompt = "选择"
 
-        if panel.runModal() == .OK, let url = panel.url {
+        if runSettingsPanel(panel) == .OK, let url = panel.url {
             openAfterCaptureAppPath = url.path
         }
     }
@@ -830,7 +839,7 @@ struct SettingsView: View {
         panel.message = "导出 3 套自定义标注模板"
         panel.prompt = "导出"
 
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard runSettingsPanel(panel) == .OK, let url = panel.url else { return }
 
         let payload = AnnotationTemplateExport(
             version: 1,
@@ -859,7 +868,7 @@ struct SettingsView: View {
         panel.message = "导入自定义标注模板"
         panel.prompt = "导入"
 
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard runSettingsPanel(panel) == .OK, let url = panel.url else { return }
 
         do {
             let data = try Data(contentsOf: url)
@@ -944,8 +953,34 @@ struct SettingsView: View {
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
-        // TODO: 实现开机自启动设置
-        print("设置开机自启动: \(enabled)")
+        guard #available(macOS 13.0, *) else {
+            generalSettingsMessage = "当前系统不支持在应用内设置开机自启动。"
+            return
+        }
+
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+                generalSettingsMessage = "已开启开机自启动。"
+            } else {
+                try SMAppService.mainApp.unregister()
+                generalSettingsMessage = "已关闭开机自启动。"
+            }
+        } catch {
+            generalSettingsMessage = "开机自启动设置失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func runSettingsPanel(_ panel: NSSavePanel) -> NSApplication.ModalResponse {
+        NSApp.activate(ignoringOtherApps: true)
+        panel.level = .floating
+        panel.orderFrontRegardless()
+        return panel.runModal()
+    }
+
+    private func openExternalURL(_ urlString: String) {
+        guard let url = URL(string: urlString) else { return }
+        NSWorkspace.shared.open(url)
     }
 }
 

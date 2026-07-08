@@ -40,7 +40,9 @@ class WindowManager: ObservableObject {
     private var recordingTimer: Timer?
 
     private init() {
-        setupStatusBar()
+        if !UserDefaults.standard.bool(forKey: "hideMenuBarIcon") {
+            setupStatusBar()
+        }
         observeCaptureState()
     }
 
@@ -53,6 +55,8 @@ class WindowManager: ObservableObject {
 
     // MARK: - Status Bar Setup
     private func setupStatusBar() {
+        if statusBarItem != nil { return }
+
         statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         guard let statusBarItem = statusBarItem else { return }
@@ -65,6 +69,17 @@ class WindowManager: ObservableObject {
         }
 
         setupStatusBarMenu()
+    }
+
+    func setStatusBarIconHidden(_ hidden: Bool) {
+        if hidden {
+            if let statusBarItem {
+                NSStatusBar.system.removeStatusItem(statusBarItem)
+                self.statusBarItem = nil
+            }
+        } else {
+            setupStatusBar()
+        }
     }
 
     private func setupStatusBarMenu() {

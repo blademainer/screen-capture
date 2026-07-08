@@ -340,18 +340,24 @@ final class MacScreenCaptureTests: XCTestCase {
         let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
 
         XCTAssertTrue(source.contains("captureSelectedRegionImage(preferWindowUnderMouse: true)"))
-        XCTAssertTrue(source.contains("magneticRegionUnderMouse(from: content)"))
+        XCTAssertTrue(source.contains("magneticRegionUnderMouse(in: displayBounds)"))
         XCTAssertTrue(source.contains("CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements]"))
         XCTAssertTrue(source.contains("windowBounds.contains(mouseLocation)"))
         XCTAssertTrue(source.contains("selectScreenshotRegion("))
         XCTAssertTrue(source.contains("MagneticRegionSelectionView("))
+        XCTAssertTrue(source.contains("activeDisplayBounds()"))
         XCTAssertTrue(source.contains("已吸附当前窗口；点击或按 Enter 截图，拖拽可重新选择，Esc 取消"))
         XCTAssertTrue(source.contains("case 36, 76:"))
         XCTAssertTrue(source.contains("case 53:"))
         XCTAssertTrue(source.contains("normalizedQuartzRect(from: startPoint, to: point)"))
         XCTAssertTrue(source.contains("mouseDownStartedInSelection"))
-        XCTAssertTrue(source.contains("captureDisplayImageWithoutSaving(display: display)"))
-        XCTAssertTrue(source.contains("cropDisplayImage(displayImage, to: cropRect, in: display)"))
+        XCTAssertTrue(source.contains("DispatchQueue.main.async { [completion] in"))
+        XCTAssertTrue(source.contains("captureFixedRegionWithScreencapture(selectedRect)"))
+        XCTAssertTrue(source.contains("process.arguments = [\"-x\", \"-R\", rectangleArgument, tempURL.path]"))
+        XCTAssertTrue(source.contains("activeRegionSelectionWindow = selectionWindow"))
+        XCTAssertTrue(source.contains("selectionWindow.isReleasedWhenClosed = false"))
+        XCTAssertTrue(source.contains("DispatchQueue.main.asyncAfter(deadline: .now() + 0.4)"))
+        XCTAssertFalse(source.contains("let displayImage = try await captureDisplayImageWithoutSaving(display: display)"))
     }
 
     func testMultiWindowSelectionSupportsShiftAndDesktopBackdrop() throws {

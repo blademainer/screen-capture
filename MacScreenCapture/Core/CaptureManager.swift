@@ -116,6 +116,7 @@ class CaptureManager: ObservableObject {
     private var recordingStartTime: Date?
     private var securityScopedURL: URL?
     private var colorSampler: NSColorSampler?
+    private var activeRegionSelectionWindow: NSWindow?
 
     private struct ScrollingCaptureTarget {
         let display: SCDisplay
@@ -1682,7 +1683,7 @@ class CaptureManager: ObservableObject {
         return frame.integral
     }
 
-    private func magneticRegionUnderMouse(from content: SCShareableContent) -> CGRect? {
+    private func magneticRegionUnderMouse(in displayBounds: CGRect) -> CGRect? {
         guard let mouseLocation = CGEvent(source: nil)?.location,
               let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return nil
@@ -1707,32 +1708,12 @@ class CaptureManager: ObservableObject {
                 continue
             }
 
-            guard let display = content.displays.first(where: { display in
-                CGDisplayBounds(display.displayID).intersects(windowBounds)
-            }) else {
-                continue
-            }
-
-            let clippedWindow = windowBounds.intersection(CGDisplayBounds(display.displayID)).integral
+            let clippedWindow = windowBounds.intersection(displayBounds).integral
             guard clippedWindow.width >= 40, clippedWindow.height >= 40 else { continue }
             return clippedWindow
         }
 
         return nil
-    }
-
-    private func displayForRegion(_ region: CGRect, from displays: [SCDisplay]) throws -> SCDisplay {
-        let rankedDisplays = displays.compactMap { display -> (display: SCDisplay, area: CGFloat)? in
-            let intersection = region.intersection(CGDisplayBounds(display.displayID))
-            guard intersection.width > 0, intersection.height > 0 else { return nil }
-            return (display, intersection.width * intersection.height)
-        }
-
-        guard let bestDisplay = rankedDisplays.max(by: { $0.area < $1.area })?.display else {
-            throw CaptureError.noDisplayAvailable
-        }
-
-        return bestDisplay
     }
 
     @MainActor
@@ -1762,6 +1743,7 @@ class CaptureManager: ObservableObject {
             selectionWindow.hasShadow = false
             selectionWindow.ignoresMouseEvents = false
             selectionWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            selectionWindow.isReleasedWhenClosed = false
 
             let overlayView = MagneticRegionSelectionView(
                 screenFrame: selectionFrame,
@@ -1769,12 +1751,20 @@ class CaptureManager: ObservableObject {
             ) { result in
                 guard !didResume else { return }
                 didResume = true
-                selectionWindow.contentView = nil
-                selectionWindow.close()
+                selectionWindow.orderOut(nil)
                 continuation.resume(with: result)
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self, selectionWindow] in
+                    selectionWindow.contentView = nil
+                    selectionWindow.close()
+                    if self?.activeRegionSelectionWindow === selectionWindow {
+                        self?.activeRegionSelectionWindow = nil
+                    }
+                }
             }
 
             selectionWindow.contentView = overlayView
+            activeRegionSelectionWindow = selectionWindow
             selectionWindow.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         }
@@ -2195,26 +2185,80 @@ class CaptureManager: ObservableObject {
 
     @MainActor
     private func captureSelectedRegionImage(preferWindowUnderMouse: Bool) async throws -> NSImage {
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        let displayBounds = allDisplayBounds(from: content.displays)
+        let displayBounds = activeDisplayBounds()
         guard !displayBounds.isNull && !displayBounds.isEmpty else {
             throw CaptureError.noDisplayAvailable
         }
 
-        let initialSelection = preferWindowUnderMouse ? magneticRegionUnderMouse(from: content) : nil
+        let initialSelection = preferWindowUnderMouse ? magneticRegionUnderMouse(in: displayBounds) : nil
         let selectedRect = try await selectScreenshotRegion(
             displayBounds: displayBounds,
             initialSelection: initialSelection
         )
-        let display = try displayForRegion(selectedRect, from: content.displays)
-        let displayBoundsForCrop = CGDisplayBounds(display.displayID)
-        let cropRect = selectedRect.intersection(displayBoundsForCrop).integral
-        guard cropRect.width >= 2, cropRect.height >= 2 else {
+        guard selectedRect.width >= 2, selectedRect.height >= 2 else {
             throw CaptureError.regionSelectionCancelled
         }
 
-        let displayImage = try await captureDisplayImageWithoutSaving(display: display)
-        return cropDisplayImage(displayImage, to: cropRect, in: display)
+        return try await captureFixedRegionWithScreencapture(selectedRect)
+    }
+
+    private func activeDisplayBounds() -> CGRect {
+        var displayCount: UInt32 = 0
+        guard CGGetActiveDisplayList(0, nil, &displayCount) == .success, displayCount > 0 else {
+            return NSScreen.screens.map(\.frame).reduce(CGRect.null) { partial, screenFrame in
+                partial.isNull ? screenFrame : partial.union(screenFrame)
+            }.integral
+        }
+
+        var displayIDs = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
+        guard CGGetActiveDisplayList(displayCount, &displayIDs, &displayCount) == .success else {
+            return .null
+        }
+
+        return displayIDs
+            .map { CGDisplayBounds($0) }
+            .filter { !$0.isNull && !$0.isEmpty }
+            .reduce(CGRect.null) { partial, displayFrame in
+                partial.isNull ? displayFrame : partial.union(displayFrame)
+            }
+            .integral
+    }
+
+    private func captureFixedRegionWithScreencapture(_ rect: CGRect) async throws -> NSImage {
+        let captureRect = rect.integral
+        guard captureRect.width >= 2, captureRect.height >= 2 else {
+            throw CaptureError.regionSelectionCancelled
+        }
+
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("magnetic_region_capture_\(UUID().uuidString).png")
+        let rectangleArgument = "\(Int(captureRect.minX)),\(Int(captureRect.minY)),\(Int(captureRect.width)),\(Int(captureRect.height))"
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-x", "-R", rectangleArgument, tempURL.path]
+
+        return try await withCheckedThrowingContinuation { continuation in
+            process.terminationHandler = { process in
+                if process.terminationStatus == 0,
+                   let image = NSImage(contentsOf: tempURL),
+                   image.size.width > 0,
+                   image.size.height > 0 {
+                    try? FileManager.default.removeItem(at: tempURL)
+                    continuation.resume(returning: image)
+                } else {
+                    try? FileManager.default.removeItem(at: tempURL)
+                    continuation.resume(throwing: CaptureError.failedToCapture)
+                }
+            }
+
+            do {
+                try process.run()
+            } catch {
+                try? FileManager.default.removeItem(at: tempURL)
+                continuation.resume(throwing: CaptureError.failedToCapture)
+            }
+        }
     }
 
     @MainActor
@@ -3000,6 +3044,7 @@ final class MagneticRegionSelectionView: NSView {
     private var currentPoint: CGPoint?
     private var didDrag = false
     private var mouseDownStartedInSelection = false
+    private var didComplete = false
 
     init(
         screenFrame: CGRect,
@@ -3096,7 +3141,7 @@ final class MagneticRegionSelectionView: NSView {
             return
         }
 
-        completion(.success(rect.integral))
+        complete(.success(rect.integral))
     }
 
     override func keyDown(with event: NSEvent) {
@@ -3106,11 +3151,20 @@ final class MagneticRegionSelectionView: NSView {
                 NSSound.beep()
                 return
             }
-            completion(.success(rect.integral))
+            complete(.success(rect.integral))
         case 53:
-            completion(.failure(CaptureError.regionSelectionCancelled))
+            complete(.failure(CaptureError.regionSelectionCancelled))
         default:
             super.keyDown(with: event)
+        }
+    }
+
+    private func complete(_ result: Result<CGRect, Error>) {
+        guard !didComplete else { return }
+        didComplete = true
+
+        DispatchQueue.main.async { [completion] in
+            completion(result)
         }
     }
 

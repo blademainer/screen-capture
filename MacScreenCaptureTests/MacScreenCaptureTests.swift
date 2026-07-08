@@ -94,6 +94,28 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(workflow.contains("x86_64"))
     }
 
+    func testApplicationIconAssetsAreComplete() throws {
+        let infoPlist = try repositoryFileContents("MacScreenCapture/Info.plist")
+        let appIconDirectory = repositoryFileURL("MacScreenCapture/Assets.xcassets/AppIcon.appiconset")
+        let expectedSizes = [16, 32, 64, 128, 256, 512, 1024]
+
+        XCTAssertTrue(infoPlist.contains("<key>CFBundleIconFile</key>"))
+        XCTAssertTrue(infoPlist.contains("<string>AppIcon</string>"))
+
+        for size in expectedSizes {
+            let iconURL = appIconDirectory.appendingPathComponent("\(size).png")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: iconURL.path), "\(size).png should exist")
+            let image = try XCTUnwrap(NSImage(contentsOf: iconURL), "\(size).png should load")
+            XCTAssertEqual(Int(image.size.width), size)
+            XCTAssertEqual(Int(image.size.height), size)
+        }
+
+        let icnsURL = appIconDirectory.appendingPathComponent("AppIcon.icns")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: icnsURL.path))
+        let attributes = try FileManager.default.attributesOfItem(atPath: icnsURL.path)
+        XCTAssertGreaterThan(attributes[.size] as? Int ?? 0, 100_000)
+    }
+
     func testPermissionButtonsOpenSystemAuthorizationEntrypoints() throws {
         let source = try repositoryFileContents("MacScreenCapture/Core/PermissionManager.swift")
 
@@ -1566,16 +1588,19 @@ final class MacScreenCaptureTests: XCTestCase {
     }
 
     private func repositoryFileContents(_ relativePath: String) throws -> String {
+        try String(contentsOf: repositoryFileURL(relativePath), encoding: .utf8)
+    }
+
+    private func repositoryFileURL(_ relativePath: String) -> URL {
         let testFileURL = URL(fileURLWithPath: #filePath)
         let repositoryRoot = testFileURL
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let fileURL = relativePath
+        return relativePath
             .split(separator: "/")
             .reduce(repositoryRoot) { partialURL, component in
                 partialURL.appendingPathComponent(String(component))
             }
-        return try String(contentsOf: fileURL, encoding: .utf8)
     }
 
     private func makeSolidImage(width: Int, height: Int, color: NSColor) -> NSImage {

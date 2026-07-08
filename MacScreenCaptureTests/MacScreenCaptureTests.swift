@@ -112,6 +112,11 @@ final class MacScreenCaptureTests: XCTestCase {
     func testSystemNotificationsAreSkippedOutsideAppBundle() throws {
         let menuSource = try repositoryFileContents("MacScreenCapture/Views/MenuBarView.swift")
         let notificationSource = try repositoryFileContents("MacScreenCapture/Utils/NotificationManager.swift")
+        let presenterSource = try repositoryFileContents("MacScreenCapture/Utils/SystemNotificationPresenter.swift")
+        let editingManagerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowManager.swift")
+        let floatingManagerSource = try repositoryFileContents("MacScreenCapture/Core/FloatingWindowManager.swift")
+        let editingControllerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowController.swift")
+        let floatingControllerSource = try repositoryFileContents("MacScreenCapture/Core/FloatingWindowController.swift")
 
         XCTAssertTrue(menuSource.contains("Bundle.main.bundleURL.pathExtension == \"app\""))
         XCTAssertTrue(menuSource.contains("print(\"\\(title): \\(message)\")"))
@@ -119,6 +124,17 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(notificationSource.contains("Bundle.main.bundleURL.pathExtension == \"app\""))
         XCTAssertTrue(notificationSource.contains("notificationCenter = nil"))
         XCTAssertTrue(notificationSource.contains("guard let notificationCenter, notificationsEnabled && hasNotificationPermission else"))
+        XCTAssertTrue(presenterSource.contains("Bundle.main.bundleURL.pathExtension == \"app\""))
+        XCTAssertTrue(presenterSource.contains("print(\"\\(title): \\(message)\")"))
+        XCTAssertTrue(presenterSource.contains("NSUserNotificationCenter.default.deliver(notification)"))
+        XCTAssertTrue(editingManagerSource.contains("SystemNotificationPresenter.deliverLegacy(message: \"截图已自动复制到剪贴板\")"))
+        XCTAssertTrue(floatingManagerSource.contains("SystemNotificationPresenter.deliverLegacy(message: \"截图已自动复制到剪贴板\")"))
+        XCTAssertTrue(editingControllerSource.contains("SystemNotificationPresenter.deliverLegacy(message: message)"))
+        XCTAssertTrue(floatingControllerSource.contains("SystemNotificationPresenter.deliverLegacy(message: message)"))
+        XCTAssertFalse(editingManagerSource.contains("NSUserNotificationCenter.default.deliver"))
+        XCTAssertFalse(floatingManagerSource.contains("NSUserNotificationCenter.default.deliver"))
+        XCTAssertFalse(editingControllerSource.contains("NSUserNotificationCenter.default.deliver"))
+        XCTAssertFalse(floatingControllerSource.contains("NSUserNotificationCenter.default.deliver"))
     }
 
     func testMainScreenshotViewExposesIShotAdvancedActions() throws {

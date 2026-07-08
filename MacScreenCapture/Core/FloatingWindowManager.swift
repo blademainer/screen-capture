@@ -66,12 +66,7 @@ class FloatingWindowManager: ObservableObject {
         pasteboard.clearContents()
         pasteboard.writeObjects([image])
         
-        // 显示通知
-        let notification = NSUserNotification()
-        notification.title = "MacScreenCapture"
-        notification.informativeText = "截图已自动复制到剪贴板"
-        notification.soundName = NSUserNotificationDefaultSoundName
-        NSUserNotificationCenter.default.deliver(notification)
+        SystemNotificationPresenter.deliverLegacy(message: "截图已自动复制到剪贴板")
     }
     
     // MARK: - Batch Operations

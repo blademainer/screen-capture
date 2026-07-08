@@ -662,15 +662,7 @@ class FloatingWindowController: NSWindowController {
     }
 
     private func showNotification(_ message: String) {
-        // 使用系统通知而不是弹窗，避免打断用户
-        let notification = NSUserNotification()
-        notification.title = "MacScreenCapture"
-        notification.informativeText = message
-        notification.soundName = NSUserNotificationDefaultSoundName
-
-        NSUserNotificationCenter.default.deliver(notification)
-
-        // 同时在浮窗中显示临时提示
+        SystemNotificationPresenter.deliverLegacy(message: message)
         showInWindowNotification(message)
     }
 

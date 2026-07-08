@@ -214,13 +214,7 @@ class EditingWindowController: NSWindowController {
     }
     
     private func showNotification(_ message: String) {
-        let notification = NSUserNotification()
-        notification.title = "MacScreenCapture"
-        notification.informativeText = message
-        notification.soundName = NSUserNotificationDefaultSoundName
-        
-        NSUserNotificationCenter.default.deliver(notification)
-        
+        SystemNotificationPresenter.deliverLegacy(message: message)
         showInWindowNotification(message)
     }
     

@@ -1806,6 +1806,8 @@ class CaptureManager: ObservableObject {
             var didResume = false
             var selectionWindows: [NSWindow] = []
 
+            NSApp.setActivationPolicy(.regular)
+
             let completeSelection: (Result<CGRect, Error>) -> Void = { result in
                 guard !didResume else { return }
                 didResume = true
@@ -1819,6 +1821,9 @@ class CaptureManager: ObservableObject {
                     }
                     self?.activeRegionSelectionWindows.removeAll { activeWindow in
                         selectionWindows.contains { $0 === activeWindow }
+                    }
+                    if WindowManager.shared.isMainWindowVisible == false {
+                        NSApp.setActivationPolicy(.accessory)
                     }
                 }
             }

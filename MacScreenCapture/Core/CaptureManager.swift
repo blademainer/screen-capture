@@ -1456,6 +1456,7 @@ class CaptureManager: ObservableObject {
 
     /// 区域截图 - 默认磁吸到当前指针所在窗口，仍支持手动拖拽框选。
     private func captureRegionScreenshot(autoOpenAfterCapture: Bool = true, forceSave: Bool = false) async throws -> NSImage {
+        HotKeyLatencyDiagnostics.mark("region_screenshot_started")
         let shouldAutoHideMainWindow = UserDefaults.standard.bool(forKey: "autoHideWindowDuringCapture")
         let mainWindowVisible = await MainActor.run { WindowManager.shared.isMainWindowVisible }
         if shouldAutoHideMainWindow && mainWindowVisible {
@@ -1788,6 +1789,7 @@ class CaptureManager: ObservableObject {
         magneticCandidates: [MagneticWindowCandidate],
         initialSelection: CGRect?
     ) async throws -> CGRect {
+        HotKeyLatencyDiagnostics.mark("region_overlay_preparing")
         let selectionFrames = coordinateSpaces
             .map(\.screenFrame)
             .filter { !$0.isNull && !$0.isEmpty }
@@ -1854,6 +1856,7 @@ class CaptureManager: ObservableObject {
             selectionWindows.forEach { $0.orderFrontRegardless() }
             selectionWindows.last?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+            HotKeyLatencyDiagnostics.mark("region_overlay_ordered")
         }
     }
 

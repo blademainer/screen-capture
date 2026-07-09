@@ -369,13 +369,23 @@ class HotKeyManager: ObservableObject {
     }
 
     private func performDoubleOptionQuickOpen() {
+        let trace = HotKeyLatencyDiagnostics.makeTrace(action: "double_option_quick_open")
+        HotKeyLatencyDiagnostics.$current.withValue(trace) {
+            HotKeyLatencyDiagnostics.mark("hotkey_received")
+        }
+
         Task(priority: .userInitiated) { @MainActor in
-            do {
-                _ = try await BackgroundResponsivenessManager.shared.performHotKeyActivity {
-                    try await CaptureManager.shared.captureRegionAndOpenInConfiguredApp()
+            await HotKeyLatencyDiagnostics.$current.withValue(trace) {
+                do {
+                    HotKeyLatencyDiagnostics.mark("task_started")
+                    _ = try await BackgroundResponsivenessManager.shared.performHotKeyActivity {
+                        try await CaptureManager.shared.captureRegionAndOpenInConfiguredApp()
+                    }
+                    HotKeyLatencyDiagnostics.mark("action_finished")
+                } catch {
+                    HotKeyLatencyDiagnostics.mark("action_failed")
+                    print("双击 Option 快速打开失败: \(error)")
                 }
-            } catch {
-                print("双击 Option 快速打开失败: \(error)")
             }
         }
     }
@@ -412,9 +422,18 @@ class HotKeyManager: ObservableObject {
             )
             
             if hotKeyID.signature == actionID.signature && hotKeyID.id == actionID.id {
+                let trace = HotKeyLatencyDiagnostics.makeTrace(action: action.rawValue)
+                HotKeyLatencyDiagnostics.$current.withValue(trace) {
+                    HotKeyLatencyDiagnostics.mark("hotkey_received")
+                }
+
                 Task(priority: .userInitiated) { @MainActor in
-                    await BackgroundResponsivenessManager.shared.performHotKeyActivity {
-                        await self.performAction(action)
+                    await HotKeyLatencyDiagnostics.$current.withValue(trace) {
+                        HotKeyLatencyDiagnostics.mark("task_started")
+                        await BackgroundResponsivenessManager.shared.performHotKeyActivity {
+                            await self.performAction(action)
+                        }
+                        HotKeyLatencyDiagnostics.mark("action_finished")
                     }
                 }
                 break

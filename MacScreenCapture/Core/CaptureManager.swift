@@ -696,7 +696,9 @@ class CaptureManager: ObservableObject {
             }
         }
 
-
+        if captureMode == .region {
+            return try await captureRegionScreenshot(autoOpenAfterCapture: autoOpenAfterCapture, forceSave: forceSave)
+        }
 
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
 
@@ -719,8 +721,7 @@ class CaptureManager: ObservableObject {
             captureSize = window.frame.size
 
         case .region:
-            // 区域截图需要先选择区域
-            return try await captureRegionScreenshot(autoOpenAfterCapture: autoOpenAfterCapture, forceSave: forceSave)
+            throw CaptureError.regionSelectionCancelled
         }
 
         let configuration = SCStreamConfiguration()
@@ -1455,7 +1456,11 @@ class CaptureManager: ObservableObject {
 
     /// 区域截图 - 默认磁吸到当前指针所在窗口，仍支持手动拖拽框选。
     private func captureRegionScreenshot(autoOpenAfterCapture: Bool = true, forceSave: Bool = false) async throws -> NSImage {
-        try? await Task.sleep(nanoseconds: 160_000_000)
+        let shouldAutoHideMainWindow = UserDefaults.standard.bool(forKey: "autoHideWindowDuringCapture")
+        let mainWindowVisible = await MainActor.run { WindowManager.shared.isMainWindowVisible }
+        if shouldAutoHideMainWindow && mainWindowVisible {
+            try? await Task.sleep(nanoseconds: 120_000_000)
+        }
         let image = try await captureSelectedRegionImage(preferWindowUnderMouse: true)
         return try await finalizeCapturedImage(
             image,

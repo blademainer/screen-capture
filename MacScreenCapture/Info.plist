@@ -45,12 +45,14 @@
 	<string>此应用需要访问麦克风来录制音频。</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSAppSleepDisabled</key>
+	<true/>
 	<key>NSScreenCaptureDescription</key>
 	<string>此应用需要屏幕录制权限来进行截图和录屏功能。</string>
 	<key>NSSupportsAutomaticTermination</key>
-	<true/>
+	<false/>
 	<key>NSSupportsSuddenTermination</key>
-	<true/>
+	<false/>
 	<key>NSUserNotificationAlertStyle</key>
 	<string>alert</string>
 </dict>

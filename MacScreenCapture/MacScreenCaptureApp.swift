@@ -52,6 +52,9 @@ struct MacScreenCaptureApp: App {
         
         // 初始化WindowManager
         _ = WindowManager.shared
+
+        // 避免常驻后台后被 App Nap/自动终止影响全局快捷键响应
+        BackgroundResponsivenessManager.shared.start()
         
         // 监听应用退出通知
         NotificationCenter.default.addObserver(
@@ -59,6 +62,7 @@ struct MacScreenCaptureApp: App {
             object: nil,
             queue: .main
         ) { _ in
+            BackgroundResponsivenessManager.shared.stop()
             Task {
                 await captureManager.cleanup()
             }

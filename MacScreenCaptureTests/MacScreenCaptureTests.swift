@@ -401,6 +401,23 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(captureManagerSource.contains("openLastScreenshotInConfiguredApp()"))
     }
 
+    func testBackgroundResponsivenessDisablesAppNapForHotKeys() throws {
+        let appSource = try repositoryFileContents("MacScreenCapture/MacScreenCaptureApp.swift")
+        let responsivenessSource = try repositoryFileContents("MacScreenCapture/Core/BackgroundResponsivenessManager.swift")
+        let infoPlist = try repositoryFileContents("MacScreenCapture/Info.plist")
+
+        XCTAssertTrue(appSource.contains("BackgroundResponsivenessManager.shared.start()"))
+        XCTAssertTrue(appSource.contains("BackgroundResponsivenessManager.shared.stop()"))
+        XCTAssertTrue(responsivenessSource.contains("ProcessInfo.processInfo"))
+        XCTAssertTrue(responsivenessSource.contains(".automaticTerminationDisabled"))
+        XCTAssertTrue(responsivenessSource.contains(".suddenTerminationDisabled"))
+        XCTAssertTrue(responsivenessSource.contains("beginActivity("))
+        XCTAssertTrue(responsivenessSource.contains("endActivity(activity)"))
+        XCTAssertTrue(infoPlist.contains("<key>NSAppSleepDisabled</key>\n\t<true/>"))
+        XCTAssertTrue(infoPlist.contains("<key>NSSupportsAutomaticTermination</key>\n\t<false/>"))
+        XCTAssertTrue(infoPlist.contains("<key>NSSupportsSuddenTermination</key>\n\t<false/>"))
+    }
+
     func testSettingsPanelButtonsAreBackedByVisibleActions() throws {
         let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")
         let appSource = try repositoryFileContents("MacScreenCapture/MacScreenCaptureApp.swift")

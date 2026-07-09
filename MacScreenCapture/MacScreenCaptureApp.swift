@@ -14,10 +14,13 @@ import AppKit
 struct MacScreenCaptureApp: App {
     @StateObject private var permissionManager = PermissionManager()
     @StateObject private var captureManager: CaptureManager
+    private static var didSetupRuntimeServices = false
     
     init() {
         UserDefaults.registerMacScreenCaptureDefaults()
-        _captureManager = StateObject(wrappedValue: CaptureManager.shared)
+        let sharedCaptureManager = CaptureManager.shared
+        _captureManager = StateObject(wrappedValue: sharedCaptureManager)
+        Self.setupRuntimeServices(captureManager: sharedCaptureManager)
     }
     
     var body: some Scene {
@@ -26,7 +29,7 @@ struct MacScreenCaptureApp: App {
                 .environmentObject(permissionManager)
                 .environmentObject(captureManager)
                 .onAppear {
-                    setupApplication()
+                    refreshApplicationState()
                 }
         }
         .windowResizability(.contentSize)
@@ -39,23 +42,22 @@ struct MacScreenCaptureApp: App {
         }
     }
     
-    private func setupApplication() {
+    private static func setupRuntimeServices(captureManager: CaptureManager) {
+        guard !didSetupRuntimeServices else { return }
+        didSetupRuntimeServices = true
+
         // 设置默认用户偏好
         setupDefaultUserDefaults()
-        
-        // 应用启动时的初始化设置
-        permissionManager.checkAllPermissions()
-        captureManager.initialize()
-        
+
         // 初始化快捷键管理器
         _ = HotKeyManager.shared
-        
+
         // 初始化WindowManager
         _ = WindowManager.shared
 
         // 避免常驻后台后被 App Nap/自动终止影响全局快捷键响应
         BackgroundResponsivenessManager.shared.start()
-        
+
         // 监听应用退出通知
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
@@ -68,8 +70,13 @@ struct MacScreenCaptureApp: App {
             }
         }
     }
-    
-    private func setupDefaultUserDefaults() {
+
+    private func refreshApplicationState() {
+        permissionManager.checkAllPermissions()
+        captureManager.initialize()
+    }
+
+    private static func setupDefaultUserDefaults() {
         let defaults = UserDefaults.standard
         
         // 设置默认值（如果还没有设置）

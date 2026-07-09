@@ -369,9 +369,11 @@ class HotKeyManager: ObservableObject {
     }
 
     private func performDoubleOptionQuickOpen() {
-        Task { @MainActor in
+        Task(priority: .userInitiated) { @MainActor in
             do {
-                _ = try await CaptureManager.shared.captureRegionAndOpenInConfiguredApp()
+                _ = try await BackgroundResponsivenessManager.shared.performHotKeyActivity {
+                    try await CaptureManager.shared.captureRegionAndOpenInConfiguredApp()
+                }
             } catch {
                 print("双击 Option 快速打开失败: \(error)")
             }
@@ -410,91 +412,92 @@ class HotKeyManager: ObservableObject {
             )
             
             if hotKeyID.signature == actionID.signature && hotKeyID.id == actionID.id {
-                DispatchQueue.main.async {
-                    self.performAction(action)
+                Task(priority: .userInitiated) { @MainActor in
+                    await BackgroundResponsivenessManager.shared.performHotKeyActivity {
+                        await self.performAction(action)
+                    }
                 }
                 break
             }
         }
     }
     
-    private func performAction(_ action: HotKeyAction) {
-        Task { @MainActor in
-            let captureManager = CaptureManager.shared
-            
-            switch action {
-            case .standardScreenshot:
-                await captureManager.captureRegion()
-            case .fullScreenshot:
-                await captureManager.captureFullScreen()
-            case .regionScreenshot:
-                await captureManager.captureRegion()
-            case .windowScreenshot:
-                await captureManager.captureWindow()
-            case .delayedScreenshot:
+    @MainActor
+    private func performAction(_ action: HotKeyAction) async {
+        let captureManager = CaptureManager.shared
+
+        switch action {
+        case .standardScreenshot:
+            await captureManager.captureRegion()
+        case .fullScreenshot:
+            await captureManager.captureFullScreen()
+        case .regionScreenshot:
+            await captureManager.captureRegion()
+        case .windowScreenshot:
+            await captureManager.captureWindow()
+        case .delayedScreenshot:
+            do {
+                _ = try await captureManager.captureDelayedScreenshot()
+            } catch {
+                print("延时截图失败: \(error)")
+            }
+        case .multiWindowScreenshot:
+            do {
+                _ = try await captureManager.captureMultipleWindowsScreenshot()
+            } catch {
+                print("多窗口截图失败: \(error)")
+            }
+        case .deviceFramedScreenshot:
+            do {
+                _ = try await captureManager.captureDeviceFramedFullScreen()
+            } catch {
+                print("全屏带壳截图失败: \(error)")
+            }
+        case .startRecording:
+            if !captureManager.isRecording {
                 do {
-                    _ = try await captureManager.captureDelayedScreenshot()
+                    _ = try await captureManager.startRecordingWithPreflight()
                 } catch {
-                    print("延时截图失败: \(error)")
+                    print("开始录制失败: \(error)")
                 }
-            case .multiWindowScreenshot:
+            }
+        case .startAudioRecording:
+            if !captureManager.isRecording {
                 do {
-                    _ = try await captureManager.captureMultipleWindowsScreenshot()
+                    _ = try await captureManager.startAudioRecordingWithPreflight()
                 } catch {
-                    print("多窗口截图失败: \(error)")
+                    print("开始录音失败: \(error)")
                 }
-            case .deviceFramedScreenshot:
-                do {
-                    _ = try await captureManager.captureDeviceFramedFullScreen()
-                } catch {
-                    print("全屏带壳截图失败: \(error)")
-                }
-            case .startRecording:
-                if !captureManager.isRecording {
-                    do {
-                        _ = try await captureManager.startRecordingWithPreflight()
-                    } catch {
-                        print("开始录制失败: \(error)")
-                    }
-                }
-            case .startAudioRecording:
-                if !captureManager.isRecording {
-                    do {
-                        _ = try await captureManager.startAudioRecordingWithPreflight()
-                    } catch {
-                        print("开始录音失败: \(error)")
-                    }
-                }
-            case .togglePauseRecording:
-                if captureManager.isRecording {
-                    captureManager.togglePauseRecording()
-                }
-            case .stopRecording:
-                if captureManager.isRecording {
-                    await captureManager.stopRecording()
-                }
-            case .scrollScreenshot:
-                await captureManager.captureScrollingWindow()
-            case .pickColor:
-                captureManager.pickScreenColor()
-            case .pinnedScreenshot:
-                do {
-                    _ = try await captureManager.capturePinnedRegion()
-                } catch {
-                    print("贴图失败: \(error)")
-                }
-            case .ocrScreenshot:
-                do {
-                    _ = try await captureManager.captureRegionAndRecognizeText()
-                } catch {
-                    print("OCR 失败: \(error)")
-                }
-            case .translateScreenshot:
-                do {
-                    _ = try await captureManager.captureRegionAndTranslate()
-                } catch {
-                    print("截图翻译失败: \(error)")
-                }
+            }
+        case .togglePauseRecording:
+            if captureManager.isRecording {
+                captureManager.togglePauseRecording()
+            }
+        case .stopRecording:
+            if captureManager.isRecording {
+                await captureManager.stopRecording()
+            }
+        case .scrollScreenshot:
+            await captureManager.captureScrollingWindow()
+        case .pickColor:
+            captureManager.pickScreenColor()
+        case .pinnedScreenshot:
+            do {
+                _ = try await captureManager.capturePinnedRegion()
+            } catch {
+                print("贴图失败: \(error)")
+            }
+        case .ocrScreenshot:
+            do {
+                _ = try await captureManager.captureRegionAndRecognizeText()
+            } catch {
+                print("OCR 失败: \(error)")
+            }
+        case .translateScreenshot:
+            do {
+                _ = try await captureManager.captureRegionAndTranslate()
+            } catch {
+                print("截图翻译失败: \(error)")
             }
         }
     }

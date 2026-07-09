@@ -27,4 +27,22 @@ final class BackgroundResponsivenessManager {
         processInfo.endActivity(activity)
         self.activity = nil
     }
+
+    func performHotKeyActivity<T>(_ operation: () async throws -> T) async rethrows -> T {
+        let activity = processInfo.beginActivity(
+            options: [
+                .userInitiatedAllowingIdleSystemSleep,
+                .latencyCritical,
+                .automaticTerminationDisabled,
+                .suddenTerminationDisabled
+            ],
+            reason: "Respond to a screenshot hotkey without background wake latency."
+        )
+
+        defer {
+            processInfo.endActivity(activity)
+        }
+
+        return try await operation()
+    }
 }

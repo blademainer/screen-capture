@@ -1782,8 +1782,7 @@ class CaptureManager: ObservableObject {
     private func selectScreenshotRegion(
         displayBounds: CGRect,
         coordinateSpaces: [DisplayCoordinateSpace],
-        magneticCandidates: [MagneticWindowCandidate],
-        initialSelection: CGRect?
+        preferWindowUnderMouse: Bool
     ) async throws -> CGRect {
         HotKeyLatencyDiagnostics.mark("region_overlay_preparing")
         let selectionFrames = coordinateSpaces
@@ -1794,13 +1793,10 @@ class CaptureManager: ObservableObject {
             throw CaptureError.noDisplayAvailable
         }
 
-        let clippedInitialSelection = initialSelection?
-            .intersection(displayBounds)
-            .integral
-
         return try await withCheckedThrowingContinuation { continuation in
             var didResume = false
             var selectionWindows: [NSWindow] = []
+            var overlayViews: [MagneticRegionSelectionView] = []
 
             let completeSelection: (Result<CGRect, Error>) -> Void = { result in
                 guard !didResume else { return }
@@ -1839,13 +1835,14 @@ class CaptureManager: ObservableObject {
                 let overlayView = MagneticRegionSelectionView(
                     overlayFrame: selectionFrame,
                     coordinateSpaces: coordinateSpaces,
-                    magneticCandidates: magneticCandidates,
-                    initialSelection: clippedInitialSelection,
+                    magneticCandidates: [],
+                    initialSelection: nil,
                     completion: completeSelection
                 )
 
                 selectionWindow.contentView = overlayView
                 selectionWindows.append(selectionWindow)
+                overlayViews.append(overlayView)
             }
 
             activeRegionSelectionWindows = selectionWindows
@@ -1853,6 +1850,35 @@ class CaptureManager: ObservableObject {
             selectionWindows.last?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             HotKeyLatencyDiagnostics.mark("region_overlay_ordered")
+
+            if preferWindowUnderMouse {
+                loadMagneticCandidatesAfterOverlayIsVisible(
+                    displayBounds: displayBounds,
+                    overlayViews: overlayViews,
+                    isSelectionComplete: { didResume }
+                )
+            }
+        }
+    }
+
+    private func loadMagneticCandidatesAfterOverlayIsVisible(
+        displayBounds: CGRect,
+        overlayViews: [MagneticRegionSelectionView],
+        isSelectionComplete: @escaping () -> Bool
+    ) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+
+            let magneticCandidates = self.magneticWindowCandidates(in: displayBounds)
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !isSelectionComplete() else { return }
+
+                let initialSelection = self.magneticRegionForCurrentContext(candidates: magneticCandidates)?
+                    .intersection(displayBounds)
+                    .integral
+                overlayViews.forEach { $0.updateMagneticCandidates(magneticCandidates, initialSelection: initialSelection) }
+            }
         }
     }
 
@@ -2277,13 +2303,10 @@ class CaptureManager: ObservableObject {
             throw CaptureError.noDisplayAvailable
         }
 
-        let magneticCandidates = preferWindowUnderMouse ? magneticWindowCandidates(in: displayBounds) : []
-        let initialSelection = preferWindowUnderMouse ? magneticRegionForCurrentContext(candidates: magneticCandidates) : nil
         let selectedRect = try await selectScreenshotRegion(
             displayBounds: displayBounds,
             coordinateSpaces: coordinateSpaces,
-            magneticCandidates: magneticCandidates,
-            initialSelection: initialSelection
+            preferWindowUnderMouse: preferWindowUnderMouse
         )
         guard selectedRect.width >= 2, selectedRect.height >= 2 else {
             throw CaptureError.regionSelectionCancelled
@@ -3174,7 +3197,7 @@ private final class RegionSelectionWindow: NSWindow {
 final class MagneticRegionSelectionView: NSView {
     private let overlayFrame: CGRect
     private let coordinateSpaces: [DisplayCoordinateSpace]
-    private let magneticCandidates: [MagneticWindowCandidate]
+    private var magneticCandidates: [MagneticWindowCandidate]
     private let completion: (Result<CGRect, Error>) -> Void
     private var selectedQuartzRect: CGRect?
     private var startPoint: CGPoint?
@@ -3354,6 +3377,19 @@ final class MagneticRegionSelectionView: NSView {
             NSEvent.removeMonitor(localEventMonitor)
             self.localEventMonitor = nil
         }
+    }
+
+    fileprivate func updateMagneticCandidates(_ magneticCandidates: [MagneticWindowCandidate], initialSelection: CGRect?) {
+        guard !didComplete else { return }
+
+        self.magneticCandidates = magneticCandidates
+        if !didDrag, let initialSelection, initialSelection.width >= 2, initialSelection.height >= 2 {
+            selectedQuartzRect = initialSelection
+        } else if !didDrag {
+            updateMagneticSelection(atScreenPoint: NSEvent.mouseLocation)
+        }
+
+        needsDisplay = true
     }
 
     private func updateMagneticSelection(at point: CGPoint) {

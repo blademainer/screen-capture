@@ -554,9 +554,11 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(source.contains("$0.bounds.contains(mouseLocation)"))
         XCTAssertTrue(source.contains("NSWorkspace.shared.frontmostApplication"))
         XCTAssertTrue(source.contains("magneticWindowCandidates(in: displayBounds)"))
-        XCTAssertTrue(source.contains("let magneticCandidates = preferWindowUnderMouse ? magneticWindowCandidates(in: displayBounds) : []"))
-        XCTAssertTrue(source.contains("magneticCandidates: magneticCandidates"))
-        XCTAssertTrue(source.contains("private let magneticCandidates: [MagneticWindowCandidate]"))
+        XCTAssertFalse(source.contains("let magneticCandidates = preferWindowUnderMouse ? magneticWindowCandidates(in: displayBounds) : []"))
+        XCTAssertTrue(source.contains("loadMagneticCandidatesAfterOverlayIsVisible("))
+        XCTAssertTrue(source.contains("overlayViews.forEach { $0.updateMagneticCandidates"))
+        XCTAssertTrue(source.contains("private var magneticCandidates: [MagneticWindowCandidate]"))
+        XCTAssertTrue(source.contains("func updateMagneticCandidates("))
         XCTAssertTrue(source.contains("override func mouseMoved(with event: NSEvent)"))
         XCTAssertTrue(source.contains("updateMagneticSelection(at: point)"))
         XCTAssertTrue(source.contains("private func updateMagneticSelection(at point: CGPoint)"))
@@ -573,6 +575,14 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertFalse(source.contains("NSApp.setActivationPolicy(.regular)"))
         XCTAssertFalse(source.contains("NSApp.setActivationPolicy(.accessory)"))
         XCTAssertTrue(source.contains("selectionWindows.forEach { $0.orderFrontRegardless() }"))
+        guard let selectRegionStart = source.range(of: "private func selectScreenshotRegion(")?.lowerBound,
+              let selectRegionEnd = source.range(of: "private func renderMultiWindowComposite(", range: selectRegionStart..<source.endIndex)?.lowerBound,
+              let overlayOrdered = source.range(of: "HotKeyLatencyDiagnostics.mark(\"region_overlay_ordered\")", range: selectRegionStart..<selectRegionEnd),
+              let loadCandidates = source.range(of: "loadMagneticCandidatesAfterOverlayIsVisible(", range: selectRegionStart..<selectRegionEnd) else {
+            XCTFail("Region selection should defer magnetic candidate loading until after overlay is ordered")
+            return
+        }
+        XCTAssertLessThan(overlayOrdered.lowerBound, loadCandidates.lowerBound)
         XCTAssertTrue(source.contains("NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .mouseMoved, .leftMouseDown])"))
         XCTAssertTrue(source.contains("event.keyCode == 53"))
         XCTAssertTrue(source.contains("complete(.failure(CaptureError.regionSelectionCancelled))"))

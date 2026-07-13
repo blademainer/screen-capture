@@ -31,7 +31,7 @@ struct EditingWindowContentView: View {
             let frameSize = boundedEditingFrameSize(for: editingSession.currentImage.size, in: availableEditingSurfaceSize(in: geometry.size))
 
             ZStack {
-                Color(NSColor(calibratedWhite: 0.18, alpha: 1))
+                Color(NSColor.windowBackgroundColor)
                 editorStack(frameSize: frameSize)
             }
             .onAppear {
@@ -47,7 +47,7 @@ struct EditingWindowContentView: View {
                 logEditorLayout(windowSize: geometry.size, availableSize: availableSize, frameSize: newFrameSize)
             }
         }
-        .background(Color(NSColor(calibratedWhite: 0.18, alpha: 1)))
+        .background(Color(NSColor.windowBackgroundColor))
         .onAppear {
             selectedColor = .annotationDefault(hex: annotationDefaultColorHex)
             lineWidth = CGFloat(annotationDefaultLineWidth)
@@ -62,7 +62,7 @@ struct EditingWindowContentView: View {
             windowSize: windowSize,
             availableSize: availableSize,
             frameSize: frameSize,
-            surfacePadding: 18
+            surfacePadding: 8
         )
     }
     
@@ -152,7 +152,6 @@ struct EditingWindowContentView: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-        .shadow(color: Color.black.opacity(0.22), radius: 12, x: 0, y: 6)
     }
 
     private func editingSurface(size: CGSize) -> some View {
@@ -176,7 +175,7 @@ struct EditingWindowContentView: View {
             .frame(width: size.width, height: size.height)
         }
         .frame(width: size.width, height: size.height)
-        .padding(18)
+        .padding(8)
         .background(Color(NSColor.textBackgroundColor))
         .overlay(
             RoundedRectangle(cornerRadius: 4, style: .continuous)

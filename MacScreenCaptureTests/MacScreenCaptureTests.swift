@@ -284,13 +284,12 @@ final class MacScreenCaptureTests: XCTestCase {
         let controllerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowController.swift")
         let managerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowManager.swift")
 
-        XCTAssertTrue(controllerSource.contains("contentRect: Self.fullScreenEditingFrame()"))
-        XCTAssertTrue(controllerSource.contains("styleMask: [.borderless]"))
-        XCTAssertFalse(controllerSource.contains("styleMask: [.titled, .closable, .resizable, .miniaturizable]"))
-        XCTAssertFalse(controllerSource.contains("titlebarAppearsTransparent"))
-        XCTAssertFalse(controllerSource.contains("titleVisibility"))
+        XCTAssertTrue(controllerSource.contains("contentRect: Self.compactEditingFrame("))
+        XCTAssertTrue(controllerSource.contains("styleMask: [.titled, .closable, .resizable, .miniaturizable]"))
+        XCTAssertTrue(controllerSource.contains("screenContainingMouse()"))
+        XCTAssertFalse(controllerSource.contains("fullScreenEditingFrame"))
+        XCTAssertFalse(controllerSource.contains("reduce(CGRect.null)"))
         XCTAssertTrue(controllerSource.contains("window.level = .floating"))
-        XCTAssertFalse(controllerSource.contains("window.level = .normal"))
         XCTAssertTrue(controllerSource.contains("window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]"))
         XCTAssertTrue(managerSource.contains("NSApp.activate(ignoringOtherApps: true)"))
         XCTAssertTrue(managerSource.contains("editingWindow.window?.makeKeyAndOrderFront(nil)"))
@@ -298,10 +297,11 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertFalse(managerSource.contains("positionNewWindow(editingWindow.window)"))
     }
 
-    func testEditingWindowUsesFocusedGrayEditingFrame() throws {
+    func testEditingWindowUsesCompactNonGrayEditingSurface() throws {
         let source = try repositoryFileContents("MacScreenCapture/Views/EditingWindowContentView.swift")
 
-        XCTAssertTrue(source.contains("Color(NSColor(calibratedWhite: 0.18, alpha: 1))"))
+        XCTAssertFalse(source.contains("Color(NSColor(calibratedWhite: 0.18, alpha: 1))"))
+        XCTAssertTrue(source.contains("Color(NSColor.windowBackgroundColor)"))
         XCTAssertTrue(source.contains("GeometryReader { geometry in"))
         XCTAssertTrue(source.contains("let frameSize = boundedEditingFrameSize(for: editingSession.currentImage.size, in: availableEditingSurfaceSize(in: geometry.size))"))
         XCTAssertTrue(source.contains("editorStack(frameSize: frameSize)"))
@@ -315,10 +315,10 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(source.contains("private func boundedEditingFrameSize(for imageSize: CGSize, in availableSize: CGSize) -> CGSize"))
         XCTAssertTrue(source.contains("min(960, max(360, availableSize.width - 96))"))
         XCTAssertTrue(source.contains("min(680, max(260, availableSize.height - 96))"))
-        XCTAssertTrue(source.contains(".padding(18)"))
+        XCTAssertTrue(source.contains(".padding(8)"))
         XCTAssertTrue(source.contains(".clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))"))
         XCTAssertTrue(source.contains(".stroke(Color(NSColor.separatorColor), lineWidth: 1)"))
-        XCTAssertTrue(source.contains(".shadow(color: Color.black.opacity(0.22), radius: 12, x: 0, y: 6)"))
+        XCTAssertFalse(source.contains(".shadow(color: Color.black.opacity(0.22), radius: 12, x: 0, y: 6)"))
         XCTAssertTrue(source.contains("Image(nsImage: editingSession.currentImage)"))
     }
 

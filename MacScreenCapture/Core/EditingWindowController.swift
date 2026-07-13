@@ -16,8 +16,11 @@ class EditingWindowController: NSWindowController {
         self.geometryTrace = ScreenshotGeometryDiagnostics.makeEditorTrace(for: screenshot.size)
 
         let window = EditingWindow(
-            contentRect: Self.fullScreenEditingFrame(),
-            styleMask: [.borderless],
+            contentRect: Self.compactEditingFrame(
+                for: screenshot.size,
+                on: Self.screenContainingMouse()
+            ),
+            styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
@@ -35,13 +38,14 @@ class EditingWindowController: NSWindowController {
     private func setupWindow() {
         guard let window = window else { return }
         
-        // 截图后编辑器使用无标题栏全屏遮罩，避免表现成普通 panel/window。
         window.level = .floating
-        window.backgroundColor = NSColor.black.withAlphaComponent(0.36)
-        window.hasShadow = false
+        window.title = "截图编辑"
+        window.backgroundColor = .windowBackgroundColor
+        window.hasShadow = true
         window.isOpaque = true
         window.isMovableByWindowBackground = false
         window.animationBehavior = .none
+        window.minSize = NSSize(width: 560, height: 400)
 
         // 窗口关闭时的处理
         window.delegate = self
@@ -62,18 +66,23 @@ class EditingWindowController: NSWindowController {
         }
     }
 
-    private static func fullScreenEditingFrame() -> NSRect {
-        let combinedFrame = NSScreen.screens
-            .map(\.frame)
-            .reduce(CGRect.null) { partial, screenFrame in
-                partial.isNull ? screenFrame : partial.union(screenFrame)
-            }
+    private static func screenContainingMouse() -> NSScreen? {
+        let mouseLocation = NSEvent.mouseLocation
+        return NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) ?? NSScreen.main
+    }
 
-        guard !combinedFrame.isNull, !combinedFrame.isEmpty else {
-            return NSRect(x: 0, y: 0, width: 900, height: 700)
-        }
-
-        return combinedFrame.integral
+    private static func compactEditingFrame(for imageSize: CGSize, on screen: NSScreen?) -> NSRect {
+        let visibleFrame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
+        let maxWidth = max(560, visibleFrame.width - 64)
+        let maxHeight = max(400, visibleFrame.height - 64)
+        let width = min(maxWidth, max(640, imageSize.width + 36))
+        let height = min(maxHeight, max(460, imageSize.height + 160))
+        return NSRect(
+            x: visibleFrame.midX - width / 2,
+            y: visibleFrame.midY - height / 2,
+            width: width,
+            height: height
+        ).integral
     }
     
     private func setupContent() {

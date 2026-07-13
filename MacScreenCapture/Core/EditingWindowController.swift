@@ -269,6 +269,9 @@ class EditingWindowController: NSWindowController {
 }
 
 final class EditingWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+
     override func cancelOperation(_ sender: Any?) {
         close()
     }

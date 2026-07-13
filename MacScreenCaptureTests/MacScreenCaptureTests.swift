@@ -272,6 +272,8 @@ final class MacScreenCaptureTests: XCTestCase {
 
         XCTAssertTrue(source.contains("let window = EditingWindow("))
         XCTAssertTrue(source.contains("final class EditingWindow: NSWindow"))
+        XCTAssertTrue(source.contains("override var canBecomeKey: Bool { true }"))
+        XCTAssertTrue(source.contains("override var canBecomeMain: Bool { true }"))
         XCTAssertTrue(source.contains("override func cancelOperation(_ sender: Any?)"))
         XCTAssertTrue(source.contains("override func keyDown(with event: NSEvent)"))
         XCTAssertTrue(source.contains("event.keyCode == UInt16(kVK_Escape)"))
@@ -300,6 +302,11 @@ final class MacScreenCaptureTests: XCTestCase {
         let source = try repositoryFileContents("MacScreenCapture/Views/EditingWindowContentView.swift")
 
         XCTAssertTrue(source.contains("Color(NSColor(calibratedWhite: 0.18, alpha: 1))"))
+        XCTAssertTrue(source.contains("let frameSize = boundedEditingFrameSize(for: editingSession.currentImage.size, in: geometry.size)"))
+        XCTAssertTrue(source.contains(".frame(width: frameSize.width, height: frameSize.height)"))
+        XCTAssertTrue(source.contains("private func boundedEditingFrameSize(for imageSize: CGSize, in availableSize: CGSize) -> CGSize"))
+        XCTAssertTrue(source.contains("min(960, max(360, availableSize.width - 96))"))
+        XCTAssertTrue(source.contains("min(680, max(260, availableSize.height - 96))"))
         XCTAssertTrue(source.contains(".padding(18)"))
         XCTAssertTrue(source.contains(".padding(28)"))
         XCTAssertTrue(source.contains(".clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))"))

@@ -119,7 +119,9 @@ struct EditingWindowContentView: View {
     
     // MARK: - Canvas Area
     private var canvasArea: some View {
-        GeometryReader { _ in
+        GeometryReader { geometry in
+            let frameSize = boundedEditingFrameSize(for: editingSession.currentImage.size, in: geometry.size)
+
             ZStack {
                 Color(NSColor(calibratedWhite: 0.18, alpha: 1))
 
@@ -142,6 +144,7 @@ struct EditingWindowContentView: View {
                         textOutlined: textOutlined
                     )
                 }
+                .frame(width: frameSize.width, height: frameSize.height)
                 .padding(18)
                 .background(Color(NSColor.textBackgroundColor))
                 .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
@@ -156,6 +159,30 @@ struct EditingWindowContentView: View {
         .frame(minWidth: 400, minHeight: 300)
         .background(Color(NSColor(calibratedWhite: 0.18, alpha: 1)))
         .clipped()
+    }
+
+    private func boundedEditingFrameSize(for imageSize: CGSize, in availableSize: CGSize) -> CGSize {
+        let maxWidth = min(960, max(360, availableSize.width - 96))
+        let maxHeight = min(680, max(260, availableSize.height - 96))
+        let fallbackSize = CGSize(width: min(maxWidth, 700), height: min(maxHeight, 460))
+
+        guard imageSize.width > 0, imageSize.height > 0 else {
+            return fallbackSize
+        }
+
+        let aspectRatio = imageSize.width / imageSize.height
+        var width = maxWidth
+        var height = width / aspectRatio
+
+        if height > maxHeight {
+            height = maxHeight
+            width = height * aspectRatio
+        }
+
+        return CGSize(
+            width: max(240, min(width, maxWidth)),
+            height: max(180, min(height, maxHeight))
+        )
     }
     
     // MARK: - Action Bar

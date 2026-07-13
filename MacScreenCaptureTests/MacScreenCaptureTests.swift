@@ -803,6 +803,27 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(source.contains("coordinateSpaces: coordinateSpaces"))
     }
 
+    func testCaptureOverlayToolbarMovesAboveSelectionWhenBelowDoesNotFit() {
+        let frame = CaptureOverlayLayout.toolbarFrame(
+            selection: CGRect(x: 100, y: 10, width: 500, height: 300),
+            toolbarSize: CGSize(width: 420, height: 52),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1440, height: 900)
+        )
+
+        XCTAssertEqual(frame.origin, CGPoint(x: 140, y: 318))
+    }
+
+    func testCaptureOverlayToolbarStaysBelowAndClampsToVisibleFrame() {
+        let frame = CaptureOverlayLayout.toolbarFrame(
+            selection: CGRect(x: 1300, y: 200, width: 100, height: 100),
+            toolbarSize: CGSize(width: 420, height: 52),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1440, height: 900)
+        )
+
+        XCTAssertEqual(frame.origin, CGPoint(x: 1012, y: 140))
+        XCTAssertEqual(frame.maxX, 1432)
+    }
+
     func testScreenshotGeometryDiagnosticsCorrelateCaptureWithGlobalCanvasPlacement() throws {
         let diagnosticsSource = try repositoryFileContents("MacScreenCapture/Utils/ScreenshotGeometryDiagnostics.swift")
         let editingControllerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowController.swift")

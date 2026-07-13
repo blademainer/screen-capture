@@ -251,6 +251,7 @@ class FloatingEditingCanvasView: NSView {
     var fontSize: CGFloat = 18.0
     var textOutlined = false
     var imageSize: CGSize = .zero
+    var logsInlineCaptureEvents = false
 
     private var currentPoints: [CGPoint] = []
     private var isDrawing = false
@@ -372,7 +373,17 @@ class FloatingEditingCanvasView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        guard let location = imagePoint(fromViewPoint: convert(event.locationInWindow, from: nil)) else { return }
+        let viewPoint = convert(event.locationInWindow, from: nil)
+        let imageLocation = imagePoint(fromViewPoint: viewPoint)
+        if logsInlineCaptureEvents {
+            ScreenshotGeometryDiagnostics.logInlineCanvasMouseDown(
+                tool: selectedTool,
+                windowIsKey: window?.isKeyWindow ?? false,
+                viewPoint: viewPoint,
+                imagePoint: imageLocation
+            )
+        }
+        guard let location = imageLocation else { return }
 
         if selectedTool == .none, let operation = hitTestMovableOperation(at: location) {
             if event.clickCount >= 2 {

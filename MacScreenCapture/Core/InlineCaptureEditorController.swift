@@ -146,6 +146,12 @@ final class InlineCaptureEditorController: NSObject {
             toolbarSize: toolbarSize,
             visibleFrame: visibleFrame
         )
+        ScreenshotGeometryDiagnostics.logInlineToolbarLayout(
+            selectionCaptureRect: currentCaptureRect,
+            anchorScreenRect: anchor.screenRect,
+            toolbarFrame: toolbarFrame,
+            visibleFrame: visibleFrame
+        )
         let level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 2)
         let window = makeToolbarWindow(frame: toolbarFrame, level: level)
         window.hasShadow = true

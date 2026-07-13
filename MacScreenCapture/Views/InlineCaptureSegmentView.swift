@@ -93,6 +93,7 @@ final class InlineCaptureSegmentView: NSView, FloatingEditingCanvasDelegate {
         canvasView.editingSession = model.editingSession
         canvasView.delegate = self
         canvasView.imageSize = model.editingSession.currentImage.size
+        canvasView.logsInlineCaptureEvents = true
 
         addSubview(imageView)
         addSubview(canvasView)
@@ -179,6 +180,7 @@ final class InlineCaptureSegmentView: NSView, FloatingEditingCanvasDelegate {
     }
 
     func canvasDidAddOperation(_ operation: EditingOperation) {
+        ScreenshotGeometryDiagnostics.logInlineOperationCommitted(operation)
         model.editingSession.addOperation(operation)
     }
 }

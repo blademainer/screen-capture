@@ -165,6 +165,42 @@ enum ScreenshotGeometryDiagnostics {
         ])
     }
 
+    static func logInlineToolbarLayout(
+        selectionCaptureRect: CGRect,
+        anchorScreenRect: CGRect,
+        toolbarFrame: CGRect,
+        visibleFrame: CGRect
+    ) {
+        appendDeduplicated(event: "inline_toolbar_layout", fields: [
+            "selection_capture_rect": rect(selectionCaptureRect),
+            "anchor_screen_rect": rect(anchorScreenRect),
+            "toolbar_frame": rect(toolbarFrame),
+            "visible_frame": rect(visibleFrame)
+        ])
+    }
+
+    static func logInlineCanvasMouseDown(
+        tool: EditingTool,
+        windowIsKey: Bool,
+        viewPoint: CGPoint,
+        imagePoint: CGPoint?
+    ) {
+        append(event: "inline_canvas_mouse_down", fields: [
+            "tool": tool.rawValue,
+            "window_is_key": windowIsKey ? "true" : "false",
+            "view_point": point(viewPoint),
+            "image_point": imagePoint.map(point) ?? "outside"
+        ])
+    }
+
+    static func logInlineOperationCommitted(_ operation: EditingOperation) {
+        append(event: "inline_operation_committed", fields: [
+            "tool": operation.type.rawValue,
+            "point_count": "\(operation.points.count)",
+            "operation_rect": operation.rect.map(rect) ?? "none"
+        ])
+    }
+
     static func makeEditorTrace(for imageSize: CGSize) -> EditorTrace {
         traceLock.lock()
         defer { traceLock.unlock() }

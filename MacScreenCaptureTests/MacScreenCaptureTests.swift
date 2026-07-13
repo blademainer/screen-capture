@@ -776,6 +776,33 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(segment.screenRect, CGRect(x: 143, y: 40, width: 2275, height: 1330))
     }
 
+    func testCaptureCoordinateMapperMapsVerticalDisplaySegmentToAppKitScreen() throws {
+        let mapper = CaptureCoordinateMapper(spaces: [
+            DisplayCoordinateSpace(
+                displayID: 3,
+                captureFrame: CGRect(x: 2560, y: -458, width: 1440, height: 2560),
+                screenFrame: CGRect(x: 2560, y: -662, width: 1440, height: 2560)
+            )
+        ])
+
+        let segment = try XCTUnwrap(
+            mapper.screenSegments(for: CGRect(x: 2600, y: -400, width: 300, height: 500)).first
+        )
+
+        XCTAssertEqual(segment.screenRect, CGRect(x: 2600, y: 1340, width: 300, height: 500))
+        XCTAssertEqual(segment.imageRect, CGRect(x: 0, y: 0, width: 300, height: 500))
+    }
+
+    func testRegionCapturePreservesImageSelectionAndDisplaySpacesInContext() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+
+        XCTAssertTrue(source.contains("private func captureSelectedRegionContext("))
+        XCTAssertTrue(source.contains(") async throws -> CapturedRegionContext"))
+        XCTAssertTrue(source.contains("CapturedRegionContext("))
+        XCTAssertTrue(source.contains("captureRect: selectedRect"))
+        XCTAssertTrue(source.contains("coordinateSpaces: coordinateSpaces"))
+    }
+
     func testScreenshotGeometryDiagnosticsCorrelateCaptureWithGlobalCanvasPlacement() throws {
         let diagnosticsSource = try repositoryFileContents("MacScreenCapture/Utils/ScreenshotGeometryDiagnostics.swift")
         let editingControllerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowController.swift")

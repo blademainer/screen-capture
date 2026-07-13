@@ -15,25 +15,9 @@ import ApplicationServices
 @preconcurrency import Vision
 import Translation
 
-private struct DisplayCoordinateSpace {
-    let displayID: CGDirectDisplayID
-    let captureFrame: CGRect
-    let screenFrame: CGRect
-}
-
 private struct MagneticWindowCandidate {
     let ownerPID: Int
     let bounds: CGRect
-}
-
-private extension CGRect {
-    func distanceSquared(to point: CGPoint) -> CGFloat {
-        let clampedX = min(max(point.x, minX), maxX)
-        let clampedY = min(max(point.y, minY), maxY)
-        let dx = point.x - clampedX
-        let dy = point.y - clampedY
-        return dx * dx + dy * dy
-    }
 }
 
 struct RecordingAudioDiagnostics: Sendable {
@@ -2310,6 +2294,11 @@ class CaptureManager: ObservableObject {
 
     @MainActor
     private func captureSelectedRegionImage(preferWindowUnderMouse: Bool) async throws -> NSImage {
+        try await captureSelectedRegionContext(preferWindowUnderMouse: preferWindowUnderMouse).image
+    }
+
+    @MainActor
+    private func captureSelectedRegionContext(preferWindowUnderMouse: Bool) async throws -> CapturedRegionContext {
         let coordinateSpaces = activeDisplayCoordinateSpaces()
         let displayBounds = activeDisplayBounds(from: coordinateSpaces)
         guard !displayBounds.isNull && !displayBounds.isEmpty else {
@@ -2336,7 +2325,12 @@ class CaptureManager: ObservableObject {
             }
         )
 
-        return try await captureFixedRegionImage(selectedRect, coordinateSpaces: coordinateSpaces)
+        let image = try await captureFixedRegionImage(selectedRect, coordinateSpaces: coordinateSpaces)
+        return CapturedRegionContext(
+            image: image,
+            captureRect: selectedRect,
+            coordinateSpaces: coordinateSpaces
+        )
     }
 
     private func activeDisplayCoordinateSpaces() -> [DisplayCoordinateSpace] {

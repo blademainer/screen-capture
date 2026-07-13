@@ -1847,9 +1847,14 @@ class CaptureManager: ObservableObject {
 
             activeRegionSelectionWindows = selectionWindows
             selectionWindows.forEach { $0.orderFrontRegardless() }
-            selectionWindows.last?.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            selectionWindows.forEach { $0.displayIfNeeded() }
             HotKeyLatencyDiagnostics.mark("region_overlay_ordered")
+
+            DispatchQueue.main.async {
+                guard !didResume else { return }
+                selectionWindows.last?.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+            }
 
             if preferWindowUnderMouse {
                 loadMagneticCandidatesAfterOverlayIsVisible(

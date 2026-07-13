@@ -581,10 +581,12 @@ final class MacScreenCaptureTests: XCTestCase {
         guard let selectRegionStart = source.range(of: "private func selectScreenshotRegion(")?.lowerBound,
               let selectRegionEnd = source.range(of: "private func renderMultiWindowComposite(", range: selectRegionStart..<source.endIndex)?.lowerBound,
               let overlayOrdered = source.range(of: "HotKeyLatencyDiagnostics.mark(\"region_overlay_ordered\")", range: selectRegionStart..<selectRegionEnd),
+              let appActivation = source.range(of: "NSApp.activate(ignoringOtherApps: true)", range: selectRegionStart..<selectRegionEnd),
               let loadCandidates = source.range(of: "loadMagneticCandidatesAfterOverlayIsVisible(", range: selectRegionStart..<selectRegionEnd) else {
             XCTFail("Region selection should defer magnetic candidate loading until after overlay is ordered")
             return
         }
+        XCTAssertLessThan(overlayOrdered.lowerBound, appActivation.lowerBound)
         XCTAssertLessThan(overlayOrdered.lowerBound, loadCandidates.lowerBound)
         XCTAssertTrue(source.contains("NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .mouseMoved, .leftMouseDown])"))
         XCTAssertTrue(source.contains("event.keyCode == 53"))

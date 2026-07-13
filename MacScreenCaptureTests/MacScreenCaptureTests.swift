@@ -824,6 +824,25 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(frame.maxX, 1432)
     }
 
+    func testInlineEditorUsesPerDisplayTransparentWindows() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Core/InlineCaptureEditorController.swift")
+
+        XCTAssertTrue(source.contains("mapper.screenSegments(for: context.captureRect)"))
+        XCTAssertTrue(source.contains("window.backgroundColor = .clear"))
+        XCTAssertTrue(source.contains("window.isOpaque = false"))
+        XCTAssertTrue(source.contains("space.screenFrame"))
+        XCTAssertFalse(source.contains("reduce(CGRect.null)"))
+    }
+
+    func testInlineCaptureSegmentKeepsImageAndCanvasAtTheSameOffsetFrame() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Views/InlineCaptureSegmentView.swift")
+
+        XCTAssertTrue(source.contains("imageView.frame = fullSelectionFrame"))
+        XCTAssertTrue(source.contains("canvasView.frame = fullSelectionFrame"))
+        XCTAssertTrue(source.contains("-segment.imageRect.minX"))
+        XCTAssertTrue(source.contains("-segment.imageRect.minY"))
+    }
+
     func testScreenshotGeometryDiagnosticsCorrelateCaptureWithGlobalCanvasPlacement() throws {
         let diagnosticsSource = try repositoryFileContents("MacScreenCapture/Utils/ScreenshotGeometryDiagnostics.swift")
         let editingControllerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowController.swift")

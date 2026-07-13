@@ -27,6 +27,8 @@ enum HotKeyLatencyDiagnostics {
         subsystem: "com.blademainer.MacScreenCapture",
         category: "HotKeyLatency"
     )
+    private static let persistentLogQueue = DispatchQueue(label: "com.blademainer.MacScreenCapture.hotkey-latency-diagnostics", qos: .utility)
+    private static let maxPersistentLogBytes: UInt64 = 512 * 1024
 
     static func makeTrace(action: String) -> HotKeyLatencyTrace {
         HotKeyLatencyTrace(action: action)
@@ -34,9 +36,52 @@ enum HotKeyLatencyDiagnostics {
 
     static func mark(_ event: String) {
         guard let current else { return }
+        let elapsedMilliseconds = current.elapsedMilliseconds()
 
         logger.info(
-            "hotkey_latency id=\(current.id, privacy: .public) action=\(current.action, privacy: .public) event=\(event, privacy: .public) elapsed_ms=\(current.elapsedMilliseconds(), privacy: .public)"
+            "hotkey_latency id=\(current.id, privacy: .public) action=\(current.action, privacy: .public) event=\(event, privacy: .public) elapsed_ms=\(elapsedMilliseconds, privacy: .public)"
         )
+        appendPersistentRecord(trace: current, event: event, elapsedMilliseconds: elapsedMilliseconds)
+    }
+
+    private static func appendPersistentRecord(trace: HotKeyLatencyTrace, event: String, elapsedMilliseconds: Double) {
+        persistentLogQueue.async {
+            do {
+                let fileManager = FileManager.default
+                let logURL = persistentLogURL()
+                try fileManager.createDirectory(
+                    at: logURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+
+                if let attributes = try? fileManager.attributesOfItem(atPath: logURL.path),
+                   let fileSize = attributes[.size] as? UInt64,
+                   fileSize > maxPersistentLogBytes {
+                    try? fileManager.removeItem(at: logURL)
+                }
+
+                let line = "\(ISO8601DateFormatter().string(from: Date())) hotkey_latency id=\(trace.id) action=\(trace.action) event=\(event) elapsed_ms=\(String(format: "%.2f", elapsedMilliseconds))\n"
+                let data = Data(line.utf8)
+
+                if fileManager.fileExists(atPath: logURL.path) {
+                    let handle = try FileHandle(forWritingTo: logURL)
+                    try handle.seekToEnd()
+                    try handle.write(contentsOf: data)
+                    try handle.close()
+                } else {
+                    try data.write(to: logURL, options: .atomic)
+                }
+            } catch {
+                logger.error("failed_to_append_hotkey_latency_record error=\(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    private static func persistentLogURL() -> URL {
+        FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first!
+            .appendingPathComponent("MacScreenCapture", isDirectory: true)
+            .appendingPathComponent("hotkey-latency.log")
     }
 }

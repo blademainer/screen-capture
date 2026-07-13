@@ -863,6 +863,18 @@ final class MacScreenCaptureTests: XCTestCase {
         }
     }
 
+    func testAutomaticRegionCaptureNeverOpensStandaloneEditingWindow() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+        let start = try XCTUnwrap(source.range(of: "private func captureRegionScreenshot("))
+        let end = try XCTUnwrap(source.range(of: "/// 捕获指定区域", range: start.lowerBound..<source.endIndex))
+        let function = String(source[start.lowerBound..<end.lowerBound])
+
+        XCTAssertTrue(function.contains("captureSelectedRegionContext"))
+        XCTAssertTrue(function.contains("presentInlineEditor"))
+        XCTAssertTrue(function.contains("showEditor: false"))
+        XCTAssertFalse(function.contains("showEditor: true"))
+    }
+
     func testScreenshotGeometryDiagnosticsCorrelateCaptureWithGlobalCanvasPlacement() throws {
         let diagnosticsSource = try repositoryFileContents("MacScreenCapture/Utils/ScreenshotGeometryDiagnostics.swift")
         let editingControllerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowController.swift")

@@ -122,6 +122,7 @@ class CaptureManager: ObservableObject {
     private var securityScopedURL: URL?
     private var colorSampler: NSColorSampler?
     private var activeRegionSelectionWindows: [NSWindow] = []
+    private var activeInlineCaptureEditor: InlineCaptureEditorController?
 
     private struct ScrollingCaptureTarget {
         let display: SCDisplay
@@ -1442,13 +1443,77 @@ class CaptureManager: ObservableObject {
     private func captureRegionScreenshot(autoOpenAfterCapture: Bool = true, forceSave: Bool = false) async throws -> NSImage {
         HotKeyLatencyDiagnostics.mark("region_screenshot_started")
         _ = await MainActor.run { WindowManager.shared.hideMainWindowForCaptureIfNeeded() }
-        let image = try await captureSelectedRegionImage(preferWindowUnderMouse: true)
-        return try await finalizeCapturedImage(
-            image,
-            showEditor: true,
-            autoOpenAfterCapture: autoOpenAfterCapture,
-            forceSave: forceSave
-        )
+        let context = try await captureSelectedRegionContext(preferWindowUnderMouse: true)
+        let outcome = await presentInlineEditor(context)
+
+        switch outcome {
+        case .finish(let image):
+            return try await finalizeCapturedImage(
+                image,
+                showEditor: false,
+                autoOpenAfterCapture: autoOpenAfterCapture,
+                forceSave: forceSave
+            )
+        case .copy(let image):
+            let finalImage = try await finalizeCapturedImage(
+                image,
+                showEditor: false,
+                autoOpenAfterCapture: autoOpenAfterCapture,
+                forceSave: forceSave
+            )
+            await MainActor.run { copyImageToPasteboard(finalImage) }
+            return finalImage
+        case .save(let image):
+            return try await finalizeCapturedImage(
+                image,
+                showEditor: false,
+                autoOpenAfterCapture: autoOpenAfterCapture,
+                forceSave: true
+            )
+        case .pin(let image):
+            let finalImage = try await finalizeCapturedImage(
+                image,
+                showEditor: false,
+                autoOpenAfterCapture: false,
+                forceSave: forceSave
+            )
+            await MainActor.run {
+                FloatingWindowManager.shared.showFloatingPreview(for: finalImage)
+            }
+            return finalImage
+        case .ocr(let image):
+            let finalImage = try await finalizeCapturedImage(
+                image,
+                showEditor: false,
+                autoOpenAfterCapture: false,
+                forceSave: forceSave
+            )
+            _ = try await recognizeTextAndCopy(from: finalImage)
+            return finalImage
+        case .scrolling(let image):
+            let finalImage = try await finalizeCapturedImage(
+                image,
+                showEditor: false,
+                autoOpenAfterCapture: false,
+                forceSave: forceSave
+            )
+            await captureScrollingWindow()
+            return finalImage
+        case .cancel:
+            throw CaptureError.regionSelectionCancelled
+        }
+    }
+
+    @MainActor
+    private func presentInlineEditor(_ context: CapturedRegionContext) async -> InlineCaptureEditorOutcome {
+        await withCheckedContinuation { continuation in
+            let controller = InlineCaptureEditorController(context: context) { [weak self] outcome in
+                self?.activeInlineCaptureEditor = nil
+                continuation.resume(returning: outcome)
+            }
+            activeInlineCaptureEditor = controller
+            controller.show()
+        }
     }
 
     /// 捕获指定区域

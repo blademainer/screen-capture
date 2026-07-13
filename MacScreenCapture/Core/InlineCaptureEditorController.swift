@@ -14,6 +14,7 @@ enum InlineCaptureEditorOutcome {
 
 final class InlineCaptureEditorModel: ObservableObject {
     let editingSession: ImageEditingSession
+    private var editingSessionObservation: AnyCancellable?
 
     @Published var selectedTool: EditingTool = .none
     @Published var selectedColor: NSColor
@@ -29,6 +30,9 @@ final class InlineCaptureEditorModel: ObservableObject {
         lineWidth = CGFloat(defaults.object(forKey: "annotationDefaultLineWidth") as? Double ?? AnnotationStylePreset.professional.lineWidth)
         fontSize = CGFloat(defaults.object(forKey: "annotationDefaultFontSize") as? Double ?? AnnotationStylePreset.professional.fontSize)
         textOutlined = UserDefaults.standard.bool(forKey: "annotationTextOutlined")
+        editingSessionObservation = editingSession.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
     }
 }
 
@@ -41,6 +45,7 @@ final class InlineCaptureEditorController: NSObject {
 
     private var backdropWindows: [NSWindow] = []
     private var segmentWindows: [NSWindow] = []
+    private var toolbarWindow: NSWindow?
     private var eventMonitor: Any?
     private var didComplete = false
 
@@ -58,10 +63,12 @@ final class InlineCaptureEditorController: NSObject {
     func show() {
         createBackdropWindows()
         createSegmentWindows()
+        createToolbarWindow()
         startEventMonitoring()
 
         backdropWindows.forEach { $0.orderFrontRegardless() }
         segmentWindows.forEach { $0.orderFrontRegardless() }
+        toolbarWindow?.orderFrontRegardless()
         segmentWindows.first?.makeKeyAndOrderFront(nil)
         segmentWindows.first?.makeFirstResponder(segmentWindows.first?.contentView)
         NSApp.activate(ignoringOtherApps: true)
@@ -96,6 +103,75 @@ final class InlineCaptureEditorController: NSObject {
             )
             return window
         }
+    }
+
+    private func createToolbarWindow() {
+        let segments = mapper.screenSegments(for: context.captureRect)
+        guard let anchor = segments.max(by: { $0.screenRect.width * $0.screenRect.height < $1.screenRect.width * $1.screenRect.height }) else {
+            return
+        }
+
+        let visibleFrame = screen(for: anchor.displayID)?.visibleFrame
+            ?? context.coordinateSpaces.first(where: { $0.displayID == anchor.displayID })?.screenFrame
+            ?? anchor.screenRect
+        let toolbarSize = CGSize(width: min(760, max(320, visibleFrame.width - 16)), height: 92)
+        let toolbarFrame = CaptureOverlayLayout.toolbarFrame(
+            selection: anchor.screenRect,
+            toolbarSize: toolbarSize,
+            visibleFrame: visibleFrame
+        )
+        let level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 2)
+        let window = makeWindow(frame: toolbarFrame, level: level, ignoresMouseEvents: false)
+        window.hasShadow = true
+        window.contentView = NSHostingView(rootView: InlineCaptureToolbarView(
+            model: model,
+            onUndo: { [weak self] in self?.model.editingSession.undo() },
+            onRedo: { [weak self] in self?.model.editingSession.redo() },
+            onClear: { [weak self] in self?.model.editingSession.clear() },
+            onCopy: { [weak self] in self?.completeWithImage(.copy) },
+            onSave: { [weak self] in self?.completeWithImage(.save) },
+            onShare: { [weak self] in self?.share() },
+            onPin: { [weak self] in self?.completeWithImage(.pin) },
+            onOCR: { [weak self] in self?.completeWithImage(.ocr) },
+            onScrolling: { [weak self] in self?.completeWithImage(.scrolling) },
+            onFinish: { [weak self] in self?.finish() },
+            onCancel: { [weak self] in self?.cancel() }
+        ))
+        toolbarWindow = window
+    }
+
+    private func screen(for displayID: CGDirectDisplayID) -> NSScreen? {
+        NSScreen.screens.first { screen in
+            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+                return false
+            }
+            return number.uint32Value == displayID
+        }
+    }
+
+    private enum ImageOutcome {
+        case copy
+        case save
+        case pin
+        case ocr
+        case scrolling
+    }
+
+    private func completeWithImage(_ outcome: ImageOutcome) {
+        let image = model.editingSession.currentImage
+        switch outcome {
+        case .copy: complete(.copy(image))
+        case .save: complete(.save(image))
+        case .pin: complete(.pin(image))
+        case .ocr: complete(.ocr(image))
+        case .scrolling: complete(.scrolling(image))
+        }
+    }
+
+    private func share() {
+        guard let contentView = toolbarWindow?.contentView else { return }
+        let picker = NSSharingServicePicker(items: [model.editingSession.currentImage])
+        picker.show(relativeTo: contentView.bounds, of: contentView, preferredEdge: .minY)
     }
 
     private func makeWindow(
@@ -149,13 +225,15 @@ final class InlineCaptureEditorController: NSObject {
             NSEvent.removeMonitor(eventMonitor)
             self.eventMonitor = nil
         }
-        (segmentWindows + backdropWindows).forEach { window in
+        let windows = segmentWindows + backdropWindows + [toolbarWindow].compactMap { $0 }
+        windows.forEach { window in
             window.orderOut(nil)
             window.contentView = nil
             window.close()
         }
         segmentWindows.removeAll()
         backdropWindows.removeAll()
+        toolbarWindow = nil
     }
 
     deinit {

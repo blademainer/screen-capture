@@ -843,6 +843,26 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(source.contains("-segment.imageRect.minY"))
     }
 
+    func testInlineToolbarExposesIShotEditingAndOutputActions() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Views/InlineCaptureToolbarView.swift")
+
+        for token in [
+            "EditingTool.allCases",
+            "onUndo",
+            "onRedo",
+            "onCopy",
+            "onSave",
+            "onShare",
+            "onPin",
+            "onOCR",
+            "onScrolling",
+            "onFinish",
+            "onCancel"
+        ] {
+            XCTAssertTrue(source.contains(token), "Missing \(token)")
+        }
+    }
+
     func testScreenshotGeometryDiagnosticsCorrelateCaptureWithGlobalCanvasPlacement() throws {
         let diagnosticsSource = try repositoryFileContents("MacScreenCapture/Utils/ScreenshotGeometryDiagnostics.swift")
         let editingControllerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowController.swift")

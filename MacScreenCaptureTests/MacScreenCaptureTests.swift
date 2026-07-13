@@ -686,6 +686,32 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(windowManagerSource.contains("window.orderOut(nil)"))
     }
 
+    func testRegionScreenshotGeometryDiagnosticsTraceCaptureAndEditorFrames() throws {
+        let diagnosticsSource = try repositoryFileContents("MacScreenCapture/Utils/ScreenshotGeometryDiagnostics.swift")
+        let captureManagerSource = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+        let editingControllerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowController.swift")
+        let editingWindowSource = try repositoryFileContents("MacScreenCapture/Views/EditingWindowContentView.swift")
+        let canvasSource = try repositoryFileContents("MacScreenCapture/Views/FloatingWindowContentView.swift")
+
+        XCTAssertTrue(diagnosticsSource.contains("screenshot-geometry.log"))
+        XCTAssertTrue(diagnosticsSource.contains("capture_selected_region"))
+        XCTAssertTrue(diagnosticsSource.contains("capture_segment"))
+        XCTAssertTrue(diagnosticsSource.contains("capture_result"))
+        XCTAssertTrue(diagnosticsSource.contains("editor_window_opened"))
+        XCTAssertTrue(diagnosticsSource.contains("editor_layout"))
+        XCTAssertTrue(diagnosticsSource.contains("canvas_layout"))
+        XCTAssertTrue(diagnosticsSource.contains("rect("))
+        XCTAssertTrue(diagnosticsSource.contains("size("))
+
+        XCTAssertTrue(captureManagerSource.contains("ScreenshotGeometryDiagnostics.logCaptureSelectedRegion"))
+        XCTAssertTrue(captureManagerSource.contains("ScreenshotGeometryDiagnostics.logCaptureSegment"))
+        XCTAssertTrue(captureManagerSource.contains("ScreenshotGeometryDiagnostics.logCaptureResult"))
+        XCTAssertTrue(captureManagerSource.contains("ScreenshotGeometryDiagnostics.logCaptureCompositeSegment"))
+        XCTAssertTrue(editingControllerSource.contains("ScreenshotGeometryDiagnostics.logEditorWindowOpened"))
+        XCTAssertTrue(editingWindowSource.contains("ScreenshotGeometryDiagnostics.logEditorLayout"))
+        XCTAssertTrue(canvasSource.contains("ScreenshotGeometryDiagnostics.logCanvasLayout"))
+    }
+
     func testMultiWindowSelectionSupportsShiftAndDesktopBackdrop() throws {
         let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
 

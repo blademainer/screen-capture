@@ -26,11 +26,24 @@ struct EditingWindowContentView: View {
     
     var body: some View {
         GeometryReader { geometry in
+            let availableSize = availableEditingSurfaceSize(in: geometry.size)
             let frameSize = boundedEditingFrameSize(for: editingSession.currentImage.size, in: availableEditingSurfaceSize(in: geometry.size))
 
             ZStack {
                 Color(NSColor(calibratedWhite: 0.18, alpha: 1))
                 editorStack(frameSize: frameSize)
+            }
+            .onAppear {
+                logEditorLayout(windowSize: geometry.size, availableSize: availableSize, frameSize: frameSize)
+            }
+            .onChange(of: geometry.size) { _, newWindowSize in
+                let newAvailableSize = availableEditingSurfaceSize(in: newWindowSize)
+                let newFrameSize = boundedEditingFrameSize(for: editingSession.currentImage.size, in: newAvailableSize)
+                logEditorLayout(windowSize: newWindowSize, availableSize: newAvailableSize, frameSize: newFrameSize)
+            }
+            .onChange(of: editingSession.currentImage.size) { _, newImageSize in
+                let newFrameSize = boundedEditingFrameSize(for: newImageSize, in: availableSize)
+                logEditorLayout(windowSize: geometry.size, availableSize: availableSize, frameSize: newFrameSize)
             }
         }
         .background(Color(NSColor(calibratedWhite: 0.18, alpha: 1)))
@@ -39,6 +52,16 @@ struct EditingWindowContentView: View {
             lineWidth = CGFloat(annotationDefaultLineWidth)
             fontSize = CGFloat(annotationDefaultFontSize)
         }
+    }
+
+    private func logEditorLayout(windowSize: CGSize, availableSize: CGSize, frameSize: CGSize) {
+        ScreenshotGeometryDiagnostics.logEditorLayout(
+            imageSize: editingSession.currentImage.size,
+            windowSize: windowSize,
+            availableSize: availableSize,
+            frameSize: frameSize,
+            surfacePadding: 18
+        )
     }
     
     // MARK: - Editing Toolbar

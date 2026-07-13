@@ -213,6 +213,7 @@ struct TraditionalEditingCanvas: NSViewRepresentable {
         nsView.lineWidth = lineWidth
         nsView.fontSize = fontSize
         nsView.textOutlined = textOutlined
+        nsView.logGeometryIfNeeded()
         nsView.needsDisplay = true
     }
 
@@ -264,6 +265,11 @@ class FloatingEditingCanvasView: NSView {
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         setupView()
+    }
+
+    override func layout() {
+        super.layout()
+        logGeometryIfNeeded()
     }
 
     private func setupView() {
@@ -500,6 +506,22 @@ class FloatingEditingCanvasView: NSView {
     private var imageScale: CGFloat {
         guard imageSize.width > 0, imageSize.height > 0 else { return 1 }
         return min(bounds.width / imageSize.width, bounds.height / imageSize.height)
+    }
+
+    func logGeometryIfNeeded() {
+        guard imageSize.width > 0,
+              imageSize.height > 0,
+              bounds.width > 0,
+              bounds.height > 0 else {
+            return
+        }
+
+        ScreenshotGeometryDiagnostics.logCanvasLayout(
+            imageSize: imageSize,
+            canvasBounds: bounds,
+            imageDisplayRect: imageDisplayRect,
+            imageScale: imageScale
+        )
     }
 
     private var scaledLineWidth: CGFloat {

@@ -2195,6 +2195,14 @@ class CaptureManager: ObservableObject {
         .integral
         .intersection(CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height))
 
+        ScreenshotGeometryDiagnostics.logDisplayCropMapping(
+            displayID: display.displayID,
+            displayFrame: displayBounds,
+            sourceRect: quartzRect,
+            displayImageSize: CGSize(width: cgImage.width, height: cgImage.height),
+            pixelCropRect: cropRect
+        )
+
         guard cropRect.width > 1,
               cropRect.height > 1,
               let croppedImage = cgImage.cropping(to: cropRect) else {
@@ -2317,6 +2325,17 @@ class CaptureManager: ObservableObject {
             throw CaptureError.regionSelectionCancelled
         }
 
+        ScreenshotGeometryDiagnostics.logCaptureSelectedRegion(
+            captureRect: selectedRect,
+            displayFrames: coordinateSpaces.map {
+                ScreenshotGeometryDiagnostics.DisplayFrame(
+                    displayID: $0.displayID,
+                    captureFrame: $0.captureFrame,
+                    screenFrame: $0.screenFrame
+                )
+            }
+        )
+
         return try await captureFixedRegionImage(selectedRect, coordinateSpaces: coordinateSpaces)
     }
 
@@ -2397,6 +2416,13 @@ class CaptureManager: ObservableObject {
 
             let displayImage = try await captureDisplayImageWithoutSaving(display: display)
             let croppedImage = cropDisplayImage(displayImage, to: segmentRect, in: display)
+            ScreenshotGeometryDiagnostics.logCaptureSegment(
+                displayID: display.displayID,
+                displayFrame: coordinateSpace.captureFrame,
+                segmentRect: segmentRect,
+                displayImageSize: displayImage.size,
+                cropImageSize: croppedImage.size
+            )
             segments.append((segmentRect, croppedImage))
         }
 
@@ -2407,6 +2433,11 @@ class CaptureManager: ObservableObject {
         if segments.count == 1,
            let onlySegment = segments.first,
            onlySegment.segmentRect.integral == captureRect {
+            ScreenshotGeometryDiagnostics.logCaptureResult(
+                captureRect: captureRect,
+                resultImageSize: onlySegment.image.size,
+                segmentCount: segments.count
+            )
             return onlySegment.image
         }
 
@@ -2425,10 +2456,21 @@ class CaptureManager: ObservableObject {
                 width: segmentRect.width,
                 height: segmentRect.height
             )
+            ScreenshotGeometryDiagnostics.logCaptureCompositeSegment(
+                captureRect: captureRect,
+                sourceRect: segmentRect,
+                drawRect: drawRect,
+                segmentImageSize: segment.image.size
+            )
             segment.image.draw(in: drawRect)
         }
 
         outputImage.unlockFocus()
+        ScreenshotGeometryDiagnostics.logCaptureResult(
+            captureRect: captureRect,
+            resultImageSize: outputImage.size,
+            segmentCount: segments.count
+        )
         return outputImage
     }
 

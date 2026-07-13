@@ -45,7 +45,11 @@ class EditingWindowController: NSWindowController {
         window.delegate = self
 
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-        
+        ScreenshotGeometryDiagnostics.logEditorWindowOpened(
+            imageSize: screenshot.size,
+            windowFrame: window.frame
+        )
+
         // 添加窗口出现动画
         window.alphaValue = 0
         NSAnimationContext.runAnimationGroup { context in

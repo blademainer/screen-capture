@@ -94,6 +94,17 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(workflow.contains("x86_64"))
     }
 
+    func testLocalInstallerUsesStableTCCCodeRequirement() throws {
+        let script = try repositoryFileContents("scripts/install-local.sh")
+
+        XCTAssertTrue(script.contains("swift build -c release"))
+        XCTAssertTrue(script.contains("/Applications/MacScreenCapture.app"))
+        XCTAssertTrue(script.contains("designated => identifier \"com.blademainer.MacScreenCapture\""))
+        XCTAssertTrue(script.contains("-r=\"$REQUIREMENT\""))
+        XCTAssertTrue(script.contains("MacScreenCapture.entitlements"))
+        XCTAssertTrue(script.contains("codesign --verify --deep --strict"))
+    }
+
     func testApplicationIconAssetsAreComplete() throws {
         let infoPlist = try repositoryFileContents("MacScreenCapture/Info.plist")
         let appIconDirectory = repositoryFileURL("MacScreenCapture/Assets.xcassets/AppIcon.appiconset")

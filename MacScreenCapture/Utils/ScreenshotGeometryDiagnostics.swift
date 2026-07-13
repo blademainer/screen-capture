@@ -145,6 +145,26 @@ enum ScreenshotGeometryDiagnostics {
         ])
     }
 
+    static func logInlineSegmentLayout(
+        selectionCaptureRect: CGRect,
+        displayID: UInt32,
+        segmentCaptureRect: CGRect,
+        segmentScreenRect: CGRect,
+        canvasScreenRect: CGRect,
+        imageRect: CGRect,
+        imageSize: CGSize
+    ) {
+        appendDeduplicated(event: "inline_segment_layout", fields: [
+            "selection_capture_rect": rect(selectionCaptureRect),
+            "display_id": "\(displayID)",
+            "segment_capture_rect": rect(segmentCaptureRect),
+            "segment_screen_rect": rect(segmentScreenRect),
+            "canvas_screen_rect": rect(canvasScreenRect),
+            "image_rect": rect(imageRect),
+            "image_size": size(imageSize)
+        ])
+    }
+
     static func makeEditorTrace(for imageSize: CGSize) -> EditorTrace {
         traceLock.lock()
         defer { traceLock.unlock() }

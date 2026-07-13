@@ -1507,7 +1507,13 @@ class CaptureManager: ObservableObject {
     @MainActor
     private func presentInlineEditor(_ context: CapturedRegionContext) async -> InlineCaptureEditorOutcome {
         await withCheckedContinuation { continuation in
-            let controller = InlineCaptureEditorController(context: context) { [weak self] outcome in
+            let controller = InlineCaptureEditorController(
+                context: context,
+                recaptureSelection: { [weak self] rect, coordinateSpaces in
+                    guard let self else { throw CaptureError.failedToCapture }
+                    return try await self.captureFixedRegionImage(rect, coordinateSpaces: coordinateSpaces)
+                }
+            ) { [weak self] outcome in
                 self?.activeInlineCaptureEditor = nil
                 continuation.resume(returning: outcome)
             }

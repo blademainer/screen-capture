@@ -168,7 +168,7 @@ class ImageEditingSession: ObservableObject {
     @Published var currentImage: NSImage
     @Published var resetRevision = 0
 
-    private let originalImage: NSImage
+    private var originalImage: NSImage
     private var undoStack: [EditingOperation] = []
     private var redoStack: [EditingOperation] = []
 
@@ -219,6 +219,15 @@ class ImageEditingSession: ObservableObject {
         undoStack.removeAll()
         redoStack.removeAll()
         currentImage = originalImage
+        resetRevision += 1
+    }
+
+    func replaceOriginalImage(_ image: NSImage) {
+        originalImage = image
+        operations.removeAll()
+        undoStack.removeAll()
+        redoStack.removeAll()
+        currentImage = image
         resetRevision += 1
     }
 

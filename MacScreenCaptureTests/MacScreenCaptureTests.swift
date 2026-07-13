@@ -793,6 +793,80 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(segment.imageRect, CGRect(x: 0, y: 0, width: 300, height: 500))
     }
 
+    func testCaptureSelectionGeometryMovesAndClampsToDisplayBounds() {
+        let geometry = CaptureSelectionGeometry(
+            initialRect: CGRect(x: 100, y: 100, width: 300, height: 200),
+            bounds: CGRect(x: 0, y: 0, width: 800, height: 600),
+            minimumSize: CGSize(width: 24, height: 24)
+        )
+
+        XCTAssertEqual(
+            geometry.moving(by: CGPoint(x: 600, y: 500)),
+            CGRect(x: 500, y: 400, width: 300, height: 200)
+        )
+        XCTAssertEqual(
+            geometry.moving(by: CGPoint(x: -200, y: -300)),
+            CGRect(x: 0, y: 0, width: 300, height: 200)
+        )
+    }
+
+    func testCaptureSelectionGeometryResizesAllEdgesInCaptureCoordinates() {
+        let geometry = CaptureSelectionGeometry(
+            initialRect: CGRect(x: 100, y: 100, width: 300, height: 200),
+            bounds: CGRect(x: 0, y: 0, width: 800, height: 600),
+            minimumSize: CGSize(width: 24, height: 24)
+        )
+
+        XCTAssertEqual(
+            geometry.resizing(handle: .topLeft, by: CGPoint(x: -20, y: -30)),
+            CGRect(x: 80, y: 70, width: 320, height: 230)
+        )
+        XCTAssertEqual(
+            geometry.resizing(handle: .bottomRight, by: CGPoint(x: 40, y: 50)),
+            CGRect(x: 100, y: 100, width: 340, height: 250)
+        )
+        XCTAssertEqual(
+            geometry.resizing(handle: .left, by: CGPoint(x: 290, y: 0)),
+            CGRect(x: 376, y: 100, width: 24, height: 200)
+        )
+    }
+
+    func testInlineEditorLogsSelectionSegmentsAndCanvasPlacement() throws {
+        let diagnostics = try repositoryFileContents("MacScreenCapture/Utils/ScreenshotGeometryDiagnostics.swift")
+        let controller = try repositoryFileContents("MacScreenCapture/Core/InlineCaptureEditorController.swift")
+
+        XCTAssertTrue(diagnostics.contains("inline_segment_layout"))
+        XCTAssertTrue(diagnostics.contains("selection_capture_rect"))
+        XCTAssertTrue(diagnostics.contains("segment_screen_rect"))
+        XCTAssertTrue(diagnostics.contains("canvas_screen_rect"))
+        XCTAssertTrue(diagnostics.contains("image_rect"))
+        XCTAssertTrue(controller.contains("logInlineSegmentLayout"))
+    }
+
+    func testInlineEditorMovesAndResizesSelectionThenRecaptures() throws {
+        let controller = try repositoryFileContents("MacScreenCapture/Core/InlineCaptureEditorController.swift")
+        let segmentView = try repositoryFileContents("MacScreenCapture/Views/InlineCaptureSegmentView.swift")
+        let captureManager = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+
+        XCTAssertTrue(controller.contains("CaptureSelectionGeometry("))
+        XCTAssertTrue(controller.contains(".leftMouseDragged"))
+        XCTAssertTrue(controller.contains(".leftMouseUp"))
+        XCTAssertTrue(controller.contains("recaptureSelection"))
+        XCTAssertTrue(controller.contains("orderEditorWindowsOut"))
+        XCTAssertTrue(controller.contains("model.replaceImage"))
+        XCTAssertTrue(segmentView.contains("CaptureResizeHandle.allCases"))
+        XCTAssertTrue(segmentView.contains("beginInteractionAt"))
+        XCTAssertTrue(captureManager.contains("captureFixedRegionImage(rect"))
+    }
+
+    func testEditingSessionCanReplaceScreenshotAfterSelectionResize() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Core/FloatingWindowController.swift")
+
+        XCTAssertTrue(source.contains("func replaceOriginalImage("))
+        XCTAssertTrue(source.contains("originalImage = image"))
+        XCTAssertTrue(source.contains("currentImage = image"))
+    }
+
     func testRegionCapturePreservesImageSelectionAndDisplaySpacesInContext() throws {
         let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
 
@@ -827,7 +901,7 @@ final class MacScreenCaptureTests: XCTestCase {
     func testInlineEditorUsesPerDisplayTransparentWindows() throws {
         let source = try repositoryFileContents("MacScreenCapture/Core/InlineCaptureEditorController.swift")
 
-        XCTAssertTrue(source.contains("mapper.screenSegments(for: context.captureRect)"))
+        XCTAssertTrue(source.contains("mapper.screenSegments(for: currentCaptureRect)"))
         XCTAssertTrue(source.contains("window.backgroundColor = .clear"))
         XCTAssertTrue(source.contains("window.isOpaque = false"))
         XCTAssertTrue(source.contains("space.screenFrame"))

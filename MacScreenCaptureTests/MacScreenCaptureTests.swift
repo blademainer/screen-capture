@@ -478,6 +478,51 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(infoPlist.contains("<key>NSSupportsSuddenTermination</key>\n\t<false/>"))
     }
 
+    func testPermissionMonitoringDoesNotPollScreenCaptureKitInBackground() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Core/PermissionManager.swift")
+
+        XCTAssertTrue(source.contains("CGPreflightScreenCaptureAccess()"))
+        XCTAssertTrue(source.contains("NSApplication.didBecomeActiveNotification"))
+        XCTAssertTrue(source.contains("applicationDidBecomeActiveObserver"))
+        XCTAssertFalse(source.contains("Timer.scheduledTimer(withTimeInterval: 2.0"))
+
+        let checkAllPermissions = try XCTUnwrap(
+            source.range(
+                of: "func checkAllPermissions()",
+                range: source.startIndex..<source.endIndex
+            )
+        )
+        let requestScreenPermission = try XCTUnwrap(
+            source.range(
+                of: "func requestScreenRecordingPermission()",
+                range: checkAllPermissions.upperBound..<source.endIndex
+            )
+        )
+        let permissionRefreshSource = source[checkAllPermissions.lowerBound..<requestScreenPermission.lowerBound]
+
+        XCTAssertFalse(permissionRefreshSource.contains("SCShareableContent"))
+    }
+
+    func testPermissionPromptsNeverBlockScreenshotHotKeys() throws {
+        let permissionSource = try repositoryFileContents("MacScreenCapture/Core/PermissionManager.swift")
+        let contentViewSource = try repositoryFileContents("MacScreenCapture/ContentView.swift")
+
+        XCTAssertFalse(permissionSource.contains("alert.runModal()"))
+        XCTAssertTrue(permissionSource.contains("alert.beginSheetModal(for:"))
+        XCTAssertTrue(permissionSource.contains("activePermissionAlert"))
+
+        let checkPermissions = try XCTUnwrap(
+            contentViewSource.range(
+                of: "private func checkPermissions()",
+                range: contentViewSource.startIndex..<contentViewSource.endIndex
+            )
+        )
+        let checkPermissionsSource = contentViewSource[checkPermissions.lowerBound..<contentViewSource.endIndex]
+
+        XCTAssertTrue(checkPermissionsSource.contains("permissionManager.checkAllPermissions()"))
+        XCTAssertFalse(checkPermissionsSource.contains("permissionManager.requestScreenRecordingPermission()"))
+    }
+
     func testSettingsPanelButtonsAreBackedByVisibleActions() throws {
         let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")
         let appSource = try repositoryFileContents("MacScreenCapture/MacScreenCaptureApp.swift")

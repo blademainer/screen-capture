@@ -21,26 +21,28 @@ class PermissionManager: ObservableObject {
     @Published var permissionCheckInProgress = false
     
     // MARK: - Private Properties
-    private var permissionCheckTimer: Timer?
+    private var applicationDidBecomeActiveObserver: NSObjectProtocol?
+    private var activePermissionAlert: NSAlert?
     
     // MARK: - Initialization
     init() {
         startPermissionMonitoring()
+        checkAllPermissions()
     }
     
     deinit {
-        permissionCheckTimer?.invalidate()
+        if let applicationDidBecomeActiveObserver {
+            NotificationCenter.default.removeObserver(applicationDidBecomeActiveObserver)
+        }
     }
     
     // MARK: - Public Methods
     
     /// 检查所有权限状态
     func checkAllPermissions() {
-        Task {
-            await checkScreenRecordingPermission()
-            await checkMicrophonePermission()
-            await checkAccessibilityPermission()
-        }
+        hasScreenRecordingPermission = CGPreflightScreenCaptureAccess()
+        hasMicrophonePermission = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        hasAccessibilityPermission = AXIsProcessTrusted()
     }
     
     /// 请求屏幕录制权限
@@ -197,34 +199,6 @@ class PermissionManager: ObservableObject {
     
     // MARK: - Private Methods
     
-    /// 检查屏幕录制权限
-    private func checkScreenRecordingPermission() async {
-        if #available(macOS 12.3, *) {
-            do {
-                let content = try await SCShareableContent.excludingDesktopWindows(
-                    false,
-                    onScreenWindowsOnly: true
-                )
-                hasScreenRecordingPermission = !content.displays.isEmpty
-            } catch {
-                hasScreenRecordingPermission = false
-            }
-        } else {
-            checkLegacyScreenRecordingPermission()
-        }
-    }
-    
-    /// 检查麦克风权限
-    private func checkMicrophonePermission() async {
-        let status = AVCaptureDevice.authorizationStatus(for: .audio)
-        hasMicrophonePermission = (status == .authorized)
-    }
-    
-    /// 检查辅助功能权限
-    private func checkAccessibilityPermission() async {
-        hasAccessibilityPermission = AXIsProcessTrusted()
-    }
-    
     /// 使用 ScreenCaptureKit 检查屏幕录制权限
     private func checkLegacyScreenRecordingPermission() {
         Task {
@@ -246,7 +220,11 @@ class PermissionManager: ObservableObject {
     
     /// 开始权限监控
     private func startPermissionMonitoring() {
-        permissionCheckTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        applicationDidBecomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
             Task { @MainActor in
                 self?.checkAllPermissions()
             }
@@ -255,16 +233,32 @@ class PermissionManager: ObservableObject {
     
     /// 显示权限提示对话框
     private func showPermissionAlert(for permission: PermissionType) {
+        guard activePermissionAlert == nil else { return }
+
         let alert = NSAlert()
         alert.messageText = permission.alertTitle
         alert.informativeText = permission.alertMessage
         alert.addButton(withTitle: "打开系统偏好设置")
         alert.addButton(withTitle: "稍后")
         alert.alertStyle = .warning
-        
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
+
+        guard let parentWindow = NSApp.keyWindow
+            ?? NSApp.mainWindow
+            ?? NSApp.windows.first(where: \.isVisible) else {
             openSystemPreferences(for: permission)
+            return
+        }
+
+        activePermissionAlert = alert
+        NSApp.activate(ignoringOtherApps: true)
+        alert.beginSheetModal(for: parentWindow) { [weak self] response in
+            Task { @MainActor in
+                guard let self else { return }
+                self.activePermissionAlert = nil
+                if response == .alertFirstButtonReturn {
+                    self.openSystemPreferences(for: permission)
+                }
+            }
         }
     }
     

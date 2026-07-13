@@ -53,9 +53,7 @@ struct ContentView: View {
     }
     
     private func checkPermissions() {
-        if !permissionManager.hasScreenRecordingPermission {
-            permissionManager.requestScreenRecordingPermission()
-        }
+        permissionManager.checkAllPermissions()
     }
 }
 

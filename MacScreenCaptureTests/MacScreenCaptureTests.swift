@@ -282,11 +282,18 @@ final class MacScreenCaptureTests: XCTestCase {
         let controllerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowController.swift")
         let managerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowManager.swift")
 
+        XCTAssertTrue(controllerSource.contains("contentRect: Self.fullScreenEditingFrame()"))
+        XCTAssertTrue(controllerSource.contains("styleMask: [.borderless]"))
+        XCTAssertFalse(controllerSource.contains("styleMask: [.titled, .closable, .resizable, .miniaturizable]"))
+        XCTAssertFalse(controllerSource.contains("titlebarAppearsTransparent"))
+        XCTAssertFalse(controllerSource.contains("titleVisibility"))
         XCTAssertTrue(controllerSource.contains("window.level = .floating"))
         XCTAssertFalse(controllerSource.contains("window.level = .normal"))
+        XCTAssertTrue(controllerSource.contains("window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]"))
         XCTAssertTrue(managerSource.contains("NSApp.activate(ignoringOtherApps: true)"))
         XCTAssertTrue(managerSource.contains("editingWindow.window?.makeKeyAndOrderFront(nil)"))
         XCTAssertTrue(managerSource.contains("editingWindow.window?.orderFrontRegardless()"))
+        XCTAssertFalse(managerSource.contains("positionNewWindow(editingWindow.window)"))
     }
 
     func testEditingWindowUsesFocusedGrayEditingFrame() throws {

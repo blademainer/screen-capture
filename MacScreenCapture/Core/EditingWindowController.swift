@@ -12,30 +12,10 @@ class EditingWindowController: NSWindowController {
     init(screenshot: NSImage) {
         self.screenshot = screenshot
         self.editingSession = ImageEditingSession(originalImage: screenshot)
-        
-        // 计算窗口尺寸
-        let imageSize = screenshot.size
-        let maxSize = CGSize(width: 900, height: 700)
-        let aspectRatio = imageSize.width / imageSize.height
-        
-        var windowSize = imageSize
-        if windowSize.width > maxSize.width {
-            windowSize.width = maxSize.width
-            windowSize.height = windowSize.width / aspectRatio
-        }
-        if windowSize.height > maxSize.height {
-            windowSize.height = maxSize.height
-            windowSize.width = windowSize.height * aspectRatio
-        }
-        
-        // 添加工具栏和操作栏的高度
-        windowSize.height += 140
-        windowSize.width = max(windowSize.width, 500) // 最小宽度
-        
-        // 创建标准窗口（非浮窗）
+
         let window = EditingWindow(
-            contentRect: NSRect(origin: .zero, size: windowSize),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
+            contentRect: Self.fullScreenEditingFrame(),
+            styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
@@ -53,31 +33,18 @@ class EditingWindowController: NSWindowController {
     private func setupWindow() {
         guard let window = window else { return }
         
-        // 窗口属性设置 - 截图后默认置顶，确保 Esc 可以直接关闭编辑窗口
-        window.title = "图片编辑"
+        // 截图后编辑器使用无标题栏全屏遮罩，避免表现成普通 panel/window。
         window.level = .floating
-        window.backgroundColor = NSColor.windowBackgroundColor
-        window.titlebarAppearsTransparent = false
-        window.titleVisibility = .visible
-        
-        // 设置窗口样式为标准文档窗口
-        window.hasShadow = true
+        window.backgroundColor = NSColor.black.withAlphaComponent(0.36)
+        window.hasShadow = false
         window.isOpaque = true
-        
-        // 居中显示
-        window.center()
-        
-        // 设置最小尺寸
-        window.minSize = NSSize(width: 500, height: 400)
-        
-        // 窗口动画
-        window.animationBehavior = .documentWindow
-        
+        window.isMovableByWindowBackground = false
+        window.animationBehavior = .none
+
         // 窗口关闭时的处理
         window.delegate = self
-        
-        // 标准窗口行为
-        window.collectionBehavior = [.managed, .participatesInCycle]
+
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         
         // 添加窗口出现动画
         window.alphaValue = 0
@@ -86,6 +53,20 @@ class EditingWindowController: NSWindowController {
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             window.animator().alphaValue = 1.0
         }
+    }
+
+    private static func fullScreenEditingFrame() -> NSRect {
+        let combinedFrame = NSScreen.screens
+            .map(\.frame)
+            .reduce(CGRect.null) { partial, screenFrame in
+                partial.isNull ? screenFrame : partial.union(screenFrame)
+            }
+
+        guard !combinedFrame.isNull, !combinedFrame.isEmpty else {
+            return NSRect(x: 0, y: 0, width: 900, height: 700)
+        }
+
+        return combinedFrame.integral
     }
     
     private func setupContent() {

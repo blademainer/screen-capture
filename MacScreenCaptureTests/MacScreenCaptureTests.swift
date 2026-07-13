@@ -948,6 +948,16 @@ final class MacScreenCaptureTests: XCTestCase {
         }
     }
 
+    func testInlineCanvasAcceptsFirstDrawingClickAfterToolbarSelection() throws {
+        let canvasSource = try repositoryFileContents("MacScreenCapture/Views/FloatingWindowContentView.swift")
+        let controllerSource = try repositoryFileContents("MacScreenCapture/Core/InlineCaptureEditorController.swift")
+
+        XCTAssertTrue(canvasSource.contains("override func acceptsFirstMouse(for event: NSEvent?) -> Bool"))
+        XCTAssertTrue(controllerSource.contains("InlineCaptureToolbarPanel"))
+        XCTAssertTrue(controllerSource.contains("styleMask: [.borderless, .nonactivatingPanel]"))
+        XCTAssertTrue(controllerSource.contains("window.becomesKeyOnlyIfNeeded = true"))
+    }
+
     func testAutomaticRegionCaptureNeverOpensStandaloneEditingWindow() throws {
         let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
         let start = try XCTUnwrap(source.range(of: "private func captureRegionScreenshot("))

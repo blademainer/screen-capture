@@ -270,6 +270,10 @@ class FloatingEditingCanvasView: NSView {
         setupView()
     }
 
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
     override func layout() {
         super.layout()
         logGeometryIfNeeded()

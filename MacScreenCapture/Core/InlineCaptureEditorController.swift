@@ -147,7 +147,7 @@ final class InlineCaptureEditorController: NSObject {
             visibleFrame: visibleFrame
         )
         let level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 2)
-        let window = makeWindow(frame: toolbarFrame, level: level, ignoresMouseEvents: false)
+        let window = makeToolbarWindow(frame: toolbarFrame, level: level)
         window.hasShadow = true
         window.contentView = NSHostingView(rootView: InlineCaptureToolbarView(
             model: model,
@@ -164,6 +164,25 @@ final class InlineCaptureEditorController: NSObject {
             onCancel: { [weak self] in self?.cancel() }
         ))
         toolbarWindow = window
+    }
+
+    private func makeToolbarWindow(frame: CGRect, level: NSWindow.Level) -> NSPanel {
+        let window = InlineCaptureToolbarPanel(
+            contentRect: frame,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        window.level = level
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = false
+        window.becomesKeyOnlyIfNeeded = true
+        window.isFloatingPanel = true
+        window.hidesOnDeactivate = false
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        window.isReleasedWhenClosed = false
+        return window
     }
 
     private func screen(for displayID: CGDirectDisplayID) -> NSScreen? {
@@ -387,4 +406,8 @@ extension InlineCaptureEditorController: InlineCaptureSegmentViewDelegate {
 private final class InlineCaptureWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+}
+
+private final class InlineCaptureToolbarPanel: NSPanel {
+    override var canBecomeMain: Bool { false }
 }

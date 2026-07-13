@@ -146,12 +146,6 @@ final class InlineCaptureEditorController: NSObject {
             toolbarSize: toolbarSize,
             visibleFrame: visibleFrame
         )
-        ScreenshotGeometryDiagnostics.logInlineToolbarLayout(
-            selectionCaptureRect: currentCaptureRect,
-            anchorScreenRect: anchor.screenRect,
-            toolbarFrame: toolbarFrame,
-            visibleFrame: visibleFrame
-        )
         let level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 2)
         let window = makeToolbarWindow(frame: toolbarFrame, level: level)
         window.hasShadow = true
@@ -169,6 +163,14 @@ final class InlineCaptureEditorController: NSObject {
             onFinish: { [weak self] in self?.finish() },
             onCancel: { [weak self] in self?.cancel() }
         ))
+        window.setFrame(toolbarFrame, display: false)
+        window.level = level
+        ScreenshotGeometryDiagnostics.logInlineToolbarLayout(
+            selectionCaptureRect: currentCaptureRect,
+            anchorScreenRect: anchor.screenRect,
+            toolbarFrame: window.frame,
+            visibleFrame: visibleFrame
+        )
         toolbarWindow = window
     }
 
@@ -179,13 +181,13 @@ final class InlineCaptureEditorController: NSObject {
             backing: .buffered,
             defer: false
         )
-        window.level = level
         window.backgroundColor = .clear
         window.isOpaque = false
         window.hasShadow = false
         window.becomesKeyOnlyIfNeeded = true
         window.isFloatingPanel = true
         window.hidesOnDeactivate = false
+        window.level = level
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         window.isReleasedWhenClosed = false
         return window

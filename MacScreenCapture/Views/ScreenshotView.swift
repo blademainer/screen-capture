@@ -318,7 +318,7 @@ struct ScreenshotView: View {
             } catch {
                 await MainActor.run {
                     isCapturing = false
-                    errorMessage = error.localizedDescription
+                    errorMessage = captureErrorMessage(for: error)
                 }
             }
         }
@@ -340,7 +340,7 @@ struct ScreenshotView: View {
             } catch {
                 await MainActor.run {
                     isRunningAdvancedAction = false
-                    errorMessage = error.localizedDescription
+                    errorMessage = captureErrorMessage(for: error)
                 }
             }
         }
@@ -370,7 +370,7 @@ struct ScreenshotView: View {
             } catch {
                 await MainActor.run {
                     isProcessingPreview = false
-                    errorMessage = error.localizedDescription
+                    errorMessage = captureErrorMessage(for: error)
                 }
             }
         }
@@ -391,9 +391,21 @@ struct ScreenshotView: View {
             } catch {
                 await MainActor.run {
                     isProcessingPreview = false
-                    errorMessage = error.localizedDescription
+                    errorMessage = captureErrorMessage(for: error)
                 }
             }
+        }
+    }
+
+    private func captureErrorMessage(for error: Error) -> String? {
+        guard let captureError = error as? CaptureError else {
+            return error.localizedDescription
+        }
+        switch captureError {
+        case .regionSelectionCancelled:
+            return nil
+        default:
+            return error.localizedDescription
         }
     }
 }

@@ -949,6 +949,15 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertFalse(function.contains("showEditor: true"))
     }
 
+    func testEscapeCancellationDoesNotPresentScreenshotError() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Views/ScreenshotView.swift")
+
+        XCTAssertTrue(source.contains("private func captureErrorMessage(for error: Error) -> String?"))
+        XCTAssertTrue(source.contains("case .regionSelectionCancelled:"))
+        XCTAssertTrue(source.contains("return nil"))
+        XCTAssertTrue(source.contains("errorMessage = captureErrorMessage(for: error)"))
+    }
+
     func testScreenshotGeometryDiagnosticsCorrelateCaptureWithGlobalCanvasPlacement() throws {
         let diagnosticsSource = try repositoryFileContents("MacScreenCapture/Utils/ScreenshotGeometryDiagnostics.swift")
         let editingControllerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowController.swift")

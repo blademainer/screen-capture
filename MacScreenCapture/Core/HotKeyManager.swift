@@ -371,7 +371,7 @@ class HotKeyManager: ObservableObject {
     private func performDoubleOptionQuickOpen() {
         let trace = HotKeyLatencyDiagnostics.makeTrace(action: "double_option_quick_open")
         HotKeyLatencyDiagnostics.$current.withValue(trace) {
-            HotKeyLatencyDiagnostics.mark("hotkey_received")
+            HotKeyLatencyDiagnostics.mark("hotkey_received", metadata: BackgroundResponsivenessManager.shared.hotKeyWakeMetadata())
         }
 
         Task(priority: .userInitiated) { @MainActor in
@@ -424,7 +424,7 @@ class HotKeyManager: ObservableObject {
             if hotKeyID.signature == actionID.signature && hotKeyID.id == actionID.id {
                 let trace = HotKeyLatencyDiagnostics.makeTrace(action: action.rawValue)
                 HotKeyLatencyDiagnostics.$current.withValue(trace) {
-                    HotKeyLatencyDiagnostics.mark("hotkey_received")
+                    HotKeyLatencyDiagnostics.mark("hotkey_received", metadata: BackgroundResponsivenessManager.shared.hotKeyWakeMetadata())
                 }
 
                 Task(priority: .userInitiated) { @MainActor in

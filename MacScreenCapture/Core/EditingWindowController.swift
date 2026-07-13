@@ -7,11 +7,13 @@ import Carbon
 class EditingWindowController: NSWindowController {
     private var screenshot: NSImage
     private var editingSession: ImageEditingSession
+    private let geometryTrace: ScreenshotGeometryDiagnostics.EditorTrace
     var onWindowClose: ((EditingWindowController) -> Void)?
     
     init(screenshot: NSImage) {
         self.screenshot = screenshot
         self.editingSession = ImageEditingSession(originalImage: screenshot)
+        self.geometryTrace = ScreenshotGeometryDiagnostics.makeEditorTrace(for: screenshot.size)
 
         let window = EditingWindow(
             contentRect: Self.fullScreenEditingFrame(),
@@ -46,6 +48,7 @@ class EditingWindowController: NSWindowController {
 
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         ScreenshotGeometryDiagnostics.logEditorWindowOpened(
+            trace: geometryTrace,
             imageSize: screenshot.size,
             windowFrame: window.frame
         )
@@ -77,6 +80,7 @@ class EditingWindowController: NSWindowController {
         let contentView = EditingWindowContentView(
             screenshot: screenshot,
             editingSession: editingSession,
+            geometryTrace: geometryTrace,
             onSave: { [weak self] editedImage in
                 self?.saveImage(editedImage)
             },

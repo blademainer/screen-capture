@@ -757,6 +757,43 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(canvasSource.contains("ScreenshotGeometryDiagnostics.logCanvasLayout"))
     }
 
+    func testScreenshotGeometryDiagnosticsMapsCaptureRectIntoScreenCoordinates() throws {
+        let display = ScreenshotGeometryDiagnostics.DisplayFrame(
+            displayID: 2,
+            captureFrame: CGRect(x: 0, y: 0, width: 2560, height: 1440),
+            screenFrame: CGRect(x: 0, y: 0, width: 2560, height: 1440)
+        )
+
+        let segments = ScreenshotGeometryDiagnostics.screenSegments(
+            for: CGRect(x: 143, y: 70, width: 2275, height: 1330),
+            displayFrames: [display]
+        )
+
+        let segment = try XCTUnwrap(segments.first)
+        XCTAssertEqual(segments.count, 1)
+        XCTAssertEqual(segment.displayID, 2)
+        XCTAssertEqual(segment.captureRect, CGRect(x: 143, y: 70, width: 2275, height: 1330))
+        XCTAssertEqual(segment.screenRect, CGRect(x: 143, y: 40, width: 2275, height: 1330))
+    }
+
+    func testScreenshotGeometryDiagnosticsCorrelateCaptureWithGlobalCanvasPlacement() throws {
+        let diagnosticsSource = try repositoryFileContents("MacScreenCapture/Utils/ScreenshotGeometryDiagnostics.swift")
+        let editingControllerSource = try repositoryFileContents("MacScreenCapture/Core/EditingWindowController.swift")
+        let editingWindowSource = try repositoryFileContents("MacScreenCapture/Views/EditingWindowContentView.swift")
+        let canvasSource = try repositoryFileContents("MacScreenCapture/Views/FloatingWindowContentView.swift")
+
+        XCTAssertTrue(diagnosticsSource.contains("capture_id"))
+        XCTAssertTrue(diagnosticsSource.contains("editor_id"))
+        XCTAssertTrue(diagnosticsSource.contains("selection_screen_rect"))
+        XCTAssertTrue(diagnosticsSource.contains("canvas_screen_rect"))
+        XCTAssertTrue(diagnosticsSource.contains("image_screen_rect"))
+        XCTAssertTrue(diagnosticsSource.contains("image_selection_origin_delta"))
+        XCTAssertTrue(diagnosticsSource.contains("image_selection_scale"))
+        XCTAssertTrue(editingControllerSource.contains("makeEditorTrace"))
+        XCTAssertTrue(editingWindowSource.contains("geometryTrace: geometryTrace"))
+        XCTAssertTrue(canvasSource.contains("window.convertToScreen"))
+    }
+
     func testMultiWindowSelectionSupportsShiftAndDesktopBackdrop() throws {
         let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
 

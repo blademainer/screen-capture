@@ -191,6 +191,7 @@ struct FloatingWindowContentView: View {
 // MARK: - Traditional Editing Canvas (基于现有ImageEditingSession方案)
 struct TraditionalEditingCanvas: NSViewRepresentable {
     @ObservedObject var editingSession: ImageEditingSession
+    var geometryTrace: ScreenshotGeometryDiagnostics.EditorTrace? = nil
     let selectedTool: EditingTool
     let selectedColor: Color
     let lineWidth: CGFloat
@@ -207,6 +208,7 @@ struct TraditionalEditingCanvas: NSViewRepresentable {
     func updateNSView(_ nsView: FloatingEditingCanvasView, context: Context) {
         nsView.imageSize = editingSession.currentImage.size
         nsView.editingSession = editingSession
+        nsView.geometryTrace = geometryTrace
         nsView.syncResetRevision(editingSession.resetRevision)
         nsView.selectedTool = selectedTool
         nsView.selectedColor = NSColor(selectedColor)
@@ -242,6 +244,7 @@ protocol FloatingEditingCanvasDelegate: AnyObject {
 class FloatingEditingCanvasView: NSView {
     weak var delegate: FloatingEditingCanvasDelegate?
     var editingSession: ImageEditingSession?
+    var geometryTrace: ScreenshotGeometryDiagnostics.EditorTrace?
     var selectedTool: EditingTool = .none
     var selectedColor: NSColor = .red
     var lineWidth: CGFloat = 2.0
@@ -516,11 +519,28 @@ class FloatingEditingCanvasView: NSView {
             return
         }
 
+        let canvasWindowRect = convert(bounds, to: nil)
+        let imageWindowRect = convert(imageDisplayRect, to: nil)
+        let canvasScreenRect = window.map { window in
+            window.convertToScreen(canvasWindowRect)
+        }
+        let imageScreenRect = window.map { window in
+            window.convertToScreen(imageWindowRect)
+        }
+
         ScreenshotGeometryDiagnostics.logCanvasLayout(
+            trace: geometryTrace,
             imageSize: imageSize,
             canvasBounds: bounds,
             imageDisplayRect: imageDisplayRect,
-            imageScale: imageScale
+            imageScale: imageScale,
+            windowFrame: window?.frame,
+            canvasWindowRect: canvasWindowRect,
+            canvasScreenRect: canvasScreenRect,
+            imageWindowRect: imageWindowRect,
+            imageScreenRect: imageScreenRect,
+            backingScale: window?.backingScaleFactor ?? 1,
+            isFlipped: isFlipped
         )
     }
 

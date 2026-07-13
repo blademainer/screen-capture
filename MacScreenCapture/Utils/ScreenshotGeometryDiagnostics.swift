@@ -8,20 +8,83 @@ enum ScreenshotGeometryDiagnostics {
         let screenFrame: CGRect
     }
 
+    struct ScreenSegment {
+        let displayID: UInt32
+        let captureRect: CGRect
+        let screenRect: CGRect
+    }
+
+    struct EditorTrace {
+        let captureID: String?
+        let editorID: String
+        let selectionScreenRect: CGRect?
+    }
+
+    private struct ActiveCapture {
+        let id: String
+        let startedAt: Date
+        let selectionScreenRect: CGRect?
+        var resultImageSize: CGSize?
+    }
+
     private static let logQueue = DispatchQueue(label: "com.blademainer.MacScreenCapture.screenshot-geometry-diagnostics")
     private static let maxLogFileSize = 512 * 1024
     private static let signatureLock = NSLock()
     private static var lastSignatures: [String: String] = [:]
+    private static let traceLock = NSLock()
+    private static var activeCapture: ActiveCapture?
 
     static func logCaptureSelectedRegion(captureRect: CGRect, displayFrames: [DisplayFrame]) {
         let displays = displayFrames
             .map { "display(id=\($0.displayID),capture=\(rect($0.captureFrame)),screen=\(rect($0.screenFrame)))" }
             .joined(separator: "|")
+        let screenSegmentText = screenSegments(for: captureRect, displayFrames: displayFrames)
+            .map { "segment(display_id=\($0.displayID),capture=\(rect($0.captureRect)),screen=\(rect($0.screenRect)))" }
+            .joined(separator: "|")
+        let selectionScreenRect = screenSegments(for: captureRect, displayFrames: displayFrames)
+            .map(\.screenRect)
+            .reduce(CGRect.null) { partial, segment in
+                partial.isNull ? segment : partial.union(segment)
+            }
+        let captureID = UUID().uuidString
+
+        traceLock.lock()
+        activeCapture = ActiveCapture(
+            id: captureID,
+            startedAt: Date(),
+            selectionScreenRect: selectionScreenRect.isNull ? nil : selectionScreenRect,
+            resultImageSize: nil
+        )
+        traceLock.unlock()
+
         append(event: "capture_selected_region", fields: [
+            "capture_id": captureID,
             "capture_rect": rect(captureRect),
             "display_count": "\(displayFrames.count)",
-            "displays": displays
+            "displays": displays,
+            "selection_screen_rect": selectionScreenRect.isNull ? "none" : rect(selectionScreenRect),
+            "selection_screen_segments": screenSegmentText
         ])
+    }
+
+    static func screenSegments(for captureRect: CGRect, displayFrames: [DisplayFrame]) -> [ScreenSegment] {
+        displayFrames.compactMap { display in
+            let intersection = captureRect.intersection(display.captureFrame)
+            guard !intersection.isNull, !intersection.isEmpty else { return nil }
+
+            let screenRect = CGRect(
+                x: display.screenFrame.minX + (intersection.minX - display.captureFrame.minX),
+                y: display.screenFrame.maxY - (intersection.maxY - display.captureFrame.minY),
+                width: intersection.width,
+                height: intersection.height
+            )
+
+            return ScreenSegment(
+                displayID: display.displayID,
+                captureRect: intersection,
+                screenRect: screenRect
+            )
+        }
     }
 
     static func logDisplayCropMapping(
@@ -71,6 +134,10 @@ enum ScreenshotGeometryDiagnostics {
     }
 
     static func logCaptureResult(captureRect: CGRect, resultImageSize: CGSize, segmentCount: Int) {
+        traceLock.lock()
+        activeCapture?.resultImageSize = resultImageSize
+        traceLock.unlock()
+
         append(event: "capture_result", fields: [
             "capture_rect": rect(captureRect),
             "result_image_size": size(resultImageSize),
@@ -78,14 +145,39 @@ enum ScreenshotGeometryDiagnostics {
         ])
     }
 
-    static func logEditorWindowOpened(imageSize: CGSize, windowFrame: CGRect) {
+    static func makeEditorTrace(for imageSize: CGSize) -> EditorTrace {
+        traceLock.lock()
+        defer { traceLock.unlock() }
+
+        let matchingCapture = activeCapture.flatMap { capture -> ActiveCapture? in
+            guard Date().timeIntervalSince(capture.startedAt) <= 60,
+                  let resultSize = capture.resultImageSize,
+                  abs(resultSize.width - imageSize.width) <= 1,
+                  abs(resultSize.height - imageSize.height) <= 1 else {
+                return nil
+            }
+            return capture
+        }
+
+        return EditorTrace(
+            captureID: matchingCapture?.id,
+            editorID: UUID().uuidString,
+            selectionScreenRect: matchingCapture?.selectionScreenRect
+        )
+    }
+
+    static func logEditorWindowOpened(trace: EditorTrace, imageSize: CGSize, windowFrame: CGRect) {
         append(event: "editor_window_opened", fields: [
+            "capture_id": trace.captureID ?? "unmatched",
+            "editor_id": trace.editorID,
             "image_size": size(imageSize),
+            "selection_screen_rect": trace.selectionScreenRect.map(rect) ?? "none",
             "window_frame": rect(windowFrame)
         ])
     }
 
     static func logEditorLayout(
+        trace: EditorTrace,
         imageSize: CGSize,
         windowSize: CGSize,
         availableSize: CGSize,
@@ -93,6 +185,8 @@ enum ScreenshotGeometryDiagnostics {
         surfacePadding: CGFloat
     ) {
         appendDeduplicated(event: "editor_layout", fields: [
+            "capture_id": trace.captureID ?? "unmatched",
+            "editor_id": trace.editorID,
             "image_size": size(imageSize),
             "window_size": size(windowSize),
             "available_size": size(availableSize),
@@ -102,17 +196,54 @@ enum ScreenshotGeometryDiagnostics {
     }
 
     static func logCanvasLayout(
+        trace: EditorTrace?,
         imageSize: CGSize,
         canvasBounds: CGRect,
         imageDisplayRect: CGRect,
-        imageScale: CGFloat
+        imageScale: CGFloat,
+        windowFrame: CGRect?,
+        canvasWindowRect: CGRect?,
+        canvasScreenRect: CGRect?,
+        imageWindowRect: CGRect?,
+        imageScreenRect: CGRect?,
+        backingScale: CGFloat,
+        isFlipped: Bool
     ) {
-        appendDeduplicated(event: "canvas_layout", fields: [
+        var fields: [String: String] = [
+            "capture_id": trace?.captureID ?? "unmatched",
+            "editor_id": trace?.editorID ?? "unmatched",
             "image_size": size(imageSize),
             "canvas_bounds": rect(canvasBounds),
             "image_display_rect": rect(imageDisplayRect),
-            "image_scale": number(imageScale)
-        ])
+            "image_scale": number(imageScale),
+            "window_frame": windowFrame.map(rect) ?? "none",
+            "canvas_window_rect": canvasWindowRect.map(rect) ?? "none",
+            "canvas_screen_rect": canvasScreenRect.map(rect) ?? "none",
+            "image_window_rect": imageWindowRect.map(rect) ?? "none",
+            "image_screen_rect": imageScreenRect.map(rect) ?? "none",
+            "backing_scale": number(backingScale),
+            "canvas_is_flipped": isFlipped ? "true" : "false",
+            "selection_screen_rect": trace?.selectionScreenRect.map(rect) ?? "none"
+        ]
+
+        if let selectionRect = trace?.selectionScreenRect,
+           let imageScreenRect,
+           selectionRect.width > 0,
+           selectionRect.height > 0 {
+            fields["image_selection_origin_delta"] = point(CGPoint(
+                x: imageScreenRect.minX - selectionRect.minX,
+                y: imageScreenRect.minY - selectionRect.minY
+            ))
+            fields["image_selection_scale"] = size(CGSize(
+                width: imageScreenRect.width / selectionRect.width,
+                height: imageScreenRect.height / selectionRect.height
+            ))
+        } else {
+            fields["image_selection_origin_delta"] = "none"
+            fields["image_selection_scale"] = "none"
+        }
+
+        appendDeduplicated(event: "canvas_layout", fields: fields)
     }
 
     private static func appendDeduplicated(event: String, fields: [String: String]) {
@@ -133,6 +264,12 @@ enum ScreenshotGeometryDiagnostics {
     }
 
     private static func append(event: String, fields: [String: String]) {
+        var fields = fields
+        if fields["capture_id"] == nil {
+            traceLock.lock()
+            fields["capture_id"] = activeCapture?.id ?? "unmatched"
+            traceLock.unlock()
+        }
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let fieldText = fields
             .sorted { $0.key < $1.key }
@@ -182,6 +319,10 @@ enum ScreenshotGeometryDiagnostics {
 
     static func size(_ size: CGSize) -> String {
         "size(w:\(number(size.width)),h:\(number(size.height)))"
+    }
+
+    static func point(_ point: CGPoint) -> String {
+        "point(x:\(number(point.x)),y:\(number(point.y)))"
     }
 
     private static func number(_ value: CGFloat) -> String {

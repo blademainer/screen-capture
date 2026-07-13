@@ -4,6 +4,7 @@ import Cocoa
 struct EditingWindowContentView: View {
     let screenshot: NSImage
     @ObservedObject var editingSession: ImageEditingSession
+    let geometryTrace: ScreenshotGeometryDiagnostics.EditorTrace
     
     let onSave: (NSImage) -> Void
     let onCopy: (NSImage) -> Void
@@ -56,6 +57,7 @@ struct EditingWindowContentView: View {
 
     private func logEditorLayout(windowSize: CGSize, availableSize: CGSize, frameSize: CGSize) {
         ScreenshotGeometryDiagnostics.logEditorLayout(
+            trace: geometryTrace,
             imageSize: editingSession.currentImage.size,
             windowSize: windowSize,
             availableSize: availableSize,
@@ -164,6 +166,7 @@ struct EditingWindowContentView: View {
 
             TraditionalEditingCanvas(
                 editingSession: editingSession,
+                geometryTrace: geometryTrace,
                 selectedTool: selectedTool,
                 selectedColor: selectedColor,
                 lineWidth: lineWidth,
@@ -262,6 +265,7 @@ struct EditingWindowContentView: View {
     return EditingWindowContentView(
         screenshot: previewImage,
         editingSession: ImageEditingSession(originalImage: previewImage),
+        geometryTrace: ScreenshotGeometryDiagnostics.makeEditorTrace(for: previewImage.size),
         onSave: { _ in },
         onCopy: { _ in },
         onShare: { _ in },

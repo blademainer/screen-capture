@@ -302,18 +302,24 @@ final class MacScreenCaptureTests: XCTestCase {
         let source = try repositoryFileContents("MacScreenCapture/Views/EditingWindowContentView.swift")
 
         XCTAssertTrue(source.contains("Color(NSColor(calibratedWhite: 0.18, alpha: 1))"))
-        XCTAssertTrue(source.contains("let frameSize = boundedEditingFrameSize(for: editingSession.currentImage.size, in: geometry.size)"))
-        XCTAssertTrue(source.contains(".frame(width: frameSize.width, height: frameSize.height)"))
+        XCTAssertTrue(source.contains("GeometryReader { geometry in"))
+        XCTAssertTrue(source.contains("let frameSize = boundedEditingFrameSize(for: editingSession.currentImage.size, in: availableEditingSurfaceSize(in: geometry.size))"))
+        XCTAssertTrue(source.contains("editorStack(frameSize: frameSize)"))
+        XCTAssertTrue(source.contains("private func editorStack(frameSize: CGSize) -> some View"))
+        XCTAssertTrue(source.contains("private func editingSurface(size: CGSize) -> some View"))
+        XCTAssertTrue(source.contains(".frame(width: size.width, height: size.height)"))
+        XCTAssertTrue(source.contains("TraditionalEditingCanvas("))
+        XCTAssertTrue(source.contains(".frame(width: size.width, height: size.height)"))
+        XCTAssertTrue(source.contains(".frame(width: frameSize.width + 36)"))
+        XCTAssertTrue(source.contains("private func availableEditingSurfaceSize(in windowSize: CGSize) -> CGSize"))
         XCTAssertTrue(source.contains("private func boundedEditingFrameSize(for imageSize: CGSize, in availableSize: CGSize) -> CGSize"))
         XCTAssertTrue(source.contains("min(960, max(360, availableSize.width - 96))"))
         XCTAssertTrue(source.contains("min(680, max(260, availableSize.height - 96))"))
         XCTAssertTrue(source.contains(".padding(18)"))
-        XCTAssertTrue(source.contains(".padding(28)"))
         XCTAssertTrue(source.contains(".clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))"))
         XCTAssertTrue(source.contains(".stroke(Color(NSColor.separatorColor), lineWidth: 1)"))
         XCTAssertTrue(source.contains(".shadow(color: Color.black.opacity(0.22), radius: 12, x: 0, y: 6)"))
         XCTAssertTrue(source.contains("Image(nsImage: editingSession.currentImage)"))
-        XCTAssertTrue(source.contains("TraditionalEditingCanvas("))
     }
 
     func testEditingWindowClearAndCloseActionsAreControllerBacked() throws {

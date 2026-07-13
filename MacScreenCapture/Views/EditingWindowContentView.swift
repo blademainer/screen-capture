@@ -25,39 +25,15 @@ struct EditingWindowContentView: View {
     @AppStorage("annotationTextOutlined") private var textOutlined = false
     
     var body: some View {
-        VStack(spacing: 0) {
-            // 编辑工具栏
-            if isToolbarVisible {
-                editingToolbar
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color(NSColor.controlBackgroundColor))
-                    .overlay(
-                        Rectangle()
-                            .frame(height: 1)
-                            .foregroundColor(Color(NSColor.separatorColor)),
-                        alignment: .bottom
-                    )
-            }
-            
-            // 主画布区域 - 只负责编辑，不处理窗口拖拽
-            canvasArea
-            
-            // 底部操作栏
-            if isActionBarVisible {
-                actionBar
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color(NSColor.controlBackgroundColor))
-                    .overlay(
-                        Rectangle()
-                            .frame(height: 1)
-                            .foregroundColor(Color(NSColor.separatorColor)),
-                        alignment: .top
-                    )
+        GeometryReader { geometry in
+            let frameSize = boundedEditingFrameSize(for: editingSession.currentImage.size, in: availableEditingSurfaceSize(in: geometry.size))
+
+            ZStack {
+                Color(NSColor(calibratedWhite: 0.18, alpha: 1))
+                editorStack(frameSize: frameSize)
             }
         }
-        .background(Color(NSColor.windowBackgroundColor))
+        .background(Color(NSColor(calibratedWhite: 0.18, alpha: 1)))
         .onAppear {
             selectedColor = .annotationDefault(hex: annotationDefaultColorHex)
             lineWidth = CGFloat(annotationDefaultLineWidth)
@@ -118,47 +94,75 @@ struct EditingWindowContentView: View {
     }
     
     // MARK: - Canvas Area
-    private var canvasArea: some View {
-        GeometryReader { geometry in
-            let frameSize = boundedEditingFrameSize(for: editingSession.currentImage.size, in: geometry.size)
-
-            ZStack {
-                Color(NSColor(calibratedWhite: 0.18, alpha: 1))
-
-                ZStack {
-                    Color(NSColor.textBackgroundColor)
-
-                    // 背景图片
-                    Image(nsImage: editingSession.currentImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                    // 与贴图浮窗复用同一套增强编辑画布，保证普通截图编辑能力一致。
-                    TraditionalEditingCanvas(
-                        editingSession: editingSession,
-                        selectedTool: selectedTool,
-                        selectedColor: selectedColor,
-                        lineWidth: lineWidth,
-                        fontSize: fontSize,
-                        textOutlined: textOutlined
+    private func editorStack(frameSize: CGSize) -> some View {
+        VStack(spacing: 0) {
+            if isToolbarVisible {
+                editingToolbar
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .frame(width: frameSize.width + 36)
+                    .background(Color(NSColor.controlBackgroundColor))
+                    .overlay(
+                        Rectangle()
+                            .frame(height: 1)
+                            .foregroundColor(Color(NSColor.separatorColor)),
+                        alignment: .bottom
                     )
-                }
-                .frame(width: frameSize.width, height: frameSize.height)
-                .padding(18)
-                .background(Color(NSColor.textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .stroke(Color(NSColor.separatorColor), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.22), radius: 12, x: 0, y: 6)
-                .padding(28)
+            }
+
+            editingSurface(size: frameSize)
+
+            if isActionBarVisible {
+                actionBar
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .frame(width: frameSize.width + 36)
+                    .background(Color(NSColor.controlBackgroundColor))
+                    .overlay(
+                        Rectangle()
+                            .frame(height: 1)
+                            .foregroundColor(Color(NSColor.separatorColor)),
+                        alignment: .top
+                    )
             }
         }
-        .frame(minWidth: 400, minHeight: 300)
-        .background(Color(NSColor(calibratedWhite: 0.18, alpha: 1)))
-        .clipped()
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .shadow(color: Color.black.opacity(0.22), radius: 12, x: 0, y: 6)
+    }
+
+    private func editingSurface(size: CGSize) -> some View {
+        ZStack {
+            Color(NSColor.textBackgroundColor)
+
+            Image(nsImage: editingSession.currentImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: size.width, height: size.height)
+
+            TraditionalEditingCanvas(
+                editingSession: editingSession,
+                selectedTool: selectedTool,
+                selectedColor: selectedColor,
+                lineWidth: lineWidth,
+                fontSize: fontSize,
+                textOutlined: textOutlined
+            )
+            .frame(width: size.width, height: size.height)
+        }
+        .frame(width: size.width, height: size.height)
+        .padding(18)
+        .background(Color(NSColor.textBackgroundColor))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .stroke(Color(NSColor.separatorColor), lineWidth: 1)
+        )
+    }
+
+    private func availableEditingSurfaceSize(in windowSize: CGSize) -> CGSize {
+        CGSize(
+            width: windowSize.width,
+            height: max(260, windowSize.height - 160)
+        )
     }
 
     private func boundedEditingFrameSize(for imageSize: CGSize, in availableSize: CGSize) -> CGSize {

@@ -309,14 +309,28 @@ class WindowManager: ObservableObject {
         }
     }
 
-    @objc private func hideMainWindow() {
-        guard let window = mainWindow else { return }
+    @discardableResult
+    func hideMainWindowForCaptureIfNeeded() -> Bool {
+        guard UserDefaults.standard.bool(forKey: "autoHideWindowDuringCapture") else { return false }
+        return orderOutMainWindow()
+    }
 
-        isMainWindowVisible = false
-        window.orderOut(nil)
+    @objc private func hideMainWindow() {
+        guard orderOutMainWindow() else { return }
 
         // 设置为辅助应用，不在 Dock 中显示但保持运行
         NSApp.setActivationPolicy(.accessory)
+    }
+
+    @discardableResult
+    private func orderOutMainWindow() -> Bool {
+        guard let window = mainWindow else { return false }
+        guard isMainWindowVisible else { return false }
+
+        isMainWindowVisible = false
+        window.orderOut(nil)
+        updateMenuForState(captureState)
+        return true
     }
 
     // MARK: - Menu Actions

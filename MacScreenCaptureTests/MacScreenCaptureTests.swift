@@ -606,6 +606,10 @@ final class MacScreenCaptureTests: XCTestCase {
         let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
 
         guard let captureStart = source.range(of: "func captureScreenshot(autoOpenAfterCapture: Bool = true, forceSave: Bool = false)")?.lowerBound,
+              let captureStateUpdate = source.range(
+                of: "WindowManager.shared.updateCaptureState(.screenshotting)",
+                range: captureStart..<source.endIndex
+              ),
               let contentLookup = source.range(
                 of: "let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)",
                 range: captureStart..<source.endIndex
@@ -618,6 +622,7 @@ final class MacScreenCaptureTests: XCTestCase {
             return
         }
 
+        XCTAssertLessThan(regionFastPath.lowerBound, captureStateUpdate.lowerBound)
         XCTAssertLessThan(regionFastPath.lowerBound, contentLookup.lowerBound)
         guard let regionFunctionStart = source.range(of: "private func captureRegionScreenshot(")?.lowerBound,
               let regionFunctionEnd = source.range(of: "/// 捕获指定区域", range: regionFunctionStart..<source.endIndex)?.lowerBound else {
@@ -626,11 +631,14 @@ final class MacScreenCaptureTests: XCTestCase {
         }
         let regionFunction = String(source[regionFunctionStart..<regionFunctionEnd])
 
-        XCTAssertTrue(regionFunction.contains("shouldAutoHideMainWindow"))
-        XCTAssertTrue(regionFunction.contains("mainWindowVisible"))
-        XCTAssertTrue(regionFunction.contains("await MainActor.run { WindowManager.shared.isMainWindowVisible }"))
-        XCTAssertTrue(regionFunction.contains("Task.sleep(nanoseconds: 120_000_000)"))
+        XCTAssertTrue(regionFunction.contains("WindowManager.shared.hideMainWindowForCaptureIfNeeded()"))
+        XCTAssertFalse(regionFunction.contains("mainWindowVisible"))
+        XCTAssertFalse(regionFunction.contains("Task.sleep(nanoseconds: 120_000_000)"))
         XCTAssertFalse(regionFunction.contains("Task.sleep(nanoseconds: 160_000_000)"))
+
+        let windowManagerSource = try repositoryFileContents("MacScreenCapture/Core/WindowManager.swift")
+        XCTAssertTrue(windowManagerSource.contains("func hideMainWindowForCaptureIfNeeded() -> Bool"))
+        XCTAssertTrue(windowManagerSource.contains("window.orderOut(nil)"))
     }
 
     func testMultiWindowSelectionSupportsShiftAndDesktopBackdrop() throws {

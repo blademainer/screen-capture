@@ -684,6 +684,10 @@ class CaptureManager: ObservableObject {
 
     /// 截图
     func captureScreenshot(autoOpenAfterCapture: Bool = true, forceSave: Bool = false) async throws -> NSImage {
+        if captureMode == .region {
+            return try await captureRegionScreenshot(autoOpenAfterCapture: autoOpenAfterCapture, forceSave: forceSave)
+        }
+
         // 通知WindowManager开始截图
         await MainActor.run {
             WindowManager.shared.updateCaptureState(.screenshotting)
@@ -694,10 +698,6 @@ class CaptureManager: ObservableObject {
             Task { @MainActor in
                 WindowManager.shared.updateCaptureState(.idle)
             }
-        }
-
-        if captureMode == .region {
-            return try await captureRegionScreenshot(autoOpenAfterCapture: autoOpenAfterCapture, forceSave: forceSave)
         }
 
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
@@ -1457,11 +1457,7 @@ class CaptureManager: ObservableObject {
     /// 区域截图 - 默认磁吸到当前指针所在窗口，仍支持手动拖拽框选。
     private func captureRegionScreenshot(autoOpenAfterCapture: Bool = true, forceSave: Bool = false) async throws -> NSImage {
         HotKeyLatencyDiagnostics.mark("region_screenshot_started")
-        let shouldAutoHideMainWindow = UserDefaults.standard.bool(forKey: "autoHideWindowDuringCapture")
-        let mainWindowVisible = await MainActor.run { WindowManager.shared.isMainWindowVisible }
-        if shouldAutoHideMainWindow && mainWindowVisible {
-            try? await Task.sleep(nanoseconds: 120_000_000)
-        }
+        _ = await MainActor.run { WindowManager.shared.hideMainWindowForCaptureIfNeeded() }
         let image = try await captureSelectedRegionImage(preferWindowUnderMouse: true)
         return try await finalizeCapturedImage(
             image,

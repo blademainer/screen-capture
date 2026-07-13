@@ -622,12 +622,19 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(source.contains("normalizedQuartzRect(from: startPoint, to: point)"))
         XCTAssertTrue(source.contains("mouseDownStartedInSelection"))
         XCTAssertTrue(source.contains("DispatchQueue.main.async { [completion] in"))
-        XCTAssertTrue(source.contains("captureFixedRegionWithScreencapture(selectedRect)"))
-        XCTAssertTrue(source.contains("process.arguments = [\"-x\", \"-R\", rectangleArgument, tempURL.path]"))
+        XCTAssertTrue(source.contains("captureFixedRegionImage(selectedRect, coordinateSpaces: coordinateSpaces)"))
+        XCTAssertTrue(source.contains("private func captureFixedRegionImage(_ rect: CGRect, coordinateSpaces: [DisplayCoordinateSpace]) async throws -> NSImage"))
+        XCTAssertTrue(source.contains("let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)"))
+        XCTAssertTrue(source.contains("content.displays.first(where: { $0.displayID == coordinateSpace.displayID })"))
+        XCTAssertTrue(source.contains("let displayImage = try await captureDisplayImageWithoutSaving(display: display)"))
+        XCTAssertTrue(source.contains("cropDisplayImage(displayImage, to: segmentRect, in: display)"))
+        XCTAssertTrue(source.contains("drawY = outputSize.height - (segmentRect.maxY - captureRect.minY)"))
+        XCTAssertFalse(source.contains("captureFixedRegionWithScreencapture(selectedRect)"))
+        XCTAssertFalse(source.contains("process.arguments = [\"-x\", \"-R\", rectangleArgument, tempURL.path]"))
         XCTAssertFalse(source.contains("activeRegionSelectionWindow = selectionWindow"))
         XCTAssertTrue(source.contains("selectionWindow.isReleasedWhenClosed = false"))
         XCTAssertTrue(source.contains("DispatchQueue.main.asyncAfter(deadline: .now() + 0.4)"))
-        XCTAssertFalse(source.contains("let displayImage = try await captureDisplayImageWithoutSaving(display: display)"))
+        XCTAssertTrue(source.contains("let displayImage = try await captureDisplayImageWithoutSaving(display: display)"))
     }
 
     func testRegionScreenshotShowsSelectionBeforeShareableContentRefresh() throws {

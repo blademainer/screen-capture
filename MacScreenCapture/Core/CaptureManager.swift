@@ -2317,7 +2317,7 @@ class CaptureManager: ObservableObject {
             throw CaptureError.regionSelectionCancelled
         }
 
-        return try await captureFixedRegionWithScreencapture(selectedRect)
+        return try await captureFixedRegionImage(selectedRect, coordinateSpaces: coordinateSpaces)
     }
 
     private func activeDisplayCoordinateSpaces() -> [DisplayCoordinateSpace] {
@@ -2381,41 +2381,55 @@ class CaptureManager: ObservableObject {
             .integral
     }
 
-    private func captureFixedRegionWithScreencapture(_ rect: CGRect) async throws -> NSImage {
+    private func captureFixedRegionImage(_ rect: CGRect, coordinateSpaces: [DisplayCoordinateSpace]) async throws -> NSImage {
         let captureRect = rect.integral
         guard captureRect.width >= 2, captureRect.height >= 2 else {
             throw CaptureError.regionSelectionCancelled
         }
 
-        let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("magnetic_region_capture_\(UUID().uuidString).png")
-        let rectangleArgument = "\(Int(captureRect.minX)),\(Int(captureRect.minY)),\(Int(captureRect.width)),\(Int(captureRect.height))"
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        var segments: [(segmentRect: CGRect, image: NSImage)] = []
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-        process.arguments = ["-x", "-R", rectangleArgument, tempURL.path]
+        for coordinateSpace in coordinateSpaces {
+            let segmentRect = captureRect.intersection(coordinateSpace.captureFrame).integral
+            guard segmentRect.width >= 1, segmentRect.height >= 1 else { continue }
+            guard let display = content.displays.first(where: { $0.displayID == coordinateSpace.displayID }) else { continue }
 
-        return try await withCheckedThrowingContinuation { continuation in
-            process.terminationHandler = { process in
-                if process.terminationStatus == 0,
-                   let image = NSImage(contentsOf: tempURL),
-                   image.size.width > 0,
-                   image.size.height > 0 {
-                    try? FileManager.default.removeItem(at: tempURL)
-                    continuation.resume(returning: image)
-                } else {
-                    try? FileManager.default.removeItem(at: tempURL)
-                    continuation.resume(throwing: CaptureError.failedToCapture)
-                }
-            }
-
-            do {
-                try process.run()
-            } catch {
-                try? FileManager.default.removeItem(at: tempURL)
-                continuation.resume(throwing: CaptureError.failedToCapture)
-            }
+            let displayImage = try await captureDisplayImageWithoutSaving(display: display)
+            let croppedImage = cropDisplayImage(displayImage, to: segmentRect, in: display)
+            segments.append((segmentRect, croppedImage))
         }
+
+        guard !segments.isEmpty else {
+            throw CaptureError.failedToCapture
+        }
+
+        if segments.count == 1,
+           let onlySegment = segments.first,
+           onlySegment.segmentRect.integral == captureRect {
+            return onlySegment.image
+        }
+
+        let outputSize = captureRect.size
+        let outputImage = NSImage(size: outputSize)
+        outputImage.lockFocus()
+        NSColor.clear.setFill()
+        NSRect(origin: .zero, size: outputSize).fill()
+
+        for segment in segments {
+            let segmentRect = segment.segmentRect
+            let drawY = outputSize.height - (segmentRect.maxY - captureRect.minY)
+            let drawRect = CGRect(
+                x: segmentRect.minX - captureRect.minX,
+                y: drawY,
+                width: segmentRect.width,
+                height: segmentRect.height
+            )
+            segment.image.draw(in: drawRect)
+        }
+
+        outputImage.unlockFocus()
+        return outputImage
     }
 
     @MainActor

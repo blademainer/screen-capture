@@ -64,6 +64,7 @@ final class InlineCaptureSegmentView: NSView, FloatingEditingCanvasDelegate {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
+        updateCanvasConfiguration()
         if resizeHandle(at: point) != nil || model.selectedTool == .none {
             return self
         }
@@ -109,12 +110,39 @@ final class InlineCaptureSegmentView: NSView, FloatingEditingCanvasDelegate {
             }
             .store(in: &cancellables)
 
-        model.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] in
-                DispatchQueue.main.async {
-                    self?.updateCanvasConfiguration()
-                }
+        model.$selectedTool
+            .sink { [weak self] tool in
+                self?.canvasView.selectedTool = tool
+            }
+            .store(in: &cancellables)
+
+        model.$selectedColor
+            .sink { [weak self] color in
+                self?.canvasView.selectedColor = color
+            }
+            .store(in: &cancellables)
+
+        model.$lineWidth
+            .sink { [weak self] lineWidth in
+                self?.canvasView.lineWidth = lineWidth
+            }
+            .store(in: &cancellables)
+
+        model.$fontSize
+            .sink { [weak self] fontSize in
+                self?.canvasView.fontSize = fontSize
+            }
+            .store(in: &cancellables)
+
+        model.$textOutlined
+            .sink { [weak self] textOutlined in
+                self?.canvasView.textOutlined = textOutlined
+            }
+            .store(in: &cancellables)
+
+        model.editingSession.$resetRevision
+            .sink { [weak self] resetRevision in
+                self?.canvasView.syncResetRevision(resetRevision)
             }
             .store(in: &cancellables)
     }

@@ -1106,6 +1106,31 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(diagnosticsSource.contains("inline_canvas_mouse_down"))
     }
 
+    @MainActor
+    func testInlineCanvasSynchronizesSelectedToolBeforeNextPointerEvent() throws {
+        let image = makeSolidImage(width: 100, height: 80, color: .white)
+        let model = InlineCaptureEditorModel(image: image)
+        let segment = CaptureScreenSegment(
+            displayID: 1,
+            captureRect: CGRect(x: 0, y: 0, width: 100, height: 80),
+            screenRect: CGRect(x: 0, y: 0, width: 100, height: 80),
+            imageRect: CGRect(x: 0, y: 0, width: 100, height: 80)
+        )
+        let segmentView = InlineCaptureSegmentView(
+            frame: CGRect(x: 0, y: 0, width: 100, height: 80),
+            model: model,
+            segment: segment,
+            selectionSize: image.size
+        )
+
+        model.selectedTool = .pen
+
+        let canvas = try XCTUnwrap(
+            segmentView.hitTest(CGPoint(x: 50, y: 40)) as? FloatingEditingCanvasView
+        )
+        XCTAssertEqual(canvas.selectedTool, .pen)
+    }
+
     func testAutomaticRegionCaptureNeverOpensStandaloneEditingWindow() throws {
         let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
         let start = try XCTUnwrap(source.range(of: "private func captureRegionScreenshot("))

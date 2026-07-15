@@ -247,6 +247,23 @@ final class MacScreenCaptureTests: XCTestCase {
         }
     }
 
+    func testHighResolutionRendererSeparatesLogicalAndPixelSizes() throws {
+        let image = try XCTUnwrap(HighResolutionImageRenderer.render(
+            logicalSize: CGSize(width: 100, height: 50),
+            pixelScale: 2
+        ) { rect in
+            NSColor.red.setFill()
+            rect.fill()
+        })
+
+        XCTAssertEqual(image.size, CGSize(width: 100, height: 50))
+        XCTAssertEqual(
+            HighResolutionImageRenderer.pixelSize(of: image),
+            CGSize(width: 200, height: 100)
+        )
+        XCTAssertEqual(HighResolutionImageRenderer.pixelScale(of: image), 2)
+    }
+
     func testAnnotationSettingsExposeNumberStyleAndTemplateControls() throws {
         let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")
         let editorSource = try repositoryFileContents("MacScreenCapture/Views/FloatingWindowContentView.swift")

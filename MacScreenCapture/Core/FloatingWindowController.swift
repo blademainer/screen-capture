@@ -251,16 +251,13 @@ class ImageEditingSession: ObservableObject {
 
     private func renderImage(_ baseImage: NSImage, applying operation: EditingOperation) -> NSImage {
         let size = baseImage.size
-        let image = NSImage(size: size)
-
-        image.lockFocus()
-
-        baseImage.draw(in: NSRect(origin: .zero, size: size))
-        applyOperation(operation, in: NSRect(origin: .zero, size: size))
-
-        image.unlockFocus()
-
-        return image
+        return HighResolutionImageRenderer.render(
+            logicalSize: size,
+            pixelScale: HighResolutionImageRenderer.pixelScale(of: baseImage)
+        ) { rect in
+            baseImage.draw(in: rect)
+            applyOperation(operation, in: rect)
+        } ?? baseImage
     }
 
     private func cropImage(_ image: NSImage, to rect: CGRect?) -> NSImage? {
@@ -270,17 +267,17 @@ class ImageEditingSession: ObservableObject {
         let cropRect = rect.intersection(imageBounds).integral
         guard cropRect.width >= 2, cropRect.height >= 2 else { return nil }
 
-        let croppedImage = NSImage(size: cropRect.size)
-        croppedImage.lockFocus()
-        image.draw(
-            in: NSRect(origin: .zero, size: cropRect.size),
-            from: cropRect,
-            operation: .copy,
-            fraction: 1.0
-        )
-        croppedImage.unlockFocus()
-
-        return croppedImage
+        return HighResolutionImageRenderer.render(
+            logicalSize: cropRect.size,
+            pixelScale: HighResolutionImageRenderer.pixelScale(of: image)
+        ) { outputRect in
+            image.draw(
+                in: outputRect,
+                from: cropRect,
+                operation: .copy,
+                fraction: 1.0
+            )
+        }
     }
 
     private func applyOperation(_ operation: EditingOperation, in rect: NSRect) {

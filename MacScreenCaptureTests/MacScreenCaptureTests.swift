@@ -1672,6 +1672,41 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(containsWhiteNumberOrBorder)
     }
 
+    func testImageEditingSessionPreservesRetinaPixelsForAnnotationsAndCrop() throws {
+        let image = try XCTUnwrap(HighResolutionImageRenderer.render(
+            logicalSize: CGSize(width: 120, height: 80),
+            pixelScale: 1.5
+        ) { rect in
+            NSColor.white.setFill()
+            rect.fill()
+        })
+        let session = ImageEditingSession(originalImage: image)
+
+        session.addOperation(EditingOperation(
+            type: .rectangle,
+            color: .systemRed,
+            lineWidth: 3,
+            rect: CGRect(x: 10, y: 10, width: 60, height: 40)
+        ))
+
+        XCTAssertEqual(session.currentImage.size, CGSize(width: 120, height: 80))
+        XCTAssertEqual(
+            HighResolutionImageRenderer.pixelSize(of: session.currentImage),
+            CGSize(width: 180, height: 120)
+        )
+
+        session.addOperation(EditingOperation(
+            type: .crop,
+            rect: CGRect(x: 20, y: 15, width: 50, height: 30)
+        ))
+
+        XCTAssertEqual(session.currentImage.size, CGSize(width: 50, height: 30))
+        XCTAssertEqual(
+            HighResolutionImageRenderer.pixelSize(of: session.currentImage),
+            CGSize(width: 75, height: 45)
+        )
+    }
+
     func testImageEditingSessionClearResetsImageAndInteractionRevision() throws {
         let image = makeSolidImage(width: 90, height: 90, color: .white)
         let session = ImageEditingSession(originalImage: image)

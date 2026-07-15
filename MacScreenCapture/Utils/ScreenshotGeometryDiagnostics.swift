@@ -108,14 +108,20 @@ enum ScreenshotGeometryDiagnostics {
         displayFrame: CGRect,
         segmentRect: CGRect,
         displayImageSize: CGSize,
-        cropImageSize: CGSize
+        displayImagePixelSize: CGSize,
+        cropImageSize: CGSize,
+        cropImagePixelSize: CGSize
     ) {
         append(event: "capture_segment", fields: [
             "display_id": "\(displayID)",
             "display_frame": rect(displayFrame),
             "segment_rect": rect(segmentRect),
             "display_image_size": size(displayImageSize),
-            "crop_image_size": size(cropImageSize)
+            "display_image_pixel_size": size(displayImagePixelSize),
+            "display_image_scale": number(displayImagePixelSize.width / max(displayImageSize.width, 1)),
+            "crop_image_size": size(cropImageSize),
+            "crop_image_pixel_size": size(cropImagePixelSize),
+            "crop_image_scale": number(cropImagePixelSize.width / max(cropImageSize.width, 1))
         ])
     }
 
@@ -123,17 +129,25 @@ enum ScreenshotGeometryDiagnostics {
         captureRect: CGRect,
         sourceRect: CGRect,
         drawRect: CGRect,
-        segmentImageSize: CGSize
+        segmentImageSize: CGSize,
+        segmentImagePixelSize: CGSize
     ) {
         append(event: "capture_composite_segment", fields: [
             "capture_rect": rect(captureRect),
             "source_rect": rect(sourceRect),
             "draw_rect": rect(drawRect),
-            "segment_image_size": size(segmentImageSize)
+            "segment_image_size": size(segmentImageSize),
+            "segment_image_pixel_size": size(segmentImagePixelSize),
+            "segment_image_scale": number(segmentImagePixelSize.width / max(segmentImageSize.width, 1))
         ])
     }
 
-    static func logCaptureResult(captureRect: CGRect, resultImageSize: CGSize, segmentCount: Int) {
+    static func logCaptureResult(
+        captureRect: CGRect,
+        resultImageSize: CGSize,
+        resultImagePixelSize: CGSize,
+        segmentCount: Int
+    ) {
         traceLock.lock()
         activeCapture?.resultImageSize = resultImageSize
         traceLock.unlock()
@@ -141,6 +155,8 @@ enum ScreenshotGeometryDiagnostics {
         append(event: "capture_result", fields: [
             "capture_rect": rect(captureRect),
             "result_image_size": size(resultImageSize),
+            "result_image_pixel_size": size(resultImagePixelSize),
+            "result_image_scale": number(resultImagePixelSize.width / max(resultImageSize.width, 1)),
             "segment_count": "\(segmentCount)"
         ])
     }

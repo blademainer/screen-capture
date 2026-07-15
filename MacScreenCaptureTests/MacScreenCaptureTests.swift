@@ -264,6 +264,23 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(HighResolutionImageRenderer.pixelScale(of: image), 2)
     }
 
+    func testCapturePixelGeometryUsesNativeDisplayScale() throws {
+        XCTAssertEqual(CapturePixelGeometry.normalizedScale(2), 2)
+        XCTAssertEqual(CapturePixelGeometry.normalizedScale(.nan), 1)
+        XCTAssertEqual(CapturePixelGeometry.normalizedScale(0, fallback: 1.5), 1.5)
+        XCTAssertEqual(
+            CapturePixelGeometry.outputPixelSize(
+                logicalSize: CGSize(width: 800, height: 600),
+                scale: 2
+            ),
+            CGSize(width: 1600, height: 1200)
+        )
+
+        let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+        XCTAssertTrue(source.contains("filter.pointPixelScale"))
+        XCTAssertTrue(source.contains("configuration.captureResolution = .best"))
+    }
+
     func testAnnotationSettingsExposeNumberStyleAndTemplateControls() throws {
         let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")
         let editorSource = try repositoryFileContents("MacScreenCapture/Views/FloatingWindowContentView.swift")

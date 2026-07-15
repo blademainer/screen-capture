@@ -689,6 +689,7 @@ class CaptureManager: ObservableObject {
 
         let filter: SCContentFilter
         let captureSize: CGSize
+        var displayID: CGDirectDisplayID?
 
         switch captureMode {
         case .fullScreen:
@@ -697,6 +698,7 @@ class CaptureManager: ObservableObject {
             }
             filter = SCContentFilter(display: display, excludingWindows: [])
             captureSize = CGSize(width: display.width, height: display.height)
+            displayID = display.displayID
 
         case .window:
             guard let window = selectedWindow else {
@@ -710,8 +712,11 @@ class CaptureManager: ObservableObject {
         }
 
         let configuration = SCStreamConfiguration()
-        configuration.width = max(1, Int(captureSize.width))
-        configuration.height = max(1, Int(captureSize.height))
+        configureNativeScreenshot(
+            configuration,
+            logicalSize: captureSize,
+            scale: nativePixelScale(for: filter, displayID: displayID)
+        )
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.showsCursor = UserDefaults.standard.bool(forKey: "showCursorInScreenshots")
 
@@ -719,7 +724,7 @@ class CaptureManager: ObservableObject {
             contentFilter: filter,
             configuration: configuration
         )
-        let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        let nsImage = NSImage(cgImage: cgImage, size: captureSize)
         return try await finalizeCapturedImage(nsImage, showEditor: false, autoOpenAfterCapture: autoOpenAfterCapture, forceSave: forceSave)
     }
 
@@ -1559,8 +1564,12 @@ class CaptureManager: ObservableObject {
 
         let filter = SCContentFilter(display: display, excludingWindows: [])
         let configuration = SCStreamConfiguration()
-        configuration.width = Int(display.width)
-        configuration.height = Int(display.height)
+        let logicalSize = CGSize(width: display.width, height: display.height)
+        configureNativeScreenshot(
+            configuration,
+            logicalSize: logicalSize,
+            scale: nativePixelScale(for: filter, displayID: display.displayID)
+        )
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.showsCursor = UserDefaults.standard.bool(forKey: "showCursorInScreenshots")
 
@@ -1569,20 +1578,8 @@ class CaptureManager: ObservableObject {
             configuration: configuration
         )
 
-        // 裁剪图像到指定区域
-        let scale = CGFloat(cgImage.width) / NSScreen.main!.frame.width
-        let scaledRect = CGRect(
-            x: rect.origin.x * scale,
-            y: rect.origin.y * scale,
-            width: rect.width * scale,
-            height: rect.height * scale
-        )
-
-        guard let croppedImage = cgImage.cropping(to: scaledRect) else {
-            throw CaptureError.failedToCapture
-        }
-
-        let nsImage = NSImage(cgImage: croppedImage, size: rect.size)
+        let displayImage = NSImage(cgImage: cgImage, size: logicalSize)
+        let nsImage = cropDisplayImage(displayImage, to: rect, in: display)
 
         return try await finalizeCapturedImage(nsImage, showEditor: false)
     }
@@ -1597,8 +1594,12 @@ class CaptureManager: ObservableObject {
 
         let filter = SCContentFilter(display: display, excludingWindows: [])
         let configuration = SCStreamConfiguration()
-        configuration.width = Int(display.width)
-        configuration.height = Int(display.height)
+        let logicalSize = CGSize(width: display.width, height: display.height)
+        configureNativeScreenshot(
+            configuration,
+            logicalSize: logicalSize,
+            scale: nativePixelScale(for: filter, displayID: display.displayID)
+        )
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
 
         let cgImage = try await SCScreenshotManager.captureImage(
@@ -1606,7 +1607,7 @@ class CaptureManager: ObservableObject {
             configuration: configuration
         )
 
-        let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        let nsImage = NSImage(cgImage: cgImage, size: logicalSize)
 
         return try await finalizeCapturedImage(nsImage, showEditor: false)
     }
@@ -1620,8 +1621,12 @@ class CaptureManager: ObservableObject {
 
         let filter = SCContentFilter(display: display, excludingWindows: excludingWindows)
         let configuration = SCStreamConfiguration()
-        configuration.width = Int(display.width)
-        configuration.height = Int(display.height)
+        let logicalSize = CGSize(width: display.width, height: display.height)
+        configureNativeScreenshot(
+            configuration,
+            logicalSize: logicalSize,
+            scale: nativePixelScale(for: filter, displayID: display.displayID)
+        )
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.showsCursor = UserDefaults.standard.bool(forKey: "showCursorInScreenshots")
 
@@ -1630,14 +1635,17 @@ class CaptureManager: ObservableObject {
             configuration: configuration
         )
 
-        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        return NSImage(cgImage: cgImage, size: logicalSize)
     }
 
     private func captureWindowImage(_ window: SCWindow) async throws -> NSImage {
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let configuration = SCStreamConfiguration()
-        configuration.width = max(1, Int(window.frame.width))
-        configuration.height = max(1, Int(window.frame.height))
+        configureNativeScreenshot(
+            configuration,
+            logicalSize: window.frame.size,
+            scale: nativePixelScale(for: filter)
+        )
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.showsCursor = false
 
@@ -1647,6 +1655,31 @@ class CaptureManager: ObservableObject {
         )
 
         return NSImage(cgImage: cgImage, size: window.frame.size)
+    }
+
+    private func nativePixelScale(
+        for filter: SCContentFilter,
+        displayID: CGDirectDisplayID? = nil
+    ) -> CGFloat {
+        let fallback = displayID.map(CapturePixelGeometry.displayFallbackScale) ?? 1
+        return CapturePixelGeometry.normalizedScale(
+            CGFloat(filter.pointPixelScale),
+            fallback: fallback
+        )
+    }
+
+    private func configureNativeScreenshot(
+        _ configuration: SCStreamConfiguration,
+        logicalSize: CGSize,
+        scale: CGFloat
+    ) {
+        let pixelSize = CapturePixelGeometry.outputPixelSize(
+            logicalSize: logicalSize,
+            scale: scale
+        )
+        configuration.width = Int(pixelSize.width)
+        configuration.height = Int(pixelSize.height)
+        configuration.captureResolution = .best
     }
 
     @MainActor
@@ -2266,7 +2299,7 @@ class CaptureManager: ObservableObject {
 
         return NSImage(
             cgImage: croppedImage,
-            size: NSSize(width: croppedImage.width, height: croppedImage.height)
+            size: quartzRect.size
         )
     }
 
@@ -2486,7 +2519,9 @@ class CaptureManager: ObservableObject {
                 displayFrame: coordinateSpace.captureFrame,
                 segmentRect: segmentRect,
                 displayImageSize: displayImage.size,
-                cropImageSize: croppedImage.size
+                displayImagePixelSize: HighResolutionImageRenderer.pixelSize(of: displayImage),
+                cropImageSize: croppedImage.size,
+                cropImagePixelSize: HighResolutionImageRenderer.pixelSize(of: croppedImage)
             )
             segments.append((segmentRect, croppedImage))
         }
@@ -2501,39 +2536,49 @@ class CaptureManager: ObservableObject {
             ScreenshotGeometryDiagnostics.logCaptureResult(
                 captureRect: captureRect,
                 resultImageSize: onlySegment.image.size,
+                resultImagePixelSize: HighResolutionImageRenderer.pixelSize(of: onlySegment.image),
                 segmentCount: segments.count
             )
             return onlySegment.image
         }
 
         let outputSize = captureRect.size
-        let outputImage = NSImage(size: outputSize)
-        outputImage.lockFocus()
-        NSColor.clear.setFill()
-        NSRect(origin: .zero, size: outputSize).fill()
+        let outputScale = segments
+            .map { HighResolutionImageRenderer.pixelScale(of: $0.image) }
+            .max() ?? 1
+        guard let outputImage = HighResolutionImageRenderer.render(
+            logicalSize: outputSize,
+            pixelScale: outputScale,
+            drawing: { _ in
+                NSColor.clear.setFill()
+                NSRect(origin: .zero, size: outputSize).fill()
 
-        for segment in segments {
-            let segmentRect = segment.segmentRect
-            let drawY = outputSize.height - (segmentRect.maxY - captureRect.minY)
-            let drawRect = CGRect(
-                x: segmentRect.minX - captureRect.minX,
-                y: drawY,
-                width: segmentRect.width,
-                height: segmentRect.height
-            )
-            ScreenshotGeometryDiagnostics.logCaptureCompositeSegment(
-                captureRect: captureRect,
-                sourceRect: segmentRect,
-                drawRect: drawRect,
-                segmentImageSize: segment.image.size
-            )
-            segment.image.draw(in: drawRect)
+                for segment in segments {
+                    let segmentRect = segment.segmentRect
+                    let drawY = outputSize.height - (segmentRect.maxY - captureRect.minY)
+                    let drawRect = CGRect(
+                        x: segmentRect.minX - captureRect.minX,
+                        y: drawY,
+                        width: segmentRect.width,
+                        height: segmentRect.height
+                    )
+                    ScreenshotGeometryDiagnostics.logCaptureCompositeSegment(
+                        captureRect: captureRect,
+                        sourceRect: segmentRect,
+                        drawRect: drawRect,
+                        segmentImageSize: segment.image.size,
+                        segmentImagePixelSize: HighResolutionImageRenderer.pixelSize(of: segment.image)
+                    )
+                    segment.image.draw(in: drawRect)
+                }
+            }
+        ) else {
+            throw CaptureError.failedToCapture
         }
-
-        outputImage.unlockFocus()
         ScreenshotGeometryDiagnostics.logCaptureResult(
             captureRect: captureRect,
             resultImageSize: outputImage.size,
+            resultImagePixelSize: HighResolutionImageRenderer.pixelSize(of: outputImage),
             segmentCount: segments.count
         )
         return outputImage

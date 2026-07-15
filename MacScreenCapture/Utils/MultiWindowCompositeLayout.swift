@@ -2,6 +2,11 @@ import CoreGraphics
 import Foundation
 
 struct MultiWindowCompositeLayout {
+    struct WindowPlacement: Equatable {
+        let sourceRect: CGRect
+        let drawRect: CGRect
+    }
+
     struct BackdropSegment: Equatable {
         let visibleRect: CGRect
         let drawRect: CGRect
@@ -36,6 +41,33 @@ struct MultiWindowCompositeLayout {
             width: visibleRect.width,
             height: visibleRect.height
         )
+    }
+
+    static func windowPlacement(
+        for windowRect: CGRect,
+        in outputRect: CGRect,
+        imageSize: CGSize
+    ) -> WindowPlacement? {
+        let visibleRect = windowRect.intersection(outputRect)
+        guard visibleRect.width > 1,
+              visibleRect.height > 1,
+              windowRect.width > 0,
+              windowRect.height > 0,
+              imageSize.width > 0,
+              imageSize.height > 0,
+              let drawRect = drawRect(for: visibleRect, in: outputRect) else {
+            return nil
+        }
+
+        let scaleX = imageSize.width / windowRect.width
+        let scaleY = imageSize.height / windowRect.height
+        let sourceRect = CGRect(
+            x: (visibleRect.minX - windowRect.minX) * scaleX,
+            y: (windowRect.maxY - visibleRect.maxY) * scaleY,
+            width: visibleRect.width * scaleX,
+            height: visibleRect.height * scaleY
+        )
+        return WindowPlacement(sourceRect: sourceRect, drawRect: drawRect)
     }
 
     static func backdropSegments(for displayBounds: [CGRect], outputRect: CGRect) -> [BackdropSegment] {

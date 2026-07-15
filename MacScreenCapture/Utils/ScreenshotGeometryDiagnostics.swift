@@ -161,6 +161,22 @@ enum ScreenshotGeometryDiagnostics {
         ])
     }
 
+    static func logImageBoundary(
+        event: String,
+        logicalSize: CGSize,
+        pixelSize: CGSize,
+        fields: [String: String] = [:]
+    ) {
+        var fields = fields
+        fields["image_logical_size"] = size(logicalSize)
+        fields["image_pixel_size"] = size(pixelSize)
+        fields["image_scale"] = number(max(
+            pixelSize.width / max(logicalSize.width, 1),
+            pixelSize.height / max(logicalSize.height, 1)
+        ))
+        append(event: event, fields: fields)
+    }
+
     static func logInlineSegmentLayout(
         selectionCaptureRect: CGRect,
         displayID: UInt32,

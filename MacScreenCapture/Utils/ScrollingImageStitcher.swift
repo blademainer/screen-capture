@@ -6,27 +6,37 @@ struct ScrollingImageStitcher {
         direction == "up" ? Array(images.reversed()) : images
     }
 
-    static func stitchImagesVertically(_ images: [NSImage], trimOverlap: Bool) -> NSImage {
-        guard let first = images.first else { return NSImage(size: .zero) }
+    static func canStitch(_ images: [NSImage], trimOverlap: Bool) -> Bool {
         let normalizedImages = trimOverlap ? removeOverlappingScrollRegions(from: images) : images
-        let width = normalizedImages.map { $0.size.width }.min() ?? first.size.width
-        let height = normalizedImages.reduce(CGFloat(0)) { $0 + ($1.size.height * width / max($1.size.width, 1)) }
-        let outputSize = NSSize(width: width, height: height)
-        let pixelScale = normalizedImages
-            .map { HighResolutionImageRenderer.pixelScale(of: $0) }
-            .max() ?? 1
+        guard let geometry = outputGeometry(for: normalizedImages) else { return false }
+        return HighResolutionImageRenderer.canRender(
+            logicalSize: geometry.size,
+            pixelScale: geometry.pixelScale
+        )
+    }
+
+    static func stitchImagesVertically(_ images: [NSImage], trimOverlap: Bool) -> NSImage? {
+        guard !images.isEmpty else { return nil }
+        let normalizedImages = trimOverlap ? removeOverlappingScrollRegions(from: images) : images
+        guard let geometry = outputGeometry(for: normalizedImages),
+              HighResolutionImageRenderer.canRender(
+                logicalSize: geometry.size,
+                pixelScale: geometry.pixelScale
+              ) else {
+            return nil
+        }
 
         return HighResolutionImageRenderer.render(
-            logicalSize: outputSize,
-            pixelScale: pixelScale
+            logicalSize: geometry.size,
+            pixelScale: geometry.pixelScale
         ) { _ in
-            var y = height
+            var y = geometry.size.height
             for image in normalizedImages {
-                let scaledHeight = image.size.height * width / max(image.size.width, 1)
+                let scaledHeight = image.size.height * geometry.size.width / max(image.size.width, 1)
                 y -= scaledHeight
-                image.draw(in: NSRect(x: 0, y: y, width: width, height: scaledHeight))
+                image.draw(in: NSRect(x: 0, y: y, width: geometry.size.width, height: scaledHeight))
             }
-        } ?? first
+        }
     }
 
     static func imagesAreVisuallySimilar(_ previous: NSImage, _ next: NSImage) -> Bool {
@@ -164,6 +174,22 @@ struct ScrollingImageStitcher {
         }
 
         return result
+    }
+
+    private static func outputGeometry(for images: [NSImage]) -> (size: CGSize, pixelScale: CGFloat)? {
+        guard let first = images.first else { return nil }
+        let width = images.map { $0.size.width }.min() ?? first.size.width
+        guard width.isFinite, width > 0 else { return nil }
+
+        let height = images.reduce(CGFloat(0)) {
+            $0 + ($1.size.height * width / max($1.size.width, 1))
+        }
+        guard height.isFinite, height > 0 else { return nil }
+
+        let pixelScale = images
+            .map { HighResolutionImageRenderer.pixelScale(of: $0) }
+            .max() ?? 1
+        return (CGSize(width: width, height: height), pixelScale)
     }
 
     private static func rgbaBuffer(from image: CGImage) -> [UInt8]? {

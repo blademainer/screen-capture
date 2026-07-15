@@ -349,11 +349,22 @@ class CaptureManager: ObservableObject {
                     break
                 }
 
+                guard ScrollingImageStitcher.canStitch(
+                    images + [sliceImage],
+                    trimOverlap: false
+                ) else {
+                    throw CaptureError.screenshotTooLarge
+                }
                 images.append(sliceImage)
             }
 
             let orderedImages = ScrollingImageStitcher.orderedImages(images, direction: scrollDirection)
-            let stitchedImage = ScrollingImageStitcher.stitchImagesVertically(orderedImages, trimOverlap: trimOverlap)
+            guard let stitchedImage = ScrollingImageStitcher.stitchImagesVertically(
+                orderedImages,
+                trimOverlap: trimOverlap
+            ) else {
+                throw CaptureError.failedToCapture
+            }
             try await finalizeCapturedImage(stitchedImage, showEditor: true)
         } catch {
             showAlert(title: "长截图失败", message: error.localizedDescription)
@@ -705,7 +716,11 @@ class CaptureManager: ObservableObject {
                 throw CaptureError.noWindowSelected
             }
             filter = SCContentFilter(desktopIndependentWindow: window)
-            captureSize = window.frame.size
+            captureSize = CapturePixelGeometry.logicalContentSize(
+                contentRect: filter.contentRect,
+                fallback: window.frame.size
+            )
+            displayID = CapturePixelGeometry.displayID(containing: window.frame)
 
         case .region:
             throw CaptureError.regionSelectionCancelled
@@ -725,6 +740,12 @@ class CaptureManager: ObservableObject {
             configuration: configuration
         )
         let nsImage = NSImage(cgImage: cgImage, size: captureSize)
+        ScreenshotGeometryDiagnostics.logImageBoundary(
+            event: "screenshot_captured",
+            logicalSize: nsImage.size,
+            pixelSize: HighResolutionImageRenderer.pixelSize(of: nsImage),
+            fields: ["capture_mode": captureMode.rawValue]
+        )
         return try await finalizeCapturedImage(nsImage, showEditor: false, autoOpenAfterCapture: autoOpenAfterCapture, forceSave: forceSave)
     }
 
@@ -1437,6 +1458,15 @@ class CaptureManager: ObservableObject {
         try? FileManager.default.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
 
         try finalData.write(to: fileURL)
+        ScreenshotGeometryDiagnostics.logImageBoundary(
+            event: "screenshot_saved",
+            logicalSize: image.size,
+            pixelSize: HighResolutionImageRenderer.pixelSize(of: image),
+            fields: [
+                "format": screenshotFormat.uppercased(),
+                "file_name": fileURL.lastPathComponent
+            ]
+        )
 
         await MainActor.run {
             markScreenshotSaved(image, at: fileURL)
@@ -1639,11 +1669,18 @@ class CaptureManager: ObservableObject {
 
     private func captureWindowImage(_ window: SCWindow) async throws -> NSImage {
         let filter = SCContentFilter(desktopIndependentWindow: window)
+        let logicalSize = CapturePixelGeometry.logicalContentSize(
+            contentRect: filter.contentRect,
+            fallback: window.frame.size
+        )
         let configuration = SCStreamConfiguration()
         configureNativeScreenshot(
             configuration,
-            logicalSize: window.frame.size,
-            scale: nativePixelScale(for: filter)
+            logicalSize: logicalSize,
+            scale: nativePixelScale(
+                for: filter,
+                displayID: CapturePixelGeometry.displayID(containing: window.frame)
+            )
         )
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.showsCursor = false
@@ -1653,7 +1690,7 @@ class CaptureManager: ObservableObject {
             configuration: configuration
         )
 
-        return NSImage(cgImage: cgImage, size: window.frame.size)
+        return NSImage(cgImage: cgImage, size: logicalSize)
     }
 
     private func nativePixelScale(
@@ -2027,8 +2064,17 @@ class CaptureManager: ObservableObject {
                 }
 
                 for (window, image) in capturedWindows {
-                    guard let drawRect = MultiWindowCompositeLayout.drawRect(for: window.frame, in: outputRect) else { continue }
-                    image.draw(in: drawRect)
+                    guard let placement = MultiWindowCompositeLayout.windowPlacement(
+                        for: window.frame,
+                        in: outputRect,
+                        imageSize: image.size
+                    ) else { continue }
+                    image.draw(
+                        in: placement.drawRect,
+                        from: placement.sourceRect,
+                        operation: .sourceOver,
+                        fraction: 1
+                    )
                 }
             }
         ) else {
@@ -2611,6 +2657,12 @@ class CaptureManager: ObservableObject {
         forceSave: Bool = false
     ) async throws -> NSImage {
         let finalImage = forceStyle ? applyOutputStyle(to: image) : image
+        ScreenshotGeometryDiagnostics.logImageBoundary(
+            event: "screenshot_finalized",
+            logicalSize: finalImage.size,
+            pixelSize: HighResolutionImageRenderer.pixelSize(of: finalImage),
+            fields: ["style_applied": forceStyle ? "true" : "false"]
+        )
         let shouldAutoOpen = autoOpenAfterCapture &&
             (UserDefaults.standard.object(forKey: "autoOpenAfterCaptureInConfiguredApp") as? Bool ?? false)
         let shouldSave = forceSave || UserDefaults.standard.bool(forKey: "autoSaveScreenshots") || shouldAutoOpen
@@ -2648,6 +2700,13 @@ class CaptureManager: ObservableObject {
 
     private func copyImageToPasteboard(_ image: NSImage) {
         guard let tiffData = ScreenshotImageEncoder.data(for: image, fileType: .tiff) else { return }
+
+        ScreenshotGeometryDiagnostics.logImageBoundary(
+            event: "screenshot_clipboard",
+            logicalSize: image.size,
+            pixelSize: HighResolutionImageRenderer.pixelSize(of: image),
+            fields: ["format": "TIFF"]
+        )
 
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setData(tiffData, forType: .tiff)
@@ -2986,6 +3045,7 @@ enum CaptureError: LocalizedError {
     case regionSelectionCancelled
     case unsupportedSystem
     case failedToCapture
+    case screenshotTooLarge
     case recordingFailed(String)
     case failedToSaveImage
     case noMicrophoneAvailable
@@ -3009,6 +3069,8 @@ enum CaptureError: LocalizedError {
             return "系统版本不支持"
         case .failedToCapture:
             return "捕获失败"
+        case .screenshotTooLarge:
+            return "截图内容过长，已达到安全像素上限，请减少长截图屏数"
         case .recordingFailed(let message):
             return message
         case .failedToSaveImage:

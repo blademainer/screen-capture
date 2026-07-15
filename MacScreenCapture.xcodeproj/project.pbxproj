@@ -36,6 +36,27 @@
 		A1234567890ABCE1C /* FloatingWindowConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE1B /* FloatingWindowConfiguration.swift */; };
 		A1234567890ABCE1E /* RecordingAudioSourceSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE1D /* RecordingAudioSourceSelection.swift */; };
 		A1234567890ABCE20 /* ScrollingCaptureSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCE1F /* ScrollingCaptureSettings.swift */; };
+		B1234567890AB0002 /* BackgroundResponsivenessManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0001 /* BackgroundResponsivenessManager.swift */; };
+		B1234567890AB0004 /* CaptureGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0003 /* CaptureGeometry.swift */; };
+		B1234567890AB0006 /* EditingWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0005 /* EditingWindowController.swift */; };
+		B1234567890AB0008 /* EditingWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0007 /* EditingWindowManager.swift */; };
+		B1234567890AB000A /* FloatingWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0009 /* FloatingWindowManager.swift */; };
+		B1234567890AB000C /* HotKeyLatencyDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB000B /* HotKeyLatencyDiagnostics.swift */; };
+		B1234567890AB000E /* InlineCaptureEditorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB000D /* InlineCaptureEditorController.swift */; };
+		B1234567890AB0010 /* AnnotationDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB000F /* AnnotationDefaults.swift */; };
+		B1234567890AB0012 /* CaptureOverlayLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0011 /* CaptureOverlayLayout.swift */; };
+		B1234567890AB0014 /* CapturePixelGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0013 /* CapturePixelGeometry.swift */; };
+		B1234567890AB0016 /* HighResolutionImageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0015 /* HighResolutionImageRenderer.swift */; };
+		B1234567890AB0018 /* RecordingCompletionSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0017 /* RecordingCompletionSummary.swift */; };
+		B1234567890AB001A /* ScreenshotGeometryDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0019 /* ScreenshotGeometryDiagnostics.swift */; };
+		B1234567890AB001C /* ScreenshotImageEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB001B /* ScreenshotImageEncoder.swift */; };
+		B1234567890AB001E /* SystemNotificationPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB001D /* SystemNotificationPresenter.swift */; };
+		B1234567890AB0020 /* UserDefaults+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB001F /* UserDefaults+Extensions.swift */; };
+		B1234567890AB0022 /* WindowAccessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0021 /* WindowAccessor.swift */; };
+		B1234567890AB0024 /* EditingWindowContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0023 /* EditingWindowContentView.swift */; };
+		B1234567890AB0026 /* FloatingWindowSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0025 /* FloatingWindowSettingsView.swift */; };
+		B1234567890AB0028 /* InlineCaptureSegmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0027 /* InlineCaptureSegmentView.swift */; };
+		B1234567890AB002A /* InlineCaptureToolbarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0029 /* InlineCaptureToolbarView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -70,6 +91,27 @@
 		A1234567890ABCE1B /* FloatingWindowConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingWindowConfiguration.swift; sourceTree = "<group>"; };
 		A1234567890ABCE1D /* RecordingAudioSourceSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingAudioSourceSelection.swift; sourceTree = "<group>"; };
 		A1234567890ABCE1F /* ScrollingCaptureSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollingCaptureSettings.swift; sourceTree = "<group>"; };
+		B1234567890AB0001 /* BackgroundResponsivenessManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundResponsivenessManager.swift; sourceTree = "<group>"; };
+		B1234567890AB0003 /* CaptureGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureGeometry.swift; sourceTree = "<group>"; };
+		B1234567890AB0005 /* EditingWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditingWindowController.swift; sourceTree = "<group>"; };
+		B1234567890AB0007 /* EditingWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditingWindowManager.swift; sourceTree = "<group>"; };
+		B1234567890AB0009 /* FloatingWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingWindowManager.swift; sourceTree = "<group>"; };
+		B1234567890AB000B /* HotKeyLatencyDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyLatencyDiagnostics.swift; sourceTree = "<group>"; };
+		B1234567890AB000D /* InlineCaptureEditorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineCaptureEditorController.swift; sourceTree = "<group>"; };
+		B1234567890AB000F /* AnnotationDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationDefaults.swift; sourceTree = "<group>"; };
+		B1234567890AB0011 /* CaptureOverlayLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureOverlayLayout.swift; sourceTree = "<group>"; };
+		B1234567890AB0013 /* CapturePixelGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturePixelGeometry.swift; sourceTree = "<group>"; };
+		B1234567890AB0015 /* HighResolutionImageRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HighResolutionImageRenderer.swift; sourceTree = "<group>"; };
+		B1234567890AB0017 /* RecordingCompletionSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingCompletionSummary.swift; sourceTree = "<group>"; };
+		B1234567890AB0019 /* ScreenshotGeometryDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotGeometryDiagnostics.swift; sourceTree = "<group>"; };
+		B1234567890AB001B /* ScreenshotImageEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotImageEncoder.swift; sourceTree = "<group>"; };
+		B1234567890AB001D /* SystemNotificationPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemNotificationPresenter.swift; sourceTree = "<group>"; };
+		B1234567890AB001F /* UserDefaults+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UserDefaults+Extensions.swift"; sourceTree = "<group>"; };
+		B1234567890AB0021 /* WindowAccessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAccessor.swift; sourceTree = "<group>"; };
+		B1234567890AB0023 /* EditingWindowContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditingWindowContentView.swift; sourceTree = "<group>"; };
+		B1234567890AB0025 /* FloatingWindowSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingWindowSettingsView.swift; sourceTree = "<group>"; };
+		B1234567890AB0027 /* InlineCaptureSegmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineCaptureSegmentView.swift; sourceTree = "<group>"; };
+		B1234567890AB0029 /* InlineCaptureToolbarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineCaptureToolbarView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -125,9 +167,16 @@
 		A1234567890ABCE1 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				B1234567890AB0001 /* BackgroundResponsivenessManager.swift */,
 				A1234567890ABCDEF /* CaptureManager.swift */,
+				B1234567890AB0003 /* CaptureGeometry.swift */,
+				B1234567890AB0005 /* EditingWindowController.swift */,
+				B1234567890AB0007 /* EditingWindowManager.swift */,
+				B1234567890AB0009 /* FloatingWindowManager.swift */,
 				A1234567890ABCDF1 /* PermissionManager.swift */,
 				A1234567890ABCE01 /* HotKeyManager.swift */,
+				B1234567890AB000B /* HotKeyLatencyDiagnostics.swift */,
+				B1234567890AB000D /* InlineCaptureEditorController.swift */,
 				A1234567890ABCE03 /* WindowManager.swift */,
 				A1234567890ABCE05 /* FloatingWindowController.swift */,
 			);
@@ -137,12 +186,16 @@
 		A1234567890ABCE2 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				B1234567890AB0023 /* EditingWindowContentView.swift */,
+				B1234567890AB0025 /* FloatingWindowSettingsView.swift */,
 				A1234567890ABCDF3 /* ScreenshotView.swift */,
 				A1234567890ABCDF5 /* RecordingView.swift */,
 				A1234567890ABCDF7 /* MenuBarView.swift */,
 				A1234567890ABCDF9 /* SettingsView.swift */,
 				A1234567890ABCE07 /* HotKeySettingsView.swift */,
 				A1234567890ABCE09 /* FloatingWindowContentView.swift */,
+				B1234567890AB0027 /* InlineCaptureSegmentView.swift */,
+				B1234567890AB0029 /* InlineCaptureToolbarView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -150,6 +203,9 @@
 		A1234567890ABCE3 /* Utils */ = {
 			isa = PBXGroup;
 			children = (
+				B1234567890AB000F /* AnnotationDefaults.swift */,
+				B1234567890AB0011 /* CaptureOverlayLayout.swift */,
+				B1234567890AB0013 /* CapturePixelGeometry.swift */,
 				A1234567890ABCDFB /* KeyboardShortcuts.swift */,
 				A1234567890ABCDFD /* NotificationManager.swift */,
 				A1234567890ABCDFF /* FileManager+Extensions.swift */,
@@ -164,6 +220,13 @@
 				A1234567890ABCE1B /* FloatingWindowConfiguration.swift */,
 				A1234567890ABCE1D /* RecordingAudioSourceSelection.swift */,
 				A1234567890ABCE1F /* ScrollingCaptureSettings.swift */,
+				B1234567890AB0015 /* HighResolutionImageRenderer.swift */,
+				B1234567890AB0017 /* RecordingCompletionSummary.swift */,
+				B1234567890AB0019 /* ScreenshotGeometryDiagnostics.swift */,
+				B1234567890AB001B /* ScreenshotImageEncoder.swift */,
+				B1234567890AB001D /* SystemNotificationPresenter.swift */,
+				B1234567890AB001F /* UserDefaults+Extensions.swift */,
+				B1234567890AB0021 /* WindowAccessor.swift */,
 			);
 			path = Utils;
 			sourceTree = "<group>";
@@ -239,6 +302,27 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B1234567890AB0002 /* BackgroundResponsivenessManager.swift in Sources */,
+				B1234567890AB0004 /* CaptureGeometry.swift in Sources */,
+				B1234567890AB0006 /* EditingWindowController.swift in Sources */,
+				B1234567890AB0008 /* EditingWindowManager.swift in Sources */,
+				B1234567890AB000A /* FloatingWindowManager.swift in Sources */,
+				B1234567890AB000C /* HotKeyLatencyDiagnostics.swift in Sources */,
+				B1234567890AB000E /* InlineCaptureEditorController.swift in Sources */,
+				B1234567890AB0010 /* AnnotationDefaults.swift in Sources */,
+				B1234567890AB0012 /* CaptureOverlayLayout.swift in Sources */,
+				B1234567890AB0014 /* CapturePixelGeometry.swift in Sources */,
+				B1234567890AB0016 /* HighResolutionImageRenderer.swift in Sources */,
+				B1234567890AB0018 /* RecordingCompletionSummary.swift in Sources */,
+				B1234567890AB001A /* ScreenshotGeometryDiagnostics.swift in Sources */,
+				B1234567890AB001C /* ScreenshotImageEncoder.swift in Sources */,
+				B1234567890AB001E /* SystemNotificationPresenter.swift in Sources */,
+				B1234567890AB0020 /* UserDefaults+Extensions.swift in Sources */,
+				B1234567890AB0022 /* WindowAccessor.swift in Sources */,
+				B1234567890AB0024 /* EditingWindowContentView.swift in Sources */,
+				B1234567890AB0026 /* FloatingWindowSettingsView.swift in Sources */,
+				B1234567890AB0028 /* InlineCaptureSegmentView.swift in Sources */,
+				B1234567890AB002A /* InlineCaptureToolbarView.swift in Sources */,
 				A1234567890ABCDE3 /* ContentView.swift in Sources */,
 				A1234567890ABCDF0 /* CaptureManager.swift in Sources */,
 				A1234567890ABCDF2 /* PermissionManager.swift in Sources */,

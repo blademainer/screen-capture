@@ -94,6 +94,35 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(workflow.contains("x86_64"))
     }
 
+    func testXcodeTargetIncludesEveryApplicationSwiftSource() throws {
+        let project = try repositoryFileContents("MacScreenCapture.xcodeproj/project.pbxproj")
+        let sourcesStart = try XCTUnwrap(project.range(of: "/* Begin PBXSourcesBuildPhase section */"))
+        let sourcesEnd = try XCTUnwrap(
+            project.range(
+                of: "/* End PBXSourcesBuildPhase section */",
+                range: sourcesStart.upperBound..<project.endIndex
+            )
+        )
+        let sourcesBuildPhase = project[sourcesStart.lowerBound..<sourcesEnd.upperBound]
+        let sourceRoot = repositoryFileURL("MacScreenCapture")
+        let enumerator = try XCTUnwrap(
+            FileManager.default.enumerator(
+                at: sourceRoot,
+                includingPropertiesForKeys: [.isRegularFileKey]
+            )
+        )
+        let swiftSources = enumerator.compactMap { $0 as? URL }
+            .filter { $0.pathExtension == "swift" }
+
+        XCTAssertFalse(swiftSources.isEmpty)
+        for source in swiftSources {
+            XCTAssertTrue(
+                sourcesBuildPhase.contains("\(source.lastPathComponent) in Sources"),
+                "\(source.path) is missing from the Xcode application target"
+            )
+        }
+    }
+
     func testLocalInstallerUsesStableTCCCodeRequirement() throws {
         let script = try repositoryFileContents("scripts/install-local.sh")
 
@@ -264,6 +293,15 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(HighResolutionImageRenderer.pixelScale(of: image), 2)
     }
 
+    func testHighResolutionRendererRejectsUnsafePixelAllocations() throws {
+        let oversized = CGSize(width: 10_000, height: 10_000)
+
+        XCTAssertFalse(HighResolutionImageRenderer.canRender(logicalSize: oversized, pixelScale: 1))
+        XCTAssertNil(HighResolutionImageRenderer.render(logicalSize: oversized, pixelScale: 1) { _ in
+            XCTFail("oversized renderer should reject the request before drawing")
+        })
+    }
+
     func testScreenshotImageEncoderPreservesBackingPixelDimensions() throws {
         let image = try XCTUnwrap(HighResolutionImageRenderer.render(
             logicalSize: CGSize(width: 40, height: 30),
@@ -273,14 +311,16 @@ final class MacScreenCaptureTests: XCTestCase {
             rect.fill()
         })
 
-        let pngData = try XCTUnwrap(ScreenshotImageEncoder.data(
-            for: image,
-            fileType: .png
-        ))
-        let encoded = try XCTUnwrap(NSBitmapImageRep(data: pngData))
+        for fileType in [NSBitmapImageRep.FileType.png, .jpeg, .tiff] {
+            let data = try XCTUnwrap(ScreenshotImageEncoder.data(
+                for: image,
+                fileType: fileType
+            ))
+            let encoded = try XCTUnwrap(NSBitmapImageRep(data: data))
 
-        XCTAssertEqual(encoded.pixelsWide, 60)
-        XCTAssertEqual(encoded.pixelsHigh, 45)
+            XCTAssertEqual(encoded.pixelsWide, 60, "\(fileType)")
+            XCTAssertEqual(encoded.pixelsHigh, 45, "\(fileType)")
+        }
     }
 
     func testCapturePixelGeometryUsesNativeDisplayScale() throws {
@@ -298,6 +338,52 @@ final class MacScreenCaptureTests: XCTestCase {
         let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
         XCTAssertTrue(source.contains("filter.pointPixelScale"))
         XCTAssertTrue(source.contains("configuration.captureResolution = .best"))
+    }
+
+    func testCapturePixelGeometryPrefersValidContentSize() throws {
+        let fallback = CGSize(width: 640, height: 480)
+
+        XCTAssertEqual(
+            CapturePixelGeometry.logicalContentSize(
+                contentRect: CGRect(x: 40, y: 20, width: 620, height: 440),
+                fallback: fallback
+            ),
+            CGSize(width: 620, height: 440)
+        )
+        XCTAssertEqual(
+            CapturePixelGeometry.logicalContentSize(contentRect: .null, fallback: fallback),
+            fallback
+        )
+
+        let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+        XCTAssertTrue(source.contains("filter.contentRect"))
+        XCTAssertTrue(source.contains("CapturePixelGeometry.displayID(containing: window.frame)"))
+    }
+
+    func testScreenshotResolutionIsLoggedAtOutputBoundaries() throws {
+        let diagnostics = try repositoryFileContents("MacScreenCapture/Utils/ScreenshotGeometryDiagnostics.swift")
+        let captureManager = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+        let editingController = try repositoryFileContents("MacScreenCapture/Core/EditingWindowController.swift")
+        let floatingController = try repositoryFileContents("MacScreenCapture/Core/FloatingWindowController.swift")
+
+        XCTAssertTrue(diagnostics.contains("static func logImageBoundary("))
+        XCTAssertTrue(diagnostics.contains("image_logical_size"))
+        XCTAssertTrue(diagnostics.contains("image_pixel_size"))
+        XCTAssertTrue(diagnostics.contains("image_scale"))
+
+        for event in [
+            "screenshot_captured",
+            "screenshot_finalized",
+            "screenshot_saved",
+            "screenshot_clipboard"
+        ] {
+            XCTAssertTrue(captureManager.contains("event: \"" + event + "\""), event)
+        }
+
+        for editorSource in [editingController, floatingController] {
+            XCTAssertTrue(editorSource.contains("event: \"edited_screenshot_saved\""))
+            XCTAssertTrue(editorSource.contains("event: \"edited_screenshot_clipboard\""))
+        }
     }
 
     func testAnnotationSettingsExposeNumberStyleAndTemplateControls() throws {
@@ -1105,8 +1191,10 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(captureManagerSource.contains("captureDisplayImageWithoutSaving(display: target?.display)"))
         XCTAssertTrue(captureManagerSource.contains("cropDisplayImage(image, to: target.cropRect"))
         XCTAssertTrue(captureManagerSource.contains("ScrollingImageStitcher.imagesAreVisuallySimilar(previous, sliceImage)"))
+        XCTAssertTrue(captureManagerSource.contains("ScrollingImageStitcher.canStitch("))
+        XCTAssertTrue(captureManagerSource.contains("throw CaptureError.screenshotTooLarge"))
         XCTAssertTrue(captureManagerSource.contains("ScrollingImageStitcher.orderedImages(images, direction: scrollDirection)"))
-        XCTAssertTrue(captureManagerSource.contains("ScrollingImageStitcher.stitchImagesVertically(orderedImages, trimOverlap: trimOverlap)"))
+        XCTAssertTrue(captureManagerSource.contains("ScrollingImageStitcher.stitchImagesVertically("))
         XCTAssertTrue(captureManagerSource.contains("finalizeCapturedImage(stitchedImage, showEditor: true)"))
         XCTAssertTrue(captureManagerSource.contains("scrollingCaptureDetectContentArea"))
         XCTAssertTrue(captureManagerSource.contains("kAXScrollAreaRole"))
@@ -1460,8 +1548,8 @@ final class MacScreenCaptureTests: XCTestCase {
 
         XCTAssertEqual(ScrollingImageStitcher.detectedVerticalOverlap(previous: first, next: second), 32)
 
-        let untrimmed = ScrollingImageStitcher.stitchImagesVertically([first, second], trimOverlap: false)
-        let trimmed = ScrollingImageStitcher.stitchImagesVertically([first, second], trimOverlap: true)
+        let untrimmed = try XCTUnwrap(ScrollingImageStitcher.stitchImagesVertically([first, second], trimOverlap: false))
+        let trimmed = try XCTUnwrap(ScrollingImageStitcher.stitchImagesVertically([first, second], trimOverlap: true))
 
         XCTAssertEqual(Int(untrimmed.size.width), 48)
         XCTAssertEqual(Int(untrimmed.size.height), 160)
@@ -1472,7 +1560,7 @@ final class MacScreenCaptureTests: XCTestCase {
     func testScrollingImageStitcherPreservesPixelsWithoutWatermark() throws {
         let first = makeSolidImage(width: 12, height: 5, color: .systemRed)
         let second = makeSolidImage(width: 12, height: 4, color: .systemBlue)
-        let stitched = ScrollingImageStitcher.stitchImagesVertically([first, second], trimOverlap: false)
+        let stitched = try XCTUnwrap(ScrollingImageStitcher.stitchImagesVertically([first, second], trimOverlap: false))
 
         XCTAssertEqual(Int(stitched.size.width), 12)
         XCTAssertEqual(Int(stitched.size.height), 9)
@@ -1519,6 +1607,13 @@ final class MacScreenCaptureTests: XCTestCase {
 
         XCTAssertTrue(ScrollingImageStitcher.imagesAreVisuallySimilar(image, image))
         XCTAssertFalse(ScrollingImageStitcher.imagesAreVisuallySimilar(image, changed))
+    }
+
+    func testScrollingImageStitcherRejectsOversizedOutput() throws {
+        let oversized = NSImage(size: CGSize(width: 10_000, height: 10_000))
+
+        XCTAssertFalse(ScrollingImageStitcher.canStitch([oversized], trimOverlap: false))
+        XCTAssertNil(ScrollingImageStitcher.stitchImagesVertically([oversized], trimOverlap: false))
     }
 
     func testScrollingCaptureSettingsNormalizeExecutionBounds() throws {
@@ -1588,6 +1683,14 @@ final class MacScreenCaptureTests: XCTestCase {
 
         XCTAssertEqual(outputRect, CGRect(x: 406, y: 306, width: 94, height: 94))
         XCTAssertEqual(drawRect, CGRect(x: 24, y: 0, width: 70, height: 70))
+
+        let placement = try XCTUnwrap(MultiWindowCompositeLayout.windowPlacement(
+            for: window,
+            in: outputRect,
+            imageSize: window.size
+        ))
+        XCTAssertEqual(placement.drawRect, drawRect)
+        XCTAssertEqual(placement.sourceRect, CGRect(x: 0, y: 30, width: 70, height: 70))
     }
 
     func testMultiWindowCompositeLayoutCreatesBackdropSegmentsAcrossDisplays() throws {
@@ -1679,10 +1782,10 @@ final class MacScreenCaptureTests: XCTestCase {
             rect.fill()
         })
 
-        let stitched = ScrollingImageStitcher.stitchImagesVertically(
+        let stitched = try XCTUnwrap(ScrollingImageStitcher.stitchImagesVertically(
             [first, second],
             trimOverlap: false
-        )
+        ))
 
         XCTAssertEqual(stitched.size, CGSize(width: 40, height: 60))
         XCTAssertEqual(
@@ -2148,6 +2251,7 @@ final class MacScreenCaptureTests: XCTestCase {
         let error4 = CaptureError.unsupportedSystem
         let error5 = CaptureError.failedToCapture
         let error6 = CaptureError.failedToSaveImage
+        let error7 = CaptureError.screenshotTooLarge
         
         XCTAssertEqual(error1.errorDescription, "没有可用的显示器")
         XCTAssertEqual(error2.errorDescription, "没有选择窗口")
@@ -2155,6 +2259,7 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(error4.errorDescription, "系统版本不支持")
         XCTAssertEqual(error5.errorDescription, "捕获失败")
         XCTAssertEqual(error6.errorDescription, "保存图片失败")
+        XCTAssertEqual(error7.errorDescription, "截图内容过长，已达到安全像素上限，请减少长截图屏数")
     }
 
     func testRecordingDiagnosticsDetectsSilentVideoOutputFailure() throws {

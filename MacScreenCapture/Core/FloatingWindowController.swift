@@ -586,7 +586,13 @@ class FloatingWindowController: NSWindowController {
         guard let tiffData = ScreenshotImageEncoder.data(for: image, fileType: .tiff) else { return }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setData(tiffData, forType: .tiff)
+        guard pasteboard.setData(tiffData, forType: .tiff) else { return }
+        ScreenshotGeometryDiagnostics.logImageBoundary(
+            event: "edited_screenshot_clipboard",
+            logicalSize: image.size,
+            pixelSize: HighResolutionImageRenderer.pixelSize(of: image),
+            fields: ["editor": "floating", "format": "TIFF"]
+        )
 
         // 显示复制成功提示
         showNotification("已复制到剪贴板")
@@ -641,6 +647,16 @@ class FloatingWindowController: NSWindowController {
 
                 // 写入文件
                 try data.write(to: url)
+                ScreenshotGeometryDiagnostics.logImageBoundary(
+                    event: "edited_screenshot_saved",
+                    logicalSize: image.size,
+                    pixelSize: HighResolutionImageRenderer.pixelSize(of: image),
+                    fields: [
+                        "editor": "floating",
+                        "file_name": url.lastPathComponent,
+                        "format": url.pathExtension.uppercased()
+                    ]
+                )
 
                 // 回到主线程更新UI
                 DispatchQueue.main.async {

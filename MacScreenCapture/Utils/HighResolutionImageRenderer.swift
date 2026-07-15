@@ -1,23 +1,26 @@
 import AppKit
 
 enum HighResolutionImageRenderer {
+    static let maximumPixelCount = 80_000_000
+
+    static func canRender(logicalSize: CGSize, pixelScale: CGFloat) -> Bool {
+        pixelDimensions(logicalSize: logicalSize, pixelScale: pixelScale) != nil
+    }
+
     static func render(
         logicalSize: CGSize,
         pixelScale: CGFloat,
         drawing: (CGRect) -> Void
     ) -> NSImage? {
-        guard logicalSize.width.isFinite,
-              logicalSize.height.isFinite,
-              logicalSize.width > 0,
-              logicalSize.height > 0 else {
-            return nil
-        }
+        guard let dimensions = pixelDimensions(
+            logicalSize: logicalSize,
+            pixelScale: pixelScale
+        ) else { return nil }
 
-        let scale = normalizedScale(pixelScale)
         guard let representation = NSBitmapImageRep(
             bitmapDataPlanes: nil,
-            pixelsWide: max(1, Int(ceil(logicalSize.width * scale))),
-            pixelsHigh: max(1, Int(ceil(logicalSize.height * scale))),
+            pixelsWide: dimensions.width,
+            pixelsHigh: dimensions.height,
             bitsPerSample: 8,
             samplesPerPixel: 4,
             hasAlpha: true,
@@ -84,6 +87,34 @@ enum HighResolutionImageRenderer {
 
     static func normalizedScale(_ scale: CGFloat) -> CGFloat {
         scale.isFinite && scale > 0 ? scale : 1
+    }
+
+    private static func pixelDimensions(
+        logicalSize: CGSize,
+        pixelScale: CGFloat
+    ) -> (width: Int, height: Int)? {
+        guard logicalSize.width.isFinite,
+              logicalSize.height.isFinite,
+              logicalSize.width > 0,
+              logicalSize.height > 0 else {
+            return nil
+        }
+
+        let scale = normalizedScale(pixelScale)
+        let rawWidth = ceil(logicalSize.width * scale)
+        let rawHeight = ceil(logicalSize.height * scale)
+        guard rawWidth.isFinite,
+              rawHeight.isFinite,
+              rawWidth <= CGFloat(Int.max),
+              rawHeight <= CGFloat(Int.max) else {
+            return nil
+        }
+
+        let width = max(1, Int(rawWidth))
+        let height = max(1, Int(rawHeight))
+        let (pixelCount, overflow) = width.multipliedReportingOverflow(by: height)
+        guard !overflow, pixelCount <= maximumPixelCount else { return nil }
+        return (width, height)
     }
 
     private static func largestBitmapRepresentation(of image: NSImage) -> NSBitmapImageRep? {

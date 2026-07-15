@@ -11,18 +11,22 @@ struct ScrollingImageStitcher {
         let normalizedImages = trimOverlap ? removeOverlappingScrollRegions(from: images) : images
         let width = normalizedImages.map { $0.size.width }.min() ?? first.size.width
         let height = normalizedImages.reduce(CGFloat(0)) { $0 + ($1.size.height * width / max($1.size.width, 1)) }
-        let output = NSImage(size: NSSize(width: width, height: height))
+        let outputSize = NSSize(width: width, height: height)
+        let pixelScale = normalizedImages
+            .map { HighResolutionImageRenderer.pixelScale(of: $0) }
+            .max() ?? 1
 
-        output.lockFocus()
-        var y = height
-        for image in normalizedImages {
-            let scaledHeight = image.size.height * width / max(image.size.width, 1)
-            y -= scaledHeight
-            image.draw(in: NSRect(x: 0, y: y, width: width, height: scaledHeight))
-        }
-        output.unlockFocus()
-
-        return output
+        return HighResolutionImageRenderer.render(
+            logicalSize: outputSize,
+            pixelScale: pixelScale
+        ) { _ in
+            var y = height
+            for image in normalizedImages {
+                let scaledHeight = image.size.height * width / max(image.size.width, 1)
+                y -= scaledHeight
+                image.draw(in: NSRect(x: 0, y: y, width: width, height: scaledHeight))
+            }
+        } ?? first
     }
 
     static func imagesAreVisuallySimilar(_ previous: NSImage, _ next: NSImage) -> Bool {
@@ -135,9 +139,13 @@ struct ScrollingImageStitcher {
             return image
         }
 
+        let scale = HighResolutionImageRenderer.pixelScale(of: image)
         return NSImage(
             cgImage: croppedCGImage,
-            size: NSSize(width: croppedCGImage.width, height: croppedCGImage.height)
+            size: NSSize(
+                width: CGFloat(croppedCGImage.width) / scale,
+                height: CGFloat(croppedCGImage.height) / scale
+            )
         )
     }
 

@@ -264,6 +264,25 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(HighResolutionImageRenderer.pixelScale(of: image), 2)
     }
 
+    func testScreenshotImageEncoderPreservesBackingPixelDimensions() throws {
+        let image = try XCTUnwrap(HighResolutionImageRenderer.render(
+            logicalSize: CGSize(width: 40, height: 30),
+            pixelScale: 1.5
+        ) { rect in
+            NSColor.systemGreen.setFill()
+            rect.fill()
+        })
+
+        let pngData = try XCTUnwrap(ScreenshotImageEncoder.data(
+            for: image,
+            fileType: .png
+        ))
+        let encoded = try XCTUnwrap(NSBitmapImageRep(data: pngData))
+
+        XCTAssertEqual(encoded.pixelsWide, 60)
+        XCTAssertEqual(encoded.pixelsHigh, 45)
+    }
+
     func testCapturePixelGeometryUsesNativeDisplayScale() throws {
         XCTAssertEqual(CapturePixelGeometry.normalizedScale(2), 2)
         XCTAssertEqual(CapturePixelGeometry.normalizedScale(.nan), 1)
@@ -1598,6 +1617,78 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertLessThan(corner.alpha, 10)
         XCTAssertGreaterThan(center.red, 200)
         XCTAssertGreaterThan(center.alpha, 240)
+    }
+
+    func testScreenshotStyleRendererPreservesSourcePixelScale() throws {
+        let image = try XCTUnwrap(HighResolutionImageRenderer.render(
+            logicalSize: CGSize(width: 40, height: 30),
+            pixelScale: 1.5
+        ) { rect in
+            NSColor.systemBlue.setFill()
+            rect.fill()
+        })
+
+        let rounded = ScreenshotStyleRenderer.renderRoundedImage(image, radius: 8)
+        XCTAssertEqual(
+            HighResolutionImageRenderer.pixelSize(of: rounded),
+            CGSize(width: 60, height: 45)
+        )
+
+        let shadowed = ScreenshotStyleRenderer.renderShadowedImage(
+            image,
+            shadowRadius: 12,
+            shadowColor: .black
+        )
+        XCTAssertEqual(shadowed.size, CGSize(width: 88, height: 78))
+        XCTAssertEqual(
+            HighResolutionImageRenderer.pixelSize(of: shadowed),
+            CGSize(width: 132, height: 117)
+        )
+
+        let framed = ScreenshotStyleRenderer.renderDeviceFrame(
+            around: image,
+            style: ScreenshotStyleRenderer.DeviceFrameStyle(
+                bezel: 18,
+                padding: 16,
+                cornerRadius: 12,
+                shadowRadius: 0,
+                bodyColor: .black,
+                shadowColor: .black
+            )
+        )
+        XCTAssertEqual(framed.size, CGSize(width: 108, height: 122))
+        XCTAssertEqual(
+            HighResolutionImageRenderer.pixelSize(of: framed),
+            CGSize(width: 162, height: 183)
+        )
+    }
+
+    func testScrollingImageStitcherPreservesSourcePixelScale() throws {
+        let first = try XCTUnwrap(HighResolutionImageRenderer.render(
+            logicalSize: CGSize(width: 40, height: 30),
+            pixelScale: 1.5
+        ) { rect in
+            NSColor.red.setFill()
+            rect.fill()
+        })
+        let second = try XCTUnwrap(HighResolutionImageRenderer.render(
+            logicalSize: CGSize(width: 40, height: 30),
+            pixelScale: 1.5
+        ) { rect in
+            NSColor.blue.setFill()
+            rect.fill()
+        })
+
+        let stitched = ScrollingImageStitcher.stitchImagesVertically(
+            [first, second],
+            trimOverlap: false
+        )
+
+        XCTAssertEqual(stitched.size, CGSize(width: 40, height: 60))
+        XCTAssertEqual(
+            HighResolutionImageRenderer.pixelSize(of: stitched),
+            CGSize(width: 60, height: 90)
+        )
     }
 
     func testScreenshotStyleRendererKeepsRoundedShadowCornersTransparent() throws {

@@ -271,8 +271,10 @@ struct ScreenshotView: View {
                             .buttonStyle(.bordered)
 
                             Button("复制到剪贴板") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setData(image.tiffRepresentation, forType: .tiff)
+                                if let data = ScreenshotImageEncoder.data(for: image, fileType: .tiff) {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setData(data, forType: .tiff)
+                                }
                             }
                             .buttonStyle(.bordered)
                         }

@@ -308,7 +308,9 @@ extension NotificationManager: @preconcurrency UNUserNotificationCenterDelegate 
                     if let image = NSImage(contentsOf: url) {
                         let pasteboard = NSPasteboard.general
                         pasteboard.clearContents()
-                        pasteboard.setData(image.tiffRepresentation, forType: .tiff)
+                        if let data = ScreenshotImageEncoder.data(for: image, fileType: .tiff) {
+                            pasteboard.setData(data, forType: .tiff)
+                        }
                     }
                 } else {
                     // 复制文件路径到剪贴板

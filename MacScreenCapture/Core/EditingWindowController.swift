@@ -133,9 +133,10 @@ class EditingWindowController: NSWindowController {
     }
     
     private func copyToClipboard(_ image: NSImage) {
+        guard let tiffData = ScreenshotImageEncoder.data(for: image, fileType: .tiff) else { return }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.writeObjects([image])
+        pasteboard.setData(tiffData, forType: .tiff)
         
         // 显示复制成功提示
         showNotification("已复制到剪贴板")
@@ -171,20 +172,6 @@ class EditingWindowController: NSWindowController {
             guard let self = self else { return }
             
             do {
-                guard let tiffData = image.tiffRepresentation else {
-                    DispatchQueue.main.async {
-                        self.showNotification("保存失败：无法获取图片数据")
-                    }
-                    return
-                }
-                
-                guard let bitmapRep = NSBitmapImageRep(data: tiffData) else {
-                    DispatchQueue.main.async {
-                        self.showNotification("保存失败：无法处理图片格式")
-                    }
-                    return
-                }
-                
                 let fileType: NSBitmapImageRep.FileType
                 let properties: [NSBitmapImageRep.PropertyKey: Any]
                 
@@ -200,7 +187,11 @@ class EditingWindowController: NSWindowController {
                     properties = [:]
                 }
                 
-                guard let data = bitmapRep.representation(using: fileType, properties: properties) else {
+                guard let data = ScreenshotImageEncoder.data(
+                    for: image,
+                    fileType: fileType,
+                    properties: properties
+                ) else {
                     DispatchQueue.main.async {
                         self.showNotification("保存失败：无法生成文件数据")
                     }

@@ -583,9 +583,10 @@ class FloatingWindowController: NSWindowController {
     }
 
     private func copyToClipboard(_ image: NSImage) {
+        guard let tiffData = ScreenshotImageEncoder.data(for: image, fileType: .tiff) else { return }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.writeObjects([image])
+        pasteboard.setData(tiffData, forType: .tiff)
 
         // 显示复制成功提示
         showNotification("已复制到剪贴板")
@@ -604,22 +605,6 @@ class FloatingWindowController: NSWindowController {
             guard let self = self else { return }
 
             do {
-                // 获取图片的 TIFF 数据
-                guard let tiffData = image.tiffRepresentation else {
-                    DispatchQueue.main.async {
-                        self.showNotification("保存失败：无法获取图片数据")
-                    }
-                    return
-                }
-
-                // 创建位图表示
-                guard let bitmapRep = NSBitmapImageRep(data: tiffData) else {
-                    DispatchQueue.main.async {
-                        self.showNotification("保存失败：无法处理图片格式")
-                    }
-                    return
-                }
-
                 // 根据文件扩展名确定保存格式
                 let fileType: NSBitmapImageRep.FileType
                 let properties: [NSBitmapImageRep.PropertyKey: Any]
@@ -637,7 +622,11 @@ class FloatingWindowController: NSWindowController {
                 }
 
                 // 生成文件数据
-                guard let data = bitmapRep.representation(using: fileType, properties: properties) else {
+                guard let data = ScreenshotImageEncoder.data(
+                    for: image,
+                    fileType: fileType,
+                    properties: properties
+                ) else {
                     DispatchQueue.main.async {
                         self.showNotification("保存失败：无法生成文件数据")
                     }

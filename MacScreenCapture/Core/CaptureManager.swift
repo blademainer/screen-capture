@@ -1414,20 +1414,19 @@ class CaptureManager: ObservableObject {
             }
         }
 
-        guard let tiffData = image.tiffRepresentation,
-              let bitmapRep = NSBitmapImageRep(data: tiffData) else {
-            throw CaptureError.failedToSaveImage
-        }
-
         // 根据格式选择相应的数据表示
         let imageData: Data?
         switch screenshotFormat.uppercased() {
         case "JPEG":
-            imageData = bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.9])
+            imageData = ScreenshotImageEncoder.data(
+                for: image,
+                fileType: .jpeg,
+                properties: [.compressionFactor: 0.9]
+            )
         case "TIFF":
-            imageData = bitmapRep.representation(using: .tiff, properties: [:])
+            imageData = ScreenshotImageEncoder.data(for: image, fileType: .tiff)
         default: // PNG
-            imageData = bitmapRep.representation(using: .png, properties: [:])
+            imageData = ScreenshotImageEncoder.data(for: image, fileType: .png)
         }
 
         guard let finalData = imageData else {
@@ -2011,22 +2010,30 @@ class CaptureManager: ObservableObject {
             capturedWindows.append((window: window, image: try await captureWindowImage(window)))
         }
 
-        let output = NSImage(size: outputRect.size)
-        output.lockFocus()
-        NSColor.clear.setFill()
-        NSRect(origin: .zero, size: outputRect.size).fill()
+        let sourceImages = backdropSegments.map(\.image) + capturedWindows.map(\.image)
+        let outputScale = sourceImages
+            .map { HighResolutionImageRenderer.pixelScale(of: $0) }
+            .max() ?? 1
+        guard let output = HighResolutionImageRenderer.render(
+            logicalSize: outputRect.size,
+            pixelScale: outputScale,
+            drawing: { _ in
+                NSColor.clear.setFill()
+                NSRect(origin: .zero, size: outputRect.size).fill()
 
-        for (visibleRect, backdrop) in backdropSegments {
-            guard let drawRect = MultiWindowCompositeLayout.drawRect(for: visibleRect, in: outputRect) else { continue }
-            backdrop.draw(in: drawRect)
+                for (visibleRect, backdrop) in backdropSegments {
+                    guard let drawRect = MultiWindowCompositeLayout.drawRect(for: visibleRect, in: outputRect) else { continue }
+                    backdrop.draw(in: drawRect)
+                }
+
+                for (window, image) in capturedWindows {
+                    guard let drawRect = MultiWindowCompositeLayout.drawRect(for: window.frame, in: outputRect) else { continue }
+                    image.draw(in: drawRect)
+                }
+            }
+        ) else {
+            throw CaptureError.failedToCapture
         }
-
-        for (window, image) in capturedWindows {
-            guard let drawRect = MultiWindowCompositeLayout.drawRect(for: window.frame, in: outputRect) else { continue }
-            image.draw(in: drawRect)
-        }
-
-        output.unlockFocus()
         return output
     }
 
@@ -2640,7 +2647,7 @@ class CaptureManager: ObservableObject {
     }
 
     private func copyImageToPasteboard(_ image: NSImage) {
-        guard let tiffData = image.tiffRepresentation else { return }
+        guard let tiffData = ScreenshotImageEncoder.data(for: image, fileType: .tiff) else { return }
 
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setData(tiffData, forType: .tiff)

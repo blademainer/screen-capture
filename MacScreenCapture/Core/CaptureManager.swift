@@ -1776,7 +1776,19 @@ class CaptureManager: ObservableObject {
             throw CaptureError.noDisplayAvailable
         }
 
-        let candidates = windows.map { window in
+        let windowInfo = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]] ?? []
+        let frontToBackWindowIDs = windowInfo.compactMap { info -> CGWindowID? in
+            (info[kCGWindowNumber as String] as? NSNumber)?.uint32Value
+        }
+        let orderedWindows = WindowSelectionZOrder.orderedIndices(
+            windowIDs: windows.map(\.windowID),
+            frontToBackIDs: frontToBackWindowIDs
+        ).map { windows[$0] }
+
+        let candidates = orderedWindows.map { window in
             MultiWindowSelectionCandidate(
                 id: window.windowID,
                 title: window.title ?? window.owningApplication?.applicationName ?? "窗口",
@@ -3774,6 +3786,27 @@ final class MagneticRegionSelectionView: NSView {
 
 // MARK: - Multi Window Selection
 
+enum WindowSelectionZOrder {
+    static func orderedIndices(
+        windowIDs: [CGWindowID],
+        frontToBackIDs: [CGWindowID]
+    ) -> [Int] {
+        let ranks = Dictionary(
+            frontToBackIDs.enumerated().map { ($0.element, $0.offset) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let fallbackBase = frontToBackIDs.count
+
+        return windowIDs.enumerated()
+            .sorted { first, second in
+                let firstRank = ranks[first.element] ?? fallbackBase + first.offset
+                let secondRank = ranks[second.element] ?? fallbackBase + second.offset
+                return firstRank < secondRank
+            }
+            .map(\.offset)
+    }
+}
+
 @available(macOS 12.3, *)
 private struct MultiWindowSelectionCandidate {
     let id: CGWindowID
@@ -3836,7 +3869,9 @@ final class MultiWindowSelectionView: NSView {
         NSColor.black.withAlphaComponent(0.30).setFill()
         bounds.fill()
 
-        for candidate in candidates {
+        // Paint the backmost candidates first so overlapping outlines match the
+        // WindowServer order used by hit testing.
+        for candidate in candidates.reversed() {
             let rect = viewRect(for: candidate.screenRect)
             let selected = selectedIDs.contains(candidate.id)
             let hovered = hoverID == candidate.id
@@ -3911,7 +3946,7 @@ final class MultiWindowSelectionView: NSView {
     }
 
     private func candidate(at point: CGPoint) -> MultiWindowSelectionCandidate? {
-        candidates.reversed().first { viewRect(for: $0.screenRect).contains(point) }
+        candidates.first { viewRect(for: $0.screenRect).contains(point) }
     }
 
     private func viewRect(for screenRect: CGRect) -> CGRect {

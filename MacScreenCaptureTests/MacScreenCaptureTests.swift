@@ -360,6 +360,34 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(source.contains("CapturePixelGeometry.displayID(containing: window.frame)"))
     }
 
+    func testWindowSelectionUsesFrontToBackZOrderForHitTesting() throws {
+        XCTAssertEqual(
+            WindowSelectionZOrder.orderedIndices(
+                windowIDs: [30, 10, 20, 40],
+                frontToBackIDs: [10, 20, 30]
+            ),
+            [1, 2, 0, 3],
+            "Known windows should follow WindowServer z-order and unknown windows should retain source order"
+        )
+
+        let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+
+        XCTAssertTrue(source.contains("CGWindowListCopyWindowInfo("))
+        XCTAssertTrue(source.contains("[.optionOnScreenOnly, .excludeDesktopElements]"))
+        XCTAssertTrue(
+            source.contains("for candidate in candidates.reversed()"),
+            "Selection overlays must be drawn back-to-front so the frontmost window remains visible"
+        )
+        XCTAssertTrue(
+            source.contains("candidates.first { viewRect(for: $0.screenRect).contains(point) }"),
+            "Candidates are sorted front-to-back, so hit testing must select the first match"
+        )
+        XCTAssertFalse(
+            source.contains("candidates.reversed().first { viewRect(for: $0.screenRect).contains(point) }"),
+            "Reversing hit testing selects a covered background window"
+        )
+    }
+
     func testScreenshotResolutionIsLoggedAtOutputBoundaries() throws {
         let diagnostics = try repositoryFileContents("MacScreenCapture/Utils/ScreenshotGeometryDiagnostics.swift")
         let captureManager = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")

@@ -1190,6 +1190,32 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(source.contains("renderMultiWindowComposite("))
     }
 
+    func testWindowSelectionDefersCompletionUntilMouseEventReturns() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+        let selectorStart = try XCTUnwrap(source.range(of: "private func selectMultipleWindows("))
+        let selectorEnd = try XCTUnwrap(
+            source.range(
+                of: "private func selectionOverlayFrame(for coordinateSpaces:",
+                range: selectorStart.lowerBound..<source.endIndex
+            )
+        )
+        let selectorSource = String(source[selectorStart.lowerBound..<selectorEnd.lowerBound])
+        let viewStart = try XCTUnwrap(source.range(of: "final class MultiWindowSelectionView: NSView"))
+        let viewEnd = try XCTUnwrap(
+            source.range(
+                of: "// MARK: - Delayed Screenshot Countdown",
+                range: viewStart.lowerBound..<source.endIndex
+            )
+        )
+        let viewSource = String(source[viewStart.lowerBound..<viewEnd.lowerBound])
+
+        XCTAssertTrue(selectorSource.contains("selectionWindow.isReleasedWhenClosed = false"))
+        XCTAssertTrue(viewSource.contains("private func completeSelection("))
+        XCTAssertTrue(viewSource.contains("DispatchQueue.main.async { [completion] in"))
+        XCTAssertTrue(viewSource.contains("completeSelection(.success("))
+        XCTAssertTrue(viewSource.contains("completeSelection(.failure("))
+    }
+
     func testScrollingScreenshotControlsAndExecutionStayAlignedWithIShot() throws {
         let captureManagerSource = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
         let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")

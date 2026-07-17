@@ -1805,6 +1805,7 @@ class CaptureManager: ObservableObject {
             selectionWindow.hasShadow = false
             selectionWindow.ignoresMouseEvents = false
             selectionWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            selectionWindow.isReleasedWhenClosed = false
 
             let overlayView = MultiWindowSelectionView(
                 screenFrame: selectionFrame,
@@ -3793,6 +3794,7 @@ final class MultiWindowSelectionView: NSView {
     private let candidates: [MultiWindowSelectionCandidate]
     private let singleClickCompletes: Bool
     private let completion: (Result<MultiWindowSelectionResult, Error>) -> Void
+    private var didComplete = false
     private var selectedIDs = Set<CGWindowID>()
     private var hoverID: CGWindowID?
     private var desktopBackdropSelected = false
@@ -3871,7 +3873,7 @@ final class MultiWindowSelectionView: NSView {
         }
 
         if singleClickCompletes && !event.modifierFlags.contains(.shift) {
-            completion(.success(MultiWindowSelectionResult(windows: [candidate.window], usesDesktopBackdrop: desktopBackdropSelected)))
+            completeSelection(.success(MultiWindowSelectionResult(windows: [candidate.window], usesDesktopBackdrop: desktopBackdropSelected)))
             return
         }
 
@@ -3891,11 +3893,20 @@ final class MultiWindowSelectionView: NSView {
                 NSSound.beep()
                 return
             }
-            completion(.success(MultiWindowSelectionResult(windows: selected, usesDesktopBackdrop: desktopBackdropSelected)))
+            completeSelection(.success(MultiWindowSelectionResult(windows: selected, usesDesktopBackdrop: desktopBackdropSelected)))
         case 53:
-            completion(.failure(CaptureError.regionSelectionCancelled))
+            completeSelection(.failure(CaptureError.regionSelectionCancelled))
         default:
             super.keyDown(with: event)
+        }
+    }
+
+    private func completeSelection(_ result: Result<MultiWindowSelectionResult, Error>) {
+        guard !didComplete else { return }
+        didComplete = true
+
+        DispatchQueue.main.async { [completion] in
+            completion(result)
         }
     }
 

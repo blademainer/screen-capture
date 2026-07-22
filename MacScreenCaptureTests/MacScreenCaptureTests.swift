@@ -1252,6 +1252,36 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertTrue(viewSource.contains("completeSelection(.failure("))
     }
 
+    func testRecordingRegionSelectionDefersCompletionUntilMouseEventReturns() throws {
+        let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
+        let selectorStart = try XCTUnwrap(source.range(of: "private func selectRecordingRegion()"))
+        let selectorEnd = try XCTUnwrap(
+            source.range(
+                of: "private func captureInteractiveScreenshot(",
+                range: selectorStart.lowerBound..<source.endIndex
+            )
+        )
+        let selectorSource = String(source[selectorStart.lowerBound..<selectorEnd.lowerBound])
+        let viewStart = try XCTUnwrap(source.range(of: "final class RecordingRegionSelectionView: NSView"))
+        let viewEnd = try XCTUnwrap(
+            source.range(
+                of: "// MARK: - Stream Output",
+                range: viewStart.lowerBound..<source.endIndex
+            )
+        )
+        let viewSource = String(source[viewStart.lowerBound..<viewEnd.lowerBound])
+
+        XCTAssertTrue(selectorSource.contains("selectionWindow.isReleasedWhenClosed = false"))
+        XCTAssertTrue(viewSource.contains("private var didComplete = false"))
+        XCTAssertTrue(viewSource.contains("private func completeSelection(_ result: Result<CGRect, Error>)"))
+        XCTAssertTrue(viewSource.contains("guard !didComplete else { return }"))
+        XCTAssertTrue(viewSource.contains("DispatchQueue.main.async { [completion] in"))
+        XCTAssertTrue(viewSource.contains("completeSelection(.success("))
+        XCTAssertTrue(viewSource.contains("completeSelection(.failure("))
+        XCTAssertFalse(viewSource.contains("completion(.success("))
+        XCTAssertFalse(viewSource.contains("completion(.failure("))
+    }
+
     func testScrollingScreenshotControlsAndExecutionStayAlignedWithIShot() throws {
         let captureManagerSource = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
         let settingsSource = try repositoryFileContents("MacScreenCapture/Views/SettingsView.swift")

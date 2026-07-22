@@ -2390,6 +2390,7 @@ class CaptureManager: ObservableObject {
             selectionWindow.hasShadow = false
             selectionWindow.ignoresMouseEvents = false
             selectionWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            selectionWindow.isReleasedWhenClosed = false
 
             let overlayView = RecordingRegionSelectionView(screenFrame: screen.frame) { result in
                 guard !didResume else { return }
@@ -4156,6 +4157,7 @@ final class RecordingRegionSelectionView: NSView {
     private let completion: (Result<CGRect, Error>) -> Void
     private var startPoint: CGPoint?
     private var currentPoint: CGPoint?
+    private var didComplete = false
 
     init(screenFrame: CGRect, completion: @escaping (Result<CGRect, Error>) -> Void) {
         self.screenFrame = screenFrame
@@ -4216,11 +4218,11 @@ final class RecordingRegionSelectionView: NSView {
         currentPoint = convert(event.locationInWindow, from: nil)
 
         guard let rect = selectionRect, rect.width >= 16, rect.height >= 16 else {
-            completion(.failure(CaptureError.regionSelectionCancelled))
+            completeSelection(.failure(CaptureError.regionSelectionCancelled))
             return
         }
 
-        completion(.success(CGRect(
+        completeSelection(.success(CGRect(
             x: screenFrame.origin.x + rect.origin.x,
             y: screenFrame.origin.y + rect.origin.y,
             width: rect.width,
@@ -4230,9 +4232,18 @@ final class RecordingRegionSelectionView: NSView {
 
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 {
-            completion(.failure(CaptureError.regionSelectionCancelled))
+            completeSelection(.failure(CaptureError.regionSelectionCancelled))
         } else {
             super.keyDown(with: event)
+        }
+    }
+
+    private func completeSelection(_ result: Result<CGRect, Error>) {
+        guard !didComplete else { return }
+        didComplete = true
+
+        DispatchQueue.main.async { [completion] in
+            completion(result)
         }
     }
 

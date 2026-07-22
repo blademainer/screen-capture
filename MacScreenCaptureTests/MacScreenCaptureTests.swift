@@ -1118,10 +1118,18 @@ final class MacScreenCaptureTests: XCTestCase {
     func testInlineCanvasAcceptsFirstDrawingClickAfterToolbarSelection() throws {
         let canvasSource = try repositoryFileContents("MacScreenCapture/Views/FloatingWindowContentView.swift")
         let controllerSource = try repositoryFileContents("MacScreenCapture/Core/InlineCaptureEditorController.swift")
+        let toolbarSource = try repositoryFileContents("MacScreenCapture/Views/InlineCaptureToolbarView.swift")
         let diagnosticsSource = try repositoryFileContents("MacScreenCapture/Utils/ScreenshotGeometryDiagnostics.swift")
 
         XCTAssertTrue(canvasSource.contains("override func acceptsFirstMouse(for event: NSEvent?) -> Bool"))
         XCTAssertTrue(controllerSource.contains("InlineCaptureToolbarPanel"))
+        XCTAssertTrue(controllerSource.contains("InlineCaptureToolbarHostingView(rootView:"))
+        XCTAssertTrue(controllerSource.contains("private final class InlineCaptureToolbarHostingView<Content: View>: NSHostingView<Content>"))
+        XCTAssertTrue(controllerSource.contains("override func acceptsFirstMouse(for event: NSEvent?) -> Bool"))
+        XCTAssertTrue(controllerSource.contains("onSelectTool: { [weak self] tool in self?.selectTool(tool) }"))
+        XCTAssertTrue(controllerSource.contains("private func focusCanvas()"))
+        XCTAssertTrue(toolbarSource.contains("let onSelectTool: (EditingTool) -> Void"))
+        XCTAssertTrue(toolbarSource.contains("onSelectTool(tool)"))
         XCTAssertTrue(controllerSource.contains("styleMask: [.borderless, .nonactivatingPanel]"))
         XCTAssertTrue(controllerSource.contains("window.becomesKeyOnlyIfNeeded = true"))
         XCTAssertTrue(controllerSource.contains("window.setFrame(toolbarFrame, display: false)"))

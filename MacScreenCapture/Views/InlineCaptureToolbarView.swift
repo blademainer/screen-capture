@@ -3,6 +3,7 @@ import SwiftUI
 struct InlineCaptureToolbarView: View {
     @ObservedObject var model: InlineCaptureEditorModel
 
+    let onSelectTool: (EditingTool) -> Void
     let onUndo: () -> Void
     let onRedo: () -> Void
     let onClear: () -> Void
@@ -20,7 +21,7 @@ struct InlineCaptureToolbarView: View {
             HStack(spacing: 4) {
                 ForEach(EditingTool.allCases, id: \.self) { tool in
                     Button {
-                        model.selectedTool = tool
+                        onSelectTool(tool)
                     } label: {
                         Image(systemName: tool.icon)
                             .font(.system(size: 14, weight: .medium))

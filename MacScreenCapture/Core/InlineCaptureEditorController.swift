@@ -84,9 +84,8 @@ final class InlineCaptureEditorController: NSObject {
         startEventMonitoring()
 
         orderEditorWindowsFront()
-        segmentWindows.first?.makeKeyAndOrderFront(nil)
-        segmentWindows.first?.makeFirstResponder(segmentWindows.first?.contentView)
         NSApp.activate(ignoringOtherApps: true)
+        focusCanvas()
     }
 
     func finish() {
@@ -149,8 +148,9 @@ final class InlineCaptureEditorController: NSObject {
         let level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 2)
         let window = makeToolbarWindow(frame: toolbarFrame, level: level)
         window.hasShadow = true
-        window.contentView = NSHostingView(rootView: InlineCaptureToolbarView(
+        window.contentView = InlineCaptureToolbarHostingView(rootView: InlineCaptureToolbarView(
             model: model,
+            onSelectTool: { [weak self] tool in self?.selectTool(tool) },
             onUndo: { [weak self] in self?.model.editingSession.undo() },
             onRedo: { [weak self] in self?.model.editingSession.redo() },
             onClear: { [weak self] in self?.model.editingSession.clear() },
@@ -208,6 +208,17 @@ final class InlineCaptureEditorController: NSObject {
         case pin
         case ocr
         case scrolling
+    }
+
+    private func selectTool(_ tool: EditingTool) {
+        model.selectedTool = tool
+        focusCanvas()
+    }
+
+    private func focusCanvas() {
+        guard let window = segmentWindows.first else { return }
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(window.contentView)
     }
 
     private func completeWithImage(_ outcome: ImageOutcome) {
@@ -333,7 +344,7 @@ final class InlineCaptureEditorController: NSObject {
 
         rebuildSelectionWindows()
         orderEditorWindowsFront()
-        segmentWindows.first?.makeKeyAndOrderFront(nil)
+        focusCanvas()
         isRecapturing = false
     }
 
@@ -418,4 +429,10 @@ private final class InlineCaptureWindow: NSWindow {
 
 private final class InlineCaptureToolbarPanel: NSPanel {
     override var canBecomeMain: Bool { false }
+}
+
+private final class InlineCaptureToolbarHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
 }

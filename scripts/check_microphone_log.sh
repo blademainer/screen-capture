@@ -2,7 +2,7 @@
 
 # 麦克风录制日志检查脚本
 
-LOG_FILE="$HOME/Desktop/MacScreenCapture_Microphone_Debug.log"
+LOG_FILE="$HOME/Library/Application Support/MacScreenCapture/microphone-debug.log"
 
 echo "=========================================="
 echo "麦克风录制日志检查工具"
@@ -12,7 +12,7 @@ echo ""
 if [ ! -f "$LOG_FILE" ]; then
     echo "❌ 日志文件不存在: $LOG_FILE"
     echo ""
-    echo "请先运行应用并进行一次录制，日志文件会自动创建在桌面。"
+    echo "请先运行应用并进行一次录制，日志文件会自动创建在本地 Application Support 目录。"
     exit 1
 fi
 

@@ -5018,27 +5018,5 @@ extension Notification.Name {
 
 /// 麦克风调试日志函数
 fileprivate func logMicrophone(_ message: String, level: String = "INFO") {
-    let desktopURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
-    let logFileURL = desktopURL.appendingPathComponent("MacScreenCapture_Microphone_Debug.log")
-
-    let dateFormatter = DateFormatter()
-    dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
-    let timestamp = dateFormatter.string(from: Date())
-    let logMessage = "[\(timestamp)] [\(level)] \(message)\n"
-
-    print("🎤 \(logMessage.trimmingCharacters(in: .newlines))")
-
-    DispatchQueue.global(qos: .utility).async {
-        if let data = logMessage.data(using: .utf8) {
-            if FileManager.default.fileExists(atPath: logFileURL.path) {
-                if let fileHandle = try? FileHandle(forWritingTo: logFileURL) {
-                    fileHandle.seekToEndOfFile()
-                    fileHandle.write(data)
-                    fileHandle.closeFile()
-                }
-            } else {
-                try? data.write(to: logFileURL)
-            }
-        }
-    }
+    MicrophoneDiagnostics.shared.append(message, level: level)
 }

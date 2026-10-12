@@ -57,6 +57,7 @@
 		B1234567890AB0026 /* FloatingWindowSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0025 /* FloatingWindowSettingsView.swift */; };
 		B1234567890AB0028 /* InlineCaptureSegmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0027 /* InlineCaptureSegmentView.swift */; };
 		B1234567890AB002A /* InlineCaptureToolbarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB0029 /* InlineCaptureToolbarView.swift */; };
+		B1234567890AB002C /* MicrophoneDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1234567890AB002B /* MicrophoneDiagnostics.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -112,6 +113,7 @@
 		B1234567890AB0025 /* FloatingWindowSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingWindowSettingsView.swift; sourceTree = "<group>"; };
 		B1234567890AB0027 /* InlineCaptureSegmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineCaptureSegmentView.swift; sourceTree = "<group>"; };
 		B1234567890AB0029 /* InlineCaptureToolbarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineCaptureToolbarView.swift; sourceTree = "<group>"; };
+		B1234567890AB002B /* MicrophoneDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrophoneDiagnostics.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -176,6 +178,7 @@
 				A1234567890ABCDF1 /* PermissionManager.swift */,
 				A1234567890ABCE01 /* HotKeyManager.swift */,
 				B1234567890AB000B /* HotKeyLatencyDiagnostics.swift */,
+				B1234567890AB002B /* MicrophoneDiagnostics.swift */,
 				B1234567890AB000D /* InlineCaptureEditorController.swift */,
 				A1234567890ABCE03 /* WindowManager.swift */,
 				A1234567890ABCE05 /* FloatingWindowController.swift */,
@@ -308,6 +311,7 @@
 				B1234567890AB0008 /* EditingWindowManager.swift in Sources */,
 				B1234567890AB000A /* FloatingWindowManager.swift in Sources */,
 				B1234567890AB000C /* HotKeyLatencyDiagnostics.swift in Sources */,
+				B1234567890AB002C /* MicrophoneDiagnostics.swift in Sources */,
 				B1234567890AB000E /* InlineCaptureEditorController.swift in Sources */,
 				B1234567890AB0010 /* AnnotationDefaults.swift in Sources */,
 				B1234567890AB0012 /* CaptureOverlayLayout.swift in Sources */,

@@ -23,9 +23,11 @@ class PermissionManager: ObservableObject {
     // MARK: - Private Properties
     private var applicationDidBecomeActiveObserver: NSObjectProtocol?
     private var activePermissionAlert: NSAlert?
+    private let microphoneDiagnostics: MicrophoneDiagnostics
     
     // MARK: - Initialization
-    init() {
+    init(microphoneDiagnostics: MicrophoneDiagnostics = .shared) {
+        self.microphoneDiagnostics = microphoneDiagnostics
         startPermissionMonitoring()
         checkAllPermissions()
     }
@@ -151,37 +153,12 @@ class PermissionManager: ObservableObject {
         )
         let devices = discoverySession.devices
         
-        logToFile("检测到的音频设备数量: \(devices.count)")
+        microphoneDiagnostics.append("检测到的音频设备数量: \(devices.count)")
         for (index, device) in devices.enumerated() {
-            logToFile("  设备 \(index + 1): \(device.localizedName)")
+            microphoneDiagnostics.append("  设备 \(index + 1): \(device.localizedName)")
         }
         
         return !devices.isEmpty
-    }
-    
-    /// 写入日志到桌面文件
-    private func logToFile(_ message: String) {
-        let desktopURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
-        let logFileURL = desktopURL.appendingPathComponent("MacScreenCapture_Microphone_Debug.log")
-        
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
-        let timestamp = dateFormatter.string(from: Date())
-        let logMessage = "[\(timestamp)] [INFO] \(message)\n"
-        
-        print("🎤 \(logMessage.trimmingCharacters(in: .newlines))")
-        
-        if let data = logMessage.data(using: .utf8) {
-            if FileManager.default.fileExists(atPath: logFileURL.path) {
-                if let fileHandle = try? FileHandle(forWritingTo: logFileURL) {
-                    fileHandle.seekToEndOfFile()
-                    fileHandle.write(data)
-                    fileHandle.closeFile()
-                }
-            } else {
-                try? data.write(to: logFileURL)
-            }
-        }
     }
     
     /// 请求辅助功能权限

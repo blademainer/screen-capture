@@ -26,6 +26,87 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertNotNil(permissionManager)
         XCTAssertFalse(permissionManager.permissionCheckInProgress)
     }
+
+    @MainActor
+    func testMicrophoneDiagnosticsDoesNotBlockCallerWhenStorageStalls() async {
+        let enteredWriter = expectation(description: "Background writer started")
+        let finishedWriter = expectation(description: "Background writer finished")
+        let releaseWriter = DispatchSemaphore(value: 0)
+        let diagnostics = MicrophoneDiagnostics(writeRecord: { data in
+            XCTAssertFalse(Thread.isMainThread)
+            guard String(decoding: data, as: UTF8.self).contains("音频设备数量") else { return }
+            enteredWriter.fulfill()
+            XCTAssertEqual(releaseWriter.wait(timeout: .now() + 3), .success)
+            finishedWriter.fulfill()
+        })
+
+        let permissionManager = PermissionManager(microphoneDiagnostics: diagnostics)
+        _ = permissionManager.checkMicrophoneDeviceAvailable()
+        await fulfillment(of: [enteredWriter], timeout: 1)
+        // The main actor remains usable while the storage operation is blocked.
+        releaseWriter.signal()
+        await fulfillment(of: [finishedWriter], timeout: 1)
+        await diagnostics.flush()
+    }
+
+    func testMicrophoneDiagnosticsBoundsBacklogAndPreservesOrder() async {
+        let startedWriter = expectation(description: "Writer blocked")
+        let writtenRecords = expectation(description: "Two queued records written")
+        writtenRecords.expectedFulfillmentCount = 2
+        let releaseWriter = DispatchSemaphore(value: 0)
+        let diagnostics = MicrophoneDiagnostics(maxPendingRecords: 2, writeRecord: { data in
+            let line = String(decoding: data, as: UTF8.self)
+            if line.contains("first") {
+                startedWriter.fulfill()
+                _ = releaseWriter.wait(timeout: .now() + 3)
+            } else {
+                XCTAssertTrue(line.contains("second"))
+            }
+            writtenRecords.fulfill()
+        })
+
+        XCTAssertTrue(diagnostics.append("first"))
+        await fulfillment(of: [startedWriter], timeout: 1)
+        XCTAssertTrue(diagnostics.append("second"))
+        for _ in 0..<100 {
+            XCTAssertFalse(diagnostics.append("dropped"))
+        }
+        releaseWriter.signal()
+        await fulfillment(of: [writtenRecords], timeout: 1)
+        await diagnostics.flush()
+    }
+
+    func testMicrophoneDiagnosticsWritesLocallyAndRotatesOversizedLog() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let logURL = directory.appendingPathComponent("microphone-debug.log")
+        let diagnostics = MicrophoneDiagnostics(logURL: logURL, maxLogBytes: 128)
+
+        diagnostics.append("first")
+        await diagnostics.flush()
+        XCTAssertTrue(try String(contentsOf: logURL, encoding: .utf8).contains("[INFO] first"))
+        try Data(repeating: 65, count: 256).write(to: logURL)
+        diagnostics.append("after rotation", level: "WARN")
+        await diagnostics.flush()
+        let contents = try String(contentsOf: logURL, encoding: .utf8)
+        XCTAssertTrue(contents.contains("[WARN] after rotation"))
+        XCTAssertLessThan(contents.utf8.count, 128)
+        XCTAssertTrue(MicrophoneDiagnostics.logFileURL.path.contains("/Library/Application Support/MacScreenCapture/"))
+    }
+
+    func testMicrophoneDiagnosticsContinuesAfterWriteFailure() async {
+        let recovered = expectation(description: "Later log survives failed write")
+        let diagnostics = MicrophoneDiagnostics(writeRecord: { data in
+            if String(decoding: data, as: UTF8.self).contains("failed") {
+                throw CocoaError(.fileWriteNoPermission)
+            }
+            recovered.fulfill()
+        })
+        diagnostics.append("failed")
+        diagnostics.append("recovered")
+        await fulfillment(of: [recovered], timeout: 1)
+        await diagnostics.flush()
+    }
     
     @MainActor
     func testCaptureManagerInitialization() throws {

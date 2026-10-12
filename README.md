@@ -182,7 +182,7 @@ MacScreenCapture/
 cat MICROPHONE_DEBUG_GUIDE.md
 ```
 
-**日志文件位置**: `~/Desktop/MacScreenCapture_Microphone_Debug.log`
+**日志文件位置**: `~/Library/Application Support/MacScreenCapture/microphone-debug.log`。日志在后台串行写入并限制为 512 KiB，避免桌面 iCloud 同步阻塞录屏。
 
 详细使用说明请参考 [麦克风调试指南](MICROPHONE_DEBUG_GUIDE.md)
 

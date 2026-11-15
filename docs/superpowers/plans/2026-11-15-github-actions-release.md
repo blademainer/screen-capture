@@ -19,7 +19,14 @@
 - [x] Validate shell/workflow syntax and reject invalid package arguments before building.
 - [x] Run all Swift tests and the real universal packaging script; verify both binary slices, resources, bundle metadata, code signature, extracted ZIP, mounted DMG, and checksums.
 - [x] Install the verified app at `/Applications/MacScreenCapture.app` for local use.
-- [ ] Commit and push to `main`, then inspect the triggered GitHub Actions run and downloaded artifacts. Do not invent a release tag without user approval.
+- [x] Commit and push to `main`, then inspect the triggered GitHub Actions run and downloaded artifacts. Do not invent a release tag without user approval.
+
+## Verification Evidence
+
+- Local: 130 tests passed; real arm64 and x86_64 release builds, extracted ZIP signature, mounted DMG signature, installation, and checksums verified.
+- Remote: [run 43709140632](https://github.com/blademainer/screen-capture/actions/runs/43709140632) at `058a0b8` passed all 130 tests and universal packaging; package and test-log artifacts uploaded successfully.
+- Downloaded remote ZIP and DMG match `SHA256SUMS`; extracted app has both architectures and passes strict ad-hoc signature verification.
+- The release job was correctly skipped for the branch push. No version tag or Release was created as part of this configuration task; actual tag publication remains to be exercised when a version is released.
 
 ## Review Focus
 

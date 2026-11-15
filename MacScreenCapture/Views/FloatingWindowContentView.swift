@@ -1001,7 +1001,13 @@ struct EditingToolbar: View {
                         selectedTool = tool
                         onToolSelected(tool)
                     }) {
-                        Image(systemName: tool.icon)
+                        Group {
+                            if tool == .text {
+                                Text("A")
+                            } else {
+                                Image(systemName: tool.icon)
+                            }
+                        }
                             .font(.system(size: 16))
                             .foregroundColor(selectedTool == tool ? .white : .primary)
                             .frame(width: 32, height: 32)
@@ -1011,6 +1017,7 @@ struct EditingToolbar: View {
                             .cornerRadius(6)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(tool == .text ? "A" : tool.name)
                     .help(tool.name)
                 }
             }

@@ -23,7 +23,13 @@ struct InlineCaptureToolbarView: View {
                     Button {
                         onSelectTool(tool)
                     } label: {
-                        Image(systemName: tool.icon)
+                        Group {
+                            if tool == .text {
+                                Text("A")
+                            } else {
+                                Image(systemName: tool.icon)
+                            }
+                        }
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(model.selectedTool == tool ? Color.white : Color.primary)
                             .frame(width: 28, height: 28)
@@ -31,6 +37,7 @@ struct InlineCaptureToolbarView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 4))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(tool == .text ? "A" : tool.name)
                     .help(tool.name)
                 }
 

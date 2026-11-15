@@ -1293,20 +1293,92 @@ final class MacScreenCaptureTests: XCTestCase {
     }
 
     @MainActor
-    func testScreenshotTextInputIsFocusedAboveCanvasAndToolbar() throws {
-        _ = NSApplication.shared
-        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 300, height: 200), styleMask: .borderless, backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        window.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
-        let canvas = FloatingEditingCanvasView(frame: CGRect(x: 0, y: 0, width: 300, height: 200))
-        window.contentView = canvas
-        defer { window.close() }
+    func testScreenshotTextCanBeEnteredOnCanvasAndCommittedForExport() throws {
+        let image = makeSolidImage(width: 400, height: 250, color: .white)
+        let session = ImageEditingSession(originalImage: image)
+        let canvas = FloatingEditingCanvasView(frame: CGRect(x: 0, y: 0, width: 400, height: 250))
+        canvas.editingSession = session
+        canvas.imageSize = image.size
+        canvas.beginTextEditing(at: CGPoint(x: 40, y: 200))
+        let input = try XCTUnwrap(canvas.subviews.compactMap { $0 as? NSTextView }.first)
+        input.string = "截图文字\n第二行"
+        XCTAssertTrue(session.operations.isEmpty)
+        session.commitPendingTextEditing()
+        let operation = try XCTUnwrap(session.operations.first)
+        XCTAssertEqual(operation.type, .text)
+        XCTAssertEqual(operation.text, "截图文字\n第二行")
+        XCTAssertTrue(canvas.subviews.isEmpty)
+        XCTAssertGreaterThan(try XCTUnwrap(operation.rect).height, 30)
+        XCTAssertEqual(HighResolutionImageRenderer.pixelSize(of: session.currentImage), HighResolutionImageRenderer.pixelSize(of: image))
+    }
 
-        let alert = canvas.makeTextInputAlert(title: "添加文字", message: "输入要标注的文字", initialValue: "文字标注")
-        let input = try XCTUnwrap(alert.accessoryView as? NSTextField)
-        XCTAssertEqual(input.stringValue, "文字标注")
-        XCTAssertTrue(alert.window.initialFirstResponder === input)
-        XCTAssertGreaterThan(alert.window.level.rawValue, window.level.rawValue + 1)
+    @MainActor
+    func testEditingExistingTextCanCancelAndUndoWithoutDuplicatingIt() throws {
+        let image = makeSolidImage(width: 400, height: 250, color: .white)
+        let session = ImageEditingSession(originalImage: image)
+        let original = EditingOperation(type: .text, text: "Original", rect: CGRect(x: 20, y: 150, width: 200, height: 40), fontSize: 18)
+        session.addOperation(original)
+        let canvas = FloatingEditingCanvasView(frame: CGRect(x: 0, y: 0, width: 400, height: 250))
+        canvas.editingSession = session
+        canvas.imageSize = image.size
+        canvas.beginTextEditing(at: CGPoint(x: 20, y: 190), operation: original)
+        let input = try XCTUnwrap(canvas.subviews.compactMap { $0 as? NSTextView }.first)
+        input.string = "Cancelled"
+        canvas.cancelTextEditing()
+        XCTAssertEqual(session.operations.first?.text, "Original")
+        canvas.beginTextEditing(at: CGPoint(x: 20, y: 190), operation: original)
+        let replacement = try XCTUnwrap(canvas.subviews.compactMap { $0 as? NSTextView }.first)
+        replacement.string = "Changed"
+        session.commitPendingTextEditing()
+        XCTAssertEqual(session.operations.count, 1)
+        XCTAssertEqual(session.operations.first?.id, original.id)
+        XCTAssertEqual(session.operations.first?.text, "Changed")
+        session.undo()
+        XCTAssertEqual(session.operations.first?.text, "Original")
+        session.redo()
+        XCTAssertEqual(session.operations.first?.text, "Changed")
+        let changed = try XCTUnwrap(session.operations.first)
+        canvas.beginTextEditing(at: CGPoint(x: 20, y: 190), operation: changed)
+        try XCTUnwrap(canvas.subviews.compactMap { $0 as? NSTextView }.first).string = ""
+        session.commitPendingTextEditing()
+        XCTAssertTrue(session.operations.isEmpty)
+        session.undo()
+        XCTAssertEqual(session.operations.first?.text, "Changed")
+    }
+
+    @MainActor
+    func testClearingCanvasCancelsUncommittedText() throws {
+        let image = makeSolidImage(width: 400, height: 250, color: .white)
+        let session = ImageEditingSession(originalImage: image)
+        let canvas = FloatingEditingCanvasView(frame: CGRect(x: 0, y: 0, width: 400, height: 250))
+        canvas.editingSession = session
+        canvas.imageSize = image.size
+        canvas.beginTextEditing(at: CGPoint(x: 40, y: 200))
+        try XCTUnwrap(canvas.subviews.compactMap { $0 as? NSTextView }.first).string = "Discard"
+        session.clear()
+        session.commitPendingTextEditing()
+        XCTAssertTrue(session.operations.isEmpty)
+        XCTAssertFalse(session.canUndo)
+        XCTAssertTrue(canvas.subviews.isEmpty)
+    }
+
+    @MainActor
+    func testSelectionToolRoutesDoubleClickToExistingInlineText() throws {
+        let image = makeSolidImage(width: 400, height: 250, color: .white)
+        let model = InlineCaptureEditorModel(image: image)
+        model.selectedTool = .none
+        model.editingSession.addOperation(EditingOperation(type: .text, text: "Existing", rect: CGRect(x: 20, y: 150, width: 200, height: 40)))
+        let segment = CaptureScreenSegment(displayID: 1, captureRect: CGRect(origin: .zero, size: image.size),
+            screenRect: CGRect(origin: .zero, size: image.size), imageRect: CGRect(origin: .zero, size: image.size))
+        let view = InlineCaptureSegmentView(frame: CGRect(origin: .zero, size: image.size),
+            model: model, segment: segment, selectionSize: image.size)
+        let canvas = try XCTUnwrap(view.hitTest(CGPoint(x: 40, y: 170)) as? FloatingEditingCanvasView)
+        let event = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown, location: CGPoint(x: 40, y: 170),
+            modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil, eventNumber: 0, clickCount: 2, pressure: 1))
+        canvas.mouseDown(with: event)
+        let input = try XCTUnwrap(canvas.subviews.compactMap { $0 as? NSTextView }.first)
+        XCTAssertEqual(input.string, "Existing")
+        model.editingSession.cancelPendingTextEditing()
     }
 
     func testAutomaticRegionCaptureNeverOpensStandaloneEditingWindow() throws {

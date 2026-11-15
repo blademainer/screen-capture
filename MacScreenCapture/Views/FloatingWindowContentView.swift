@@ -185,7 +185,8 @@ struct FloatingWindowContentView: View {
     }
 
     private func generateFinalImage() -> NSImage {
-        editingSession.currentImage
+        editingSession.commitPendingTextEditing()
+        return editingSession.currentImage
     }
 }
 
@@ -242,15 +243,23 @@ protocol FloatingEditingCanvasDelegate: AnyObject {
     func canvasDidAddOperation(_ operation: EditingOperation)
 }
 
-class FloatingEditingCanvasView: NSView {
+class FloatingEditingCanvasView: NSView, NSTextViewDelegate {
     weak var delegate: FloatingEditingCanvasDelegate?
     var editingSession: ImageEditingSession?
     var geometryTrace: ScreenshotGeometryDiagnostics.EditorTrace?
-    var selectedTool: EditingTool = .none
-    var selectedColor: NSColor = .red
+    var selectedTool: EditingTool = .none {
+        didSet { if selectedTool != oldValue { commitTextEditing() } }
+    }
+    var selectedColor: NSColor = .red {
+        didSet { if !selectedColor.isEqual(oldValue) { updateTextEditingStyle() } }
+    }
     var lineWidth: CGFloat = 2.0
-    var fontSize: CGFloat = 18.0
-    var textOutlined = false
+    var fontSize: CGFloat = 18.0 {
+        didSet { if fontSize != oldValue { updateTextEditingStyle() } }
+    }
+    var textOutlined = false {
+        didSet { if textOutlined != oldValue { updateTextEditingStyle() } }
+    }
     var imageSize: CGSize = .zero
     var logsInlineCaptureEvents = false
 
@@ -261,6 +270,19 @@ class FloatingEditingCanvasView: NSView {
     private var movingStartPoint: CGPoint?
     private var originalMovingOperation: EditingOperation?
     private var observedResetRevision = 0
+    private var textEditor: AnnotationTextView?
+    private var textDraft: TextDraft?
+
+    private struct TextDraft {
+        let original: EditingOperation?
+        var rect: CGRect
+        var color: NSColor
+        var lineWidth: CGFloat
+        var fontSize: CGFloat
+        var outlined: Bool
+    }
+
+    var isEditingText: Bool { textEditor != nil }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -286,6 +308,7 @@ class FloatingEditingCanvasView: NSView {
 
     override func layout() {
         super.layout()
+        resizeTextEditor()
         logGeometryIfNeeded()
     }
 
@@ -306,6 +329,7 @@ class FloatingEditingCanvasView: NSView {
     }
 
     private func cancelActiveInteraction() {
+        cancelTextEditing()
         currentPoints.removeAll()
         isDrawing = false
         movingOperationID = nil
@@ -382,6 +406,7 @@ class FloatingEditingCanvasView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        commitTextEditing()
         window?.makeFirstResponder(self)
         let viewPoint = convert(event.locationInWindow, from: nil)
         let imageLocation = imagePoint(fromViewPoint: viewPoint)
@@ -394,6 +419,17 @@ class FloatingEditingCanvasView: NSView {
             )
         }
         guard let location = imageLocation else { return }
+
+        if event.clickCount >= 2, let existing = hitTestMovableOperation(at: location), existing.type == .text {
+            beginTextEditing(at: location, operation: existing)
+            return
+        }
+
+        if selectedTool == .text {
+            let existing = hitTestMovableOperation(at: location).flatMap { $0.type == .text ? $0 : nil }
+            beginTextEditing(at: location, operation: existing)
+            return
+        }
 
         if selectedTool == .none, let operation = hitTestMovableOperation(at: location) {
             if event.clickCount >= 2 {
@@ -424,7 +460,7 @@ class FloatingEditingCanvasView: NSView {
                 width: location.x - movingStartPoint.x,
                 height: location.y - movingStartPoint.y
             )
-            editingSession?.updateOperation(originalMovingOperation.moved(by: offset))
+            editingSession?.updateOperation(originalMovingOperation.moved(by: offset), recordUndo: false)
             needsDisplay = true
             return
         }
@@ -438,6 +474,7 @@ class FloatingEditingCanvasView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         if movingOperationID != nil {
+            if let originalMovingOperation { editingSession?.recordMovedOperation(originalMovingOperation) }
             movingOperationID = nil
             movingStartPoint = nil
             originalMovingOperation = nil
@@ -490,12 +527,7 @@ class FloatingEditingCanvasView: NSView {
         case .arrow:
             return EditingOperation(type: selectedTool, points: [firstPoint, lastPoint], color: selectedColor, lineWidth: lineWidth)
         case .text:
-            guard let text = requestTextInput(title: "添加文字", message: "输入要标注的文字") else { return nil }
-            let draggedRect = normalizedRect(from: firstPoint, to: lastPoint)
-            let textRect = draggedRect.width >= 24 && draggedRect.height >= 18
-                ? draggedRect
-                : NSRect(x: firstPoint.x, y: firstPoint.y, width: 240, height: max(32, lineWidth * 12))
-            return EditingOperation(type: .text, color: selectedColor, lineWidth: lineWidth, text: text, rect: textRect, fontSize: fontSize, textOutlined: textOutlined)
+            return nil
         case .numbered:
             let text = "\(nextNumber)"
             nextNumber += 1
@@ -633,6 +665,11 @@ class FloatingEditingCanvasView: NSView {
     private func editTextOperation(_ operation: EditingOperation) {
         guard operation.type == .text || operation.type == .numbered else { return }
 
+        if operation.type == .text, let rect = operation.rect {
+            beginTextEditing(at: CGPoint(x: rect.minX, y: rect.maxY), operation: operation)
+            return
+        }
+
         let title = operation.type == .numbered ? "设置序号" : "编辑文字"
         let message = operation.type == .numbered ? "输入要显示的序号" : "输入要标注的文字"
         guard let newText = requestTextInput(
@@ -644,6 +681,146 @@ class FloatingEditingCanvasView: NSView {
         }
 
         editingSession?.updateOperation(operation.replacingText(with: newText))
+        needsDisplay = true
+    }
+
+    func beginTextEditing(at point: CGPoint, operation: EditingOperation? = nil) {
+        guard let editingSession, imageScale > 0 else { return }
+        editingSession.commitPendingTextEditing()
+        let visible = imageDisplayRect.intersection(visibleRect)
+        guard !visible.isNull, visible.width > 0, visible.height > 0 else { return }
+        let imageBounds = CGRect(
+            x: (visible.minX - imageDisplayRect.minX) / imageScale,
+            y: (visible.minY - imageDisplayRect.minY) / imageScale,
+            width: visible.width / imageScale, height: visible.height / imageScale
+        )
+        let resolvedFontSize = operation?.resolvedAnnotationFontSize ?? min(max(fontSize, 10), 72)
+        let height = min(max(28, resolvedFontSize * 1.5), imageBounds.height)
+        let x = min(max(point.x, imageBounds.minX), imageBounds.maxX - min(24, imageBounds.width))
+        let top = min(max(point.y, imageBounds.minY + height), imageBounds.maxY)
+        let rect = operation?.rect ?? CGRect(x: x, y: top - height, width: min(240, imageBounds.maxX - x), height: height)
+        textDraft = TextDraft(original: operation, rect: rect, color: operation?.color.nsColor ?? selectedColor,
+                              lineWidth: operation?.lineWidth ?? lineWidth, fontSize: resolvedFontSize,
+                              outlined: operation?.textOutlined ?? textOutlined)
+
+        let editor = AnnotationTextView(frame: viewRect(fromImageRect: rect))
+        editor.isRichText = false
+        editor.importsGraphics = false
+        editor.allowsUndo = true
+        editor.drawsBackground = false
+        editor.textContainerInset = .zero
+        editor.textContainer?.lineFragmentPadding = 0
+        editor.textContainer?.widthTracksTextView = true
+        editor.textContainer?.heightTracksTextView = false
+        editor.textContainer?.containerSize.height = .greatestFiniteMagnitude
+        editor.isHorizontallyResizable = false
+        editor.isVerticallyResizable = false
+        editor.isAutomaticQuoteSubstitutionEnabled = false
+        editor.isAutomaticDashSubstitutionEnabled = false
+        editor.isAutomaticTextReplacementEnabled = false
+        editor.wantsLayer = true
+        editor.layer?.borderColor = NSColor.systemBlue.cgColor
+        editor.layer?.borderWidth = 1
+        editor.setAccessibilityLabel("截图文字编辑")
+        editor.string = operation?.text ?? ""
+        editor.delegate = self
+        editor.onCommit = { [weak self, weak editor] in
+            guard let self, self.textEditor === editor else { return }
+            self.commitTextEditing()
+        }
+        editor.onCancel = { [weak self, weak editor] in
+            guard let self, self.textEditor === editor else { return }
+            self.cancelTextEditing()
+        }
+        textEditor = editor
+        applyTextDraftStyle()
+        addSubview(editor)
+        editingSession.beginTextEditing(operationID: operation?.id,
+            commit: { [weak self] in self?.finishTextEditing(commit: true) },
+            cancel: { [weak self] in self?.finishTextEditing(commit: false) })
+        resizeTextEditor()
+        window?.makeFirstResponder(editor)
+        if operation != nil { editor.selectAll(nil) }
+    }
+
+    func commitTextEditing() {
+        guard textEditor != nil else { return }
+        editingSession?.commitPendingTextEditing()
+    }
+
+    func cancelTextEditing() {
+        guard textEditor != nil else { return }
+        editingSession?.cancelPendingTextEditing()
+    }
+
+    func textDidChange(_ notification: Notification) {
+        resizeTextEditor()
+    }
+
+    private func updateTextEditingStyle() {
+        guard textDraft != nil else { return }
+        textDraft?.color = selectedColor
+        textDraft?.fontSize = min(max(fontSize, 10), 72)
+        textDraft?.outlined = textOutlined
+        applyTextDraftStyle()
+        resizeTextEditor()
+    }
+
+    private func applyTextDraftStyle() {
+        guard let editor = textEditor, let draft = textDraft else { return }
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: draft.fontSize * imageScale), .foregroundColor: draft.color
+        ]
+        if draft.outlined {
+            attributes[.strokeColor] = NSColor.white
+            attributes[.strokeWidth] = -3.0
+        }
+        editor.font = NSFont.systemFont(ofSize: draft.fontSize * imageScale)
+        editor.textColor = draft.color
+        editor.typingAttributes = attributes
+        editor.textStorage?.setAttributes(attributes, range: NSRange(location: 0, length: (editor.string as NSString).length))
+        editor.insertionPointColor = draft.color
+    }
+
+    private func resizeTextEditor() {
+        guard let editor = textEditor, var draft = textDraft,
+              let layoutManager = editor.layoutManager, let container = editor.textContainer else { return }
+        let frame = viewRect(fromImageRect: draft.rect)
+        container.containerSize = CGSize(width: frame.width, height: .greatestFiniteMagnitude)
+        layoutManager.ensureLayout(for: container)
+        let height = max(draft.fontSize * 1.5, (layoutManager.usedRect(for: container).height + 4) / imageScale)
+        let top = draft.rect.maxY
+        let bottom = max(0, (visibleRect.minY - imageDisplayRect.minY) / imageScale)
+        draft.rect.size.height = min(height, max(1, top - bottom))
+        draft.rect.origin.y = top - draft.rect.height
+        textDraft = draft
+        editor.frame = viewRect(fromImageRect: draft.rect)
+    }
+
+    private func finishTextEditing(commit: Bool) {
+        resizeTextEditor()
+        guard let editor = textEditor, let draft = textDraft else { return }
+        let text = editor.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        textEditor = nil
+        textDraft = nil
+        editor.delegate = nil
+        editor.removeFromSuperview()
+        if window?.firstResponder === editor { window?.makeFirstResponder(self) }
+        guard commit else { return }
+        if text.isEmpty {
+            if let original = draft.original { editingSession?.removeOperation(id: original.id) }
+            return
+        }
+        let operation = EditingOperation(id: draft.original?.id ?? UUID(), type: .text,
+            color: draft.color, lineWidth: draft.lineWidth, text: text, rect: draft.rect,
+            fontSize: draft.fontSize, textOutlined: draft.outlined)
+        if draft.original != nil {
+            editingSession?.updateOperation(operation)
+        } else if let delegate {
+            delegate.canvasDidAddOperation(operation)
+        } else {
+            editingSession?.addOperation(operation)
+        }
         needsDisplay = true
     }
 
@@ -681,6 +858,10 @@ class FloatingEditingCanvasView: NSView {
                 return false
             }
         }
+    }
+
+    func hasMovableAnnotation(at viewPoint: CGPoint) -> Bool {
+        imagePoint(fromViewPoint: viewPoint).flatMap { hitTestMovableOperation(at: $0) } != nil
     }
 
     private func drawCommittedOperation(_ operation: EditingOperation) {
@@ -774,6 +955,33 @@ class FloatingEditingCanvasView: NSView {
 }
 
 // MARK: - Editing Toolbar
+private final class AnnotationTextView: NSTextView {
+    var onCommit: (() -> Void)?
+    var onCancel: (() -> Void)?
+
+    override func keyDown(with event: NSEvent) {
+        if !hasMarkedText() {
+            if event.keyCode == 53 {
+                DispatchQueue.main.async { [weak self] in self?.onCancel?() }
+                return
+            }
+            if [36, 76].contains(event.keyCode), event.modifierFlags.contains(.command) {
+                DispatchQueue.main.async { [weak self] in self?.onCommit?() }
+                return
+            }
+        }
+        super.keyDown(with: event)
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned {
+            DispatchQueue.main.async { [weak self] in self?.onCommit?() }
+        }
+        return resigned
+    }
+}
+
 struct EditingToolbar: View {
     @Binding var selectedTool: EditingTool
     @Binding var selectedColor: Color

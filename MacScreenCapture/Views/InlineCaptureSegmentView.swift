@@ -65,13 +65,17 @@ final class InlineCaptureSegmentView: NSView, FloatingEditingCanvasDelegate {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         updateCanvasConfiguration()
-        if resizeHandle(at: point) != nil || model.selectedTool == .none {
-            return self
+        if let textView = super.hitTest(point) as? NSTextView { return textView }
+        if resizeHandle(at: point) != nil { return self }
+        if model.selectedTool == .none {
+            let canvasPoint = canvasView.convert(point, from: self)
+            return canvasView.hasMovableAnnotation(at: canvasPoint) ? canvasView : self
         }
         return super.hitTest(point)
     }
 
     override func mouseDown(with event: NSEvent) {
+        canvasView.commitTextEditing()
         guard let window else { return }
         let localPoint = convert(event.locationInWindow, from: nil)
         interactionDelegate?.inlineCaptureSegmentView(

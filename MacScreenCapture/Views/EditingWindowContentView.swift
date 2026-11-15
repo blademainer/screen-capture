@@ -258,7 +258,8 @@ struct EditingWindowContentView: View {
     }
     
     private func generateFinalImage() -> NSImage {
-        editingSession.currentImage
+        editingSession.commitPendingTextEditing()
+        return editingSession.currentImage
     }
 }
 

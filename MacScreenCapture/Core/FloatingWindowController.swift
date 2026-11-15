@@ -177,8 +177,14 @@ class ImageEditingSession: ObservableObject {
     @Published var resetRevision = 0
 
     private var originalImage: NSImage
-    private var undoStack: [EditingOperation] = []
-    private var redoStack: [EditingOperation] = []
+    private enum HistoryEntry {
+        case added(EditingOperation)
+        case removed(EditingOperation, index: Int)
+        case changed(before: EditingOperation, after: EditingOperation)
+    }
+    private var undoStack: [HistoryEntry] = []
+    private var redoStack: [HistoryEntry] = []
+    private var pendingTextEdit: (operationID: UUID?, commit: () -> Void, cancel: () -> Void)?
 
     var canUndo: Bool { !undoStack.isEmpty }
     var canRedo: Bool { !redoStack.isEmpty }
@@ -190,24 +196,67 @@ class ImageEditingSession: ObservableObject {
 
     func addOperation(_ operation: EditingOperation) {
         operations.append(operation)
-        undoStack.append(operation)
+        undoStack.append(.added(operation))
         redoStack.removeAll()
 
         updateCurrentImage()
     }
 
-    func updateOperation(_ operation: EditingOperation) {
+    func updateOperation(_ operation: EditingOperation, recordUndo: Bool = true) {
         guard let index = operations.firstIndex(where: { $0.id == operation.id }) else { return }
+        if recordUndo {
+            undoStack.append(.changed(before: operations[index], after: operation))
+            redoStack.removeAll()
+        }
         operations[index] = operation
         updateCurrentImage()
     }
 
-    func undo() {
-        guard let lastOperation = undoStack.popLast() else { return }
+    func recordMovedOperation(_ original: EditingOperation) {
+        guard let updated = operations.first(where: { $0.id == original.id }),
+              updated.points != original.points || updated.rect != original.rect else { return }
+        undoStack.append(.changed(before: original, after: updated))
+        redoStack.removeAll()
+    }
 
-        redoStack.append(lastOperation)
-        if let index = operations.firstIndex(where: { $0.id == lastOperation.id }) {
-            operations.remove(at: index)
+    func removeOperation(id: UUID) {
+        guard let index = operations.firstIndex(where: { $0.id == id }) else { return }
+        undoStack.append(.removed(operations.remove(at: index), index: index))
+        redoStack.removeAll()
+        updateCurrentImage()
+    }
+
+    func beginTextEditing(operationID: UUID?, commit: @escaping () -> Void, cancel: @escaping () -> Void) {
+        commitPendingTextEditing()
+        pendingTextEdit = (operationID, commit, cancel)
+        updateCurrentImage()
+    }
+
+    func commitPendingTextEditing() {
+        guard let edit = pendingTextEdit else { return }
+        pendingTextEdit = nil
+        edit.commit()
+        updateCurrentImage()
+    }
+
+    func cancelPendingTextEditing() {
+        guard let edit = pendingTextEdit else { return }
+        pendingTextEdit = nil
+        edit.cancel()
+        updateCurrentImage()
+    }
+
+    func undo() {
+        commitPendingTextEditing()
+        guard let entry = undoStack.popLast() else { return }
+        redoStack.append(entry)
+        switch entry {
+        case .added(let operation):
+            operations.removeAll { $0.id == operation.id }
+        case .removed(let operation, let index):
+            operations.insert(operation, at: min(index, operations.count))
+        case .changed(let before, _):
+            if let index = operations.firstIndex(where: { $0.id == before.id }) { operations[index] = before }
         }
 
         updateCurrentImage()
@@ -227,15 +276,21 @@ class ImageEditingSession: ObservableObject {
     }
 
     func redo() {
-        guard let operation = redoStack.popLast() else { return }
-
-        operations.append(operation)
-        undoStack.append(operation)
+        commitPendingTextEditing()
+        guard let entry = redoStack.popLast() else { return }
+        switch entry {
+        case .added(let operation): operations.append(operation)
+        case .removed(let operation, _): operations.removeAll { $0.id == operation.id }
+        case .changed(_, let after):
+            if let index = operations.firstIndex(where: { $0.id == after.id }) { operations[index] = after }
+        }
+        undoStack.append(entry)
 
         updateCurrentImage()
     }
 
     func clear() {
+        cancelPendingTextEditing()
         operations.removeAll()
         undoStack.removeAll()
         redoStack.removeAll()
@@ -244,6 +299,7 @@ class ImageEditingSession: ObservableObject {
     }
 
     func replaceOriginalImage(_ image: NSImage) {
+        cancelPendingTextEditing()
         originalImage = image
         operations.removeAll()
         undoStack.removeAll()
@@ -253,7 +309,8 @@ class ImageEditingSession: ObservableObject {
     }
 
     private func updateCurrentImage() {
-        currentImage = renderImageWithOperations(originalImage, operations: operations)
+        let visibleOperations = operations.filter { $0.id != pendingTextEdit?.operationID }
+        currentImage = renderImageWithOperations(originalImage, operations: visibleOperations)
     }
 
     private func renderImageWithOperations(_ baseImage: NSImage, operations: [EditingOperation]) -> NSImage {

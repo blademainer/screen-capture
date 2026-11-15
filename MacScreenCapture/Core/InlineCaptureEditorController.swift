@@ -91,10 +91,12 @@ final class InlineCaptureEditorController: NSObject {
     }
 
     func finish() {
+        model.editingSession.commitPendingTextEditing()
         complete(.finish(model.editingSession.currentImage))
     }
 
     func cancel() {
+        model.editingSession.cancelPendingTextEditing()
         complete(.cancel)
     }
 
@@ -224,6 +226,7 @@ final class InlineCaptureEditorController: NSObject {
     }
 
     private func completeWithImage(_ outcome: ImageOutcome) {
+        model.editingSession.commitPendingTextEditing()
         let image = model.editingSession.currentImage
         switch outcome {
         case .copy: complete(.copy(image))
@@ -235,6 +238,7 @@ final class InlineCaptureEditorController: NSObject {
     }
 
     private func share() {
+        model.editingSession.commitPendingTextEditing()
         guard let contentView = toolbarWindow?.contentView else { return }
         let picker = NSSharingServicePicker(items: [model.editingSession.currentImage])
         picker.show(relativeTo: contentView.bounds, of: contentView, preferredEdge: .minY)
@@ -272,6 +276,11 @@ final class InlineCaptureEditorController: NSObject {
                 guard let eventWindow = event.window,
                       editorWindows.contains(where: { $0 === eventWindow }),
                       NSApp.modalWindow == nil else { return event }
+                if event.modifierFlags.intersection([.command, .shift, .control, .option]) == .command,
+                   event.charactersIgnoringModifiers?.lowercased() == "s" {
+                    DispatchQueue.main.async { self.completeWithImage(.save) }
+                    return nil
+                }
                 if let textView = eventWindow.firstResponder as? NSTextView, textView.isEditable {
                     return event
                 }
@@ -280,9 +289,6 @@ final class InlineCaptureEditorController: NSObject {
                     switch event.charactersIgnoringModifiers?.lowercased() {
                     case "c":
                         DispatchQueue.main.async { self.completeWithImage(.copy) }
-                        return nil
-                    case "s":
-                        DispatchQueue.main.async { self.completeWithImage(.save) }
                         return nil
                     default: break
                     }

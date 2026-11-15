@@ -10,7 +10,7 @@ struct FloatingWindowContentView: View {
     let onShare: (NSImage) -> Void
     let onClose: () -> Void
 
-    @State private var selectedTool: EditingTool = .none
+    @State private var selectedTool: EditingTool = .lastSelected()
     @State private var selectedColor: Color = .red
     @State private var lineWidth: CGFloat = 2.0
     @State private var fontSize: CGFloat = 18.0
@@ -106,6 +106,7 @@ struct FloatingWindowContentView: View {
             showingColorPicker: $showingColorPicker,
             onToolSelected: { tool in
                 selectedTool = tool
+                tool.rememberSelection()
                 isEditing = tool != .none
             }
         )
@@ -275,6 +276,14 @@ class FloatingEditingCanvasView: NSView {
         true
     }
 
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if let textView = window?.firstResponder as? NSTextView, textView.isEditable {
+            return super.performKeyEquivalent(with: event)
+        }
+        if editingSession?.handleUndoRedoShortcut(event) == true { return true }
+        return super.performKeyEquivalent(with: event)
+    }
+
     override func layout() {
         super.layout()
         logGeometryIfNeeded()
@@ -373,6 +382,7 @@ class FloatingEditingCanvasView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
         let viewPoint = convert(event.locationInWindow, from: nil)
         let imageLocation = imagePoint(fromViewPoint: viewPoint)
         if logsInlineCaptureEvents {
@@ -591,7 +601,7 @@ class FloatingEditingCanvasView: NSView {
         )
     }
 
-    private func requestTextInput(title: String, message: String, initialValue: String = "") -> String? {
+    func makeTextInputAlert(title: String, message: String, initialValue: String = "") -> NSAlert {
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = message
@@ -602,6 +612,19 @@ class FloatingEditingCanvasView: NSView {
         textField.stringValue = initialValue
         alert.accessoryView = textField
 
+        // The screenshot overlay is above ordinary alerts and must not hide text input.
+        alert.window.level = NSWindow.Level(rawValue: (window?.level.rawValue ?? NSWindow.Level.normal.rawValue) + 2)
+        alert.window.initialFirstResponder = textField
+        return alert
+    }
+
+    private func requestTextInput(title: String, message: String, initialValue: String = "") -> String? {
+        let alert = makeTextInputAlert(title: title, message: message, initialValue: initialValue)
+        guard let textField = alert.accessoryView as? NSTextField else { return nil }
+        defer {
+            window?.makeKeyAndOrderFront(nil)
+            window?.makeFirstResponder(self)
+        }
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
         let value = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value

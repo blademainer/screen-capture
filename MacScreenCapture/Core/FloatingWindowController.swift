@@ -16,6 +16,14 @@ enum EditingTool: String, CaseIterable, Codable {
     case mosaic = "mosaic"
     case crop = "crop"
 
+    static func lastSelected(in defaults: UserDefaults = .standard) -> EditingTool {
+        defaults.string(forKey: "lastScreenshotEditingTool").flatMap(EditingTool.init(rawValue:)) ?? .none
+    }
+
+    func rememberSelection(in defaults: UserDefaults = .standard) {
+        defaults.set(rawValue, forKey: "lastScreenshotEditingTool")
+    }
+
     var icon: String {
         switch self {
         case .none: return "hand.point.up.left"
@@ -203,6 +211,19 @@ class ImageEditingSession: ObservableObject {
         }
 
         updateCurrentImage()
+    }
+
+    @discardableResult
+    func handleUndoRedoShortcut(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .control, .option])
+        guard event.type == .keyDown,
+              event.charactersIgnoringModifiers?.lowercased() == "z" else { return false }
+        switch modifiers {
+        case [.command]: undo()
+        case [.command, .shift]: redo()
+        default: return false
+        }
+        return true
     }
 
     func redo() {

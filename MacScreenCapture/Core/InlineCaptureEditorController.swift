@@ -16,7 +16,9 @@ final class InlineCaptureEditorModel: ObservableObject {
     let editingSession: ImageEditingSession
     private var editingSessionObservation: AnyCancellable?
 
-    @Published var selectedTool: EditingTool = .none
+    @Published var selectedTool: EditingTool = .lastSelected() {
+        didSet { selectedTool.rememberSelection() }
+    }
     @Published var selectedColor: NSColor
     @Published var lineWidth: CGFloat
     @Published var fontSize: CGFloat
@@ -266,12 +268,31 @@ final class InlineCaptureEditorController: NSObject {
             guard let self else { return event }
             switch event.type {
             case .keyDown:
+                let editorWindows = self.segmentWindows + [self.toolbarWindow].compactMap { $0 }
+                guard let eventWindow = event.window,
+                      editorWindows.contains(where: { $0 === eventWindow }),
+                      NSApp.modalWindow == nil else { return event }
+                if let textView = eventWindow.firstResponder as? NSTextView, textView.isEditable {
+                    return event
+                }
+                if self.model.editingSession.handleUndoRedoShortcut(event) { return nil }
+                if event.modifierFlags.intersection([.command, .shift, .control, .option]) == .command {
+                    switch event.charactersIgnoringModifiers?.lowercased() {
+                    case "c":
+                        DispatchQueue.main.async { self.completeWithImage(.copy) }
+                        return nil
+                    case "s":
+                        DispatchQueue.main.async { self.completeWithImage(.save) }
+                        return nil
+                    default: break
+                    }
+                }
                 switch event.keyCode {
                 case 53:
-                    self.cancel()
+                    DispatchQueue.main.async { self.cancel() }
                     return nil
                 case 36, 76:
-                    self.finish()
+                    DispatchQueue.main.async { self.finish() }
                     return nil
                 default:
                     return event

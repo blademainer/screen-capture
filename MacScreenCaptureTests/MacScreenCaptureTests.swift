@@ -1248,6 +1248,67 @@ final class MacScreenCaptureTests: XCTestCase {
         XCTAssertEqual(canvas.selectedTool, .pen)
     }
 
+    @MainActor
+    func testScreenshotEditorRestoresLastSelectedTool() {
+        let defaults = UserDefaults.standard
+        let key = "lastScreenshotEditingTool"
+        let original = defaults.object(forKey: key)
+        defer {
+            if let original { defaults.set(original, forKey: key) }
+            else { defaults.removeObject(forKey: key) }
+        }
+        defaults.removeObject(forKey: key)
+        let image = makeSolidImage(width: 100, height: 80, color: .white)
+        let first = InlineCaptureEditorModel(image: image)
+        XCTAssertEqual(first.selectedTool, .none)
+        first.selectedTool = .pen
+        XCTAssertEqual(InlineCaptureEditorModel(image: image).selectedTool, .pen)
+        first.selectedTool = .text
+        XCTAssertEqual(InlineCaptureEditorModel(image: image).selectedTool, .text)
+        defaults.set("unknown-tool", forKey: key)
+        XCTAssertEqual(InlineCaptureEditorModel(image: image).selectedTool, .none)
+    }
+
+    @MainActor
+    func testScreenshotCanvasCommandZUndoesAndShiftCommandZRedoes() throws {
+        let image = makeSolidImage(width: 100, height: 80, color: .white)
+        let session = ImageEditingSession(originalImage: image)
+        let canvas = FloatingEditingCanvasView(frame: CGRect(x: 0, y: 0, width: 100, height: 80))
+        canvas.editingSession = session
+        let operation = EditingOperation(type: .text, text: "Hello", rect: CGRect(x: 10, y: 10, width: 60, height: 30))
+        session.addOperation(operation)
+        func event(_ modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+            try XCTUnwrap(NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0,
+                windowNumber: 0, context: nil, characters: "z", charactersIgnoringModifiers: "z",
+                isARepeat: false, keyCode: 6
+            ))
+        }
+        XCTAssertTrue(canvas.performKeyEquivalent(with: try event(.command)))
+        XCTAssertTrue(session.operations.isEmpty)
+        XCTAssertTrue(canvas.performKeyEquivalent(with: try event([.command, .shift])))
+        XCTAssertEqual(session.operations.map(\.id), [operation.id])
+        XCTAssertFalse(canvas.performKeyEquivalent(with: try event([.command, .option])))
+        XCTAssertEqual(session.operations.count, 1)
+    }
+
+    @MainActor
+    func testScreenshotTextInputIsFocusedAboveCanvasAndToolbar() throws {
+        _ = NSApplication.shared
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 300, height: 200), styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
+        let canvas = FloatingEditingCanvasView(frame: CGRect(x: 0, y: 0, width: 300, height: 200))
+        window.contentView = canvas
+        defer { window.close() }
+
+        let alert = canvas.makeTextInputAlert(title: "添加文字", message: "输入要标注的文字", initialValue: "文字标注")
+        let input = try XCTUnwrap(alert.accessoryView as? NSTextField)
+        XCTAssertEqual(input.stringValue, "文字标注")
+        XCTAssertTrue(alert.window.initialFirstResponder === input)
+        XCTAssertGreaterThan(alert.window.level.rawValue, window.level.rawValue + 1)
+    }
+
     func testAutomaticRegionCaptureNeverOpensStandaloneEditingWindow() throws {
         let source = try repositoryFileContents("MacScreenCapture/Core/CaptureManager.swift")
         let start = try XCTUnwrap(source.range(of: "private func captureRegionScreenshot("))

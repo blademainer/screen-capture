@@ -12,7 +12,7 @@ struct EditingWindowContentView: View {
     let onClear: () -> Void
     let onClose: () -> Void
     
-    @State private var selectedTool: EditingTool = .none
+    @State private var selectedTool: EditingTool = .lastSelected()
     @State private var selectedColor: Color = .red
     @State private var lineWidth: CGFloat = 2.0
     @State private var fontSize: CGFloat = 18.0
@@ -78,6 +78,7 @@ struct EditingWindowContentView: View {
                 showingColorPicker: $showingColorPicker,
                 onToolSelected: { tool in
                         selectedTool = tool
+                        tool.rememberSelection()
                         isEditing = tool != .none
                 }
             )
@@ -95,6 +96,7 @@ struct EditingWindowContentView: View {
                 .buttonStyle(.plain)
                 .disabled(!editingSession.canUndo)
                 .help("撤销")
+                .keyboardShortcut("z", modifiers: .command)
                 
                 Button(action: {
                     editingSession.redo()
@@ -105,6 +107,7 @@ struct EditingWindowContentView: View {
                 .buttonStyle(.plain)
                 .disabled(!editingSession.canRedo)
                 .help("重做")
+                .keyboardShortcut("z", modifiers: [.command, .shift])
             }
             
             // 工具栏切换按钮

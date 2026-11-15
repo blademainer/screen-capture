@@ -167,12 +167,13 @@ final class MacScreenCaptureTests: XCTestCase {
 
     func testReleaseWorkflowBuildsUniversalMacArtifacts() throws {
         let workflow = try repositoryFileContents(".github/workflows/build-and-release.yml")
+        let script = try repositoryFileContents("scripts/build-release.sh")
 
-        XCTAssertTrue(workflow.contains("ARCHS=\"arm64 x86_64\""))
-        XCTAssertTrue(workflow.contains("ONLY_ACTIVE_ARCH=NO"))
-        XCTAssertTrue(workflow.contains("lipo -archs"))
-        XCTAssertTrue(workflow.contains("arm64"))
-        XCTAssertTrue(workflow.contains("x86_64"))
+        XCTAssertTrue(workflow.contains("./scripts/build-release.sh"))
+        XCTAssertTrue(script.contains("for ARCH in arm64 x86_64"))
+        XCTAssertTrue(script.contains("swift build -c release --arch"))
+        XCTAssertTrue(script.contains("lipo -create"))
+        XCTAssertTrue(script.contains("-verify_arch arm64 x86_64"))
     }
 
     func testXcodeTargetIncludesEveryApplicationSwiftSource() throws {

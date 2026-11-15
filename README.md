@@ -31,12 +31,18 @@
 
 ## 系统要求
 
-- macOS 12.0 或更高版本
+- macOS 15.0 或更高版本
 - 支持Apple Silicon和Intel处理器
 - 需要屏幕录制权限
 - 录制音频需要麦克风权限
 
 ## 安装说明
+
+### 自动构建与下载
+
+推送到 `main`、向 `main` 提交 PR 或手动运行 GitHub Actions 时，自动执行测试并生成 Apple Silicon + Intel 双架构 ZIP、DMG 和 SHA-256 校验和。推送 `v1.0.1` 这样的版本 tag 后，仅在测试和打包通过时发布到 GitHub Releases。
+
+当前产物仅做 ad-hoc 签名，未进行 Developer ID 正式签名和 Apple 公证。下载位置、安装限制和发布命令详见 [发布指南](RELEASE.md)。
 
 ### 从源码构建
 

@@ -6,6 +6,8 @@
 
 **Constraints:** macOS 15 minimum; stable bundle identifier `com.blademainer.MacScreenCapture`; arm64 and x86_64; ad-hoc signing only, no Developer ID credentials or notarization. Manual dispatch builds artifacts without creating a release.
 
+**Build toolchain:** `macos-26` runner with macOS 26 SDK for the existing Translation APIs. The first remote run on `macos-15` failed with Xcode 16.4 because that SDK lacks `TranslationSession(installedSource:target:)`; deployment remains macOS 15.
+
 ## Implementation
 
 - [x] Replace the stale Xcode release script with fail-fast Swift package builds, universal binary assembly, staged bundle versioning, ad-hoc verification, ZIP, DMG, and SHA-256 checksums.

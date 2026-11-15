@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   test-and-package:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 30
     steps:
       - name: Checkout code
@@ -33,6 +33,9 @@ jobs:
         run: |
           xcodebuild -version
           swift --version
+          SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
+          echo "macOS SDK: $SDK_VERSION"
+          [[ "${SDK_VERSION%%.*}" -ge 26 ]]
 
       - name: Run tests
         run: |

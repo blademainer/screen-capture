@@ -11,7 +11,7 @@
 | Actions 页面手动 Run workflow | 是 | 是 | 否 |
 | 推送 `v*` tag | 是 | 是 | 是，仅在前面步骤全部成功后 |
 
-构建使用 `macos-15` runner、Swift Package Manager 和系统自带的 Xcode 工具链。首先运行 `swift test`，再分别编译 `arm64` 和 `x86_64`，通过 `lipo` 合成 Universal 应用，支持 Apple Silicon 和 Intel。
+构建使用 `macos-26` runner、Swift Package Manager 和系统自带的 Xcode 26 或更新工具链。编译需要 macOS 26 SDK，因为现有 Apple 本地翻译代码使用了该 SDK 新增的 API；这不改变应用最低运行版本 macOS 15，旧系统会使用已有的翻译回退路径。首先运行 `swift test`，再分别编译 `arm64` 和 `x86_64`，通过 `lipo` 合成 Universal 应用，支持 Apple Silicon 和 Intel。
 
 在 [Actions 页面](https://github.com/blademainer/screen-capture/actions)打开成功的运行记录，从 Artifacts 下载 `MacScreenCapture-universal-*`。包内包含：
 
@@ -59,7 +59,7 @@ cd build
 shasum -a 256 -c SHA256SUMS
 ```
 
-本地也需要 macOS 15 或更新系统，以及支持该系统 SDK 的 Xcode 命令行工具。脚本任一步失败即退出；不修改受版本管理的 plist，仅在 `build/export/MacScreenCapture.app` 写入版本号。最终产物位于 `build/`，资源和图标均包含在应用内。
+本地也需要能够运行 Xcode 26 或更新版本的 macOS，以及包含 macOS 26 SDK 的 Xcode 命令行工具。脚本任一步失败即退出；不修改受版本管理的 plist，仅在 `build/export/MacScreenCapture.app` 写入版本号。最终产物位于 `build/`，资源和图标均包含在应用内。
 
 本地手工测试前，将打包后的应用安装到固定路径，避免从 `.build` 的裸可执行文件运行：
 
